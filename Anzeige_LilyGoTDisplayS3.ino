@@ -14,17 +14,30 @@ const int buttonPin = 0;
 bool lastButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 200;
-
-// GPIO für Display Backlight
 #define BACKLIGHT_PIN 38
 
-// Aktueller RPM-Wert
-volatile uint16_t currentRPM = 0;
+volatile float currentRPM = 0.0; // Jetzt float statt uint16_t
 
-// Struktur für empfangene Daten (z. B. uint16_t RPM)
-typedef struct struct_message {
-  uint16_t rpm;
-} struct_message;
+// Callback für empfangene Textdaten
+void onDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
+  char payload[128];
+  memset(payload, 0, sizeof(payload));
+  memcpy(payload, incomingData, min(len, 127));
+
+  Serial.print("Empfangen: ");
+  Serial.println(payload);
+
+  // Erwartetes Format: "0C,RPM,2431.00,rpm"
+  if (strstr(payload, ",RPM,") != nullptr) {
+    char* token = strtok(payload, ","); // PID (z.B. "0C")
+    token = strtok(nullptr, ",");       // Name ("RPM")
+    token = strtok(nullptr, ",");       // Wert (z.B. "2431.00")
+
+    if (token != nullptr) {
+      currentRPM = atof(token);
+    }
+  }
+}
 
 void setBacklight(uint8_t duty) {
   ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty);
@@ -55,13 +68,6 @@ void setupBacklight() {
   setBacklight(brightnessLevels[brightnessIndex]);
 }
 
-// Callback für empfangene Daten
-void onDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  struct_message receivedData;
-  memcpy(&receivedData, incomingData, sizeof(receivedData));
-  currentRPM = receivedData.rpm;
-}
-
 void setup() {
   Serial.begin(115200);
 
@@ -74,23 +80,21 @@ void setup() {
 
   setupBacklight();
 
-  // ESP-NOW starten
   WiFi.mode(WIFI_STA);
   if (esp_now_init() != ESP_OK) {
     Serial.println("Fehler beim Initialisieren von ESP-NOW");
     return;
   }
 
-  esp_now_register_recv_cb(onDataRecv); // Callback setzen
+  esp_now_register_recv_cb(onDataRecv);
+  Serial.println("Empfänger bereit...");
 }
 
 void loop() {
-  // Display aktualisieren
   tft.fillScreen(TFT_BLACK);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextSize(3);
+  tft.drawString(String(currentRPM, 0) + " RPM", tft.width() / 2, tft.height() / 2);
 
-  tft.setTextDatum(MC_DATUM); // Mitte-Mitte Bezugspunkt
-  tft.setTextSize(3);         // Größere Schriftgröße
-  tft.drawString(String(currentRPM) + " RPM", tft.width() / 2, tft.height() / 2);
-
-  delay(200); // Kurzes Delay für flüssige Anzeige
+  delay(200);
 }
