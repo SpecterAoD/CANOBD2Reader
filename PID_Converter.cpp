@@ -1,6 +1,8 @@
 #include "PID_Converter.h"
 #include "PIDs.h"
 
+// ==== Einzelne Konvertierer (je nach PID) ====
+
 namespace {
     PIDResult convertENGINE_LOAD(const byte* d) {
         return {(d[0] * 100.0f) / 255.0f, "%"};
@@ -59,7 +61,7 @@ namespace {
     }
 
     PIDResult unknownPID() {
-        return {-1, "N/A"};
+        return {-1.0f, "N/A"};
     }
 
     typedef PIDResult (*ConverterFunc)(const byte*);
@@ -88,6 +90,8 @@ namespace {
     const size_t converterTableSize = sizeof(converterTable) / sizeof(PIDConverterEntry);
 }
 
+// ==== Hauptumrechnungsfunktion ====
+
 PIDResult convertPID(byte pid, const byte* data, byte length) {
     for (size_t i = 0; i < converterTableSize; ++i) {
         if (converterTable[i].pid == pid) {
@@ -95,4 +99,34 @@ PIDResult convertPID(byte pid, const byte* data, byte length) {
         }
     }
     return unknownPID();
+}
+
+// ==== PID-Name Mapping ====
+
+const char* getPIDName(byte pid) {
+    switch (pid) {
+        case SUPPORTED_PIDS_1_20:              return "SupportedPIDs";
+        case MONITOR_STATUS_SINCE_DTC_CLEARED: return "MonitorStatus";
+        case FREEZE_DTC:                       return "FreezeDTC";
+        case FUEL_SYSTEM_STATUS:               return "FuelSystemStatus";
+        case ENGINE_LOAD:                      return "EngineLoad";
+        case ENGINE_COOLANT_TEMP:              return "CoolantTemp";
+        case SHORT_TERM_FUEL_TRIM_BANK_1:      return "ShortFT_B1";
+        case LONG_TERM_FUEL_TRIM_BANK_1:       return "LongFT_B1";
+        case SHORT_TERM_FUEL_TRIM_BANK_2:      return "ShortFT_B2";
+        case LONG_TERM_FUEL_TRIM_BANK_2:       return "LongFT_B2";
+        case FUEL_PRESSURE:                    return "FuelPressure";
+        case INTAKE_MANIFOLD_ABS_PRESSURE:     return "IntakePressure";
+        case ENGINE_RPM:                       return "RPM";
+        case VEHICLE_SPEED:                    return "Speed";
+        case TIMING_ADVANCE:                   return "TimingAdvance";
+        case INTAKE_AIR_TEMP:                  return "IntakeTemp";
+        case MAF_FLOW_RATE:                    return "MAF";
+        case THROTTLE_POSITION:                return "Throttle";
+        case FUEL_TANK_LEVEL_INPUT:            return "FuelLevel";
+        case CONTROL_MODULE_VOLTAGE:           return "ControlVoltage";
+        case ENGINE_OIL_TEMP:                  return "OilTemp";
+        case ENGINE_FUEL_RATE:                 return "FuelRate";
+        default:                               return "Unknown";
+    }
 }
