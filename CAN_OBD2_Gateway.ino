@@ -1,4 +1,4 @@
-/*  ============================================================================
+/*============================================================================
 	 CAN_OBD2_Gateway
 	 Version: 0.0.1 
 	 
@@ -31,9 +31,9 @@
 // leave it commented for normal use
 
 //#define PRINT_CAN_FLAG  1
-#define DEBUG_FLAG 1       // Serielle Ausgabe aktivieren
-#define TWAI_DEBUG_FLAG 1       // Serielle Ausgabe aktivieren
-#define POWER_DEBUG_FLAG 1       // Serielle Ausgabe aktivieren
+#define DEBUG_FLAG 0       		// 0 = aus, 1 = an
+#define TWAI_DEBUG_FLAG 0       // 0 = aus, 1 = an
+#define POWER_DEBUG_FLAG 0      // 0 = aus, 1 = an
 
 #if DEBUG_FLAG
   #define debug(...) Serial.print(__VA_ARGS__)
@@ -63,7 +63,6 @@
 #else
   #define TWAI_OPERATION_MODE TWAI_MODE_LISTEN_ONLY
 #endif
-
 // -----------------------------
 
 // ---- MAX_PAYLOAD_LEN --------
@@ -78,10 +77,11 @@
 #define SHIELD_CAN_TX 5
 #define SHIELD_VOLTAGE_DIVIDER 32
 
-// ------------ CAN ------------
+// ------------ CAN / OBD2 ------------
 #define POLLING_RATE_MS 500
 #define CAN_IDLE_TIMEOUT 500
 #define SLEEP_PERIOD 6 // 6
+#define RAW_DATA_ONLY 0  // 1 = nur Rohdaten senden, 0 = berechnete Werte senden
 
 // ----------- Fahrzeug Status -----------
 #define CAR_IS_RUNNING 1
@@ -129,8 +129,6 @@ typedef struct {
   int adc_raw;
   float voltage;
 } VoltageMeasurement;
-
-
 // End region ================================== struct ==================================
 
 // region ========================== Laufzeitvariablen ==========================
@@ -142,24 +140,43 @@ unsigned long last_car_running_time = 0;
 int car_status = 0;
 unsigned long sleep_trigger_time  = 0;
 unsigned long last_battery_send_time = 0;
+float last_fuel_rate = 0.0;    // L/h
+float last_speed = 0.0;        // km/h
+float consumption_sum = 0.0;   // Summe für Mittelwert
+int consumption_count = 0;     // Anzahl Messungen
 
 // End region ========================== Laufzeitvariablen ==========================
-
 
 // region ========================== OBD2-Konfiguration ==========================
 // Moegliche Abfragen siehe PIDs.h
 const byte obd_requested_pids[] = {
-  ENGINE_RPM
-  //ENGINE_COOLANT_TEMP,
-  //VEHICLE_SPEED,
-  //CONTROL_MODULE_VOLTAGE,
-  //ENGINE_FUEL_RATE,
-  //ENGINE_OIL_TEMP
+  //ENGINE_RPM
+  ENGINE_COOLANT_TEMP,
+  VEHICLE_SPEED,
+  CONTROL_MODULE_VOLTAGE,
+  ENGINE_FUEL_RATE,
+  ENGINE_OIL_TEMP
 };
 const byte obd_pid_count = sizeof(obd_requested_pids) / sizeof(obd_requested_pids[0]);
-const unsigned long OBD_INTERVAL_MS = 200;
+const unsigned long OBD_INTERVAL_MS = 2000;
 
 // End region ========================== OBD2-Konfiguration ==========================
+
+// region ================ CRC ================
+uint16_t crc16(const uint8_t* data, size_t length) {
+  uint16_t crc = 0xFFFF;
+  for (size_t i = 0; i < length; ++i) {
+    crc ^= data[i];
+    for (int j = 0; j < 8; ++j) {
+      if (crc & 1)
+        crc = (crc >> 1) ^ 0xA001;
+      else
+        crc >>= 1;
+    }
+  }
+  return crc;
+}
+// end region ================ CRC ================
 
 // region ================================== ESP-NOW ==================================
 int esp_now_mesh_id;
@@ -289,107 +306,8 @@ if (TWAI_OPERATION_MODE == TWAI_MODE_NORMAL) {
   }
   debugln(" CAN.................OK");
   return true;
-
 }
 // End region ================================== initCAN ==================================
-
-// region ================================== loop ==================================
-void loop() {
-  currentMillis = millis();
-  uint32_t alerts_triggered;
-  twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(POLLING_RATE_MS));
-
-  //------------- CAN Empfang -------------
-  if (alerts_triggered & TWAI_ALERT_RX_DATA) {
-    twai_message_t message;
-    while (twai_receive(&message, 0) == ESP_OK) {
-      handleCANMessage(message);
-    }
-    last_can_msg_timestamp = millis();
-    return;
-  }
-  //---------------------------------------
-
-  //------------ Fehleranzeigen ------------
-  twai_status_info_t twaistatus;
-  twai_get_status_info(&twaistatus);
-
-  bool ledShouldBeOn = false;  // Variable to determine if LED should blink
-
-  if (alerts_triggered & TWAI_ALERT_ERR_PASS) {
-      debugln("Alert: TWAI controller has become error passive.");
-      ledShouldBeOn = true;
-      debugln(" CAN MSG..........ERROR");
-  }
-  if (alerts_triggered & TWAI_ALERT_BUS_ERROR) {
-      debugln("Alert: A (Bit, Stuff, CRC, Form, ACK) error has occurred on the bus.");
-      //Serial.printf("Bus error count: %d\n", twaistatus.bus_error_count);
-      ledShouldBeOn = true;
-      debugln(" CAN MSG......BUS ERROR");
-  }
-  if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL) {
-      debugln("Alert: The RX queue is full causing a received frame to be lost.");
-      //Serial.printf("RX buffered: %d\t", twaistatus.msgs_to_rx);
-      //Serial.printf("RX missed: %d\t", twaistatus.rx_missed_count);
-      //Serial.printf("RX overrun %d\n", twaistatus.rx_overrun_count);
-      ledShouldBeOn = true;
-      debugln(" CAN MSG.........Q FULL");
-  }
-  //---------------------------------------
-
-  //------------- LED Steuerung ------------
-      // blink LED if needed
-  if (ledShouldBeOn) {
-    digitalWrite(SHIELD_LED_PIN, HIGH);
-    led_last_on_timestamp = currentMillis;
-  }
-
-  if (currentMillis - led_last_on_timestamp >= 1000) {
-    digitalWrite(SHIELD_LED_PIN, LOW);
-    led_last_on_timestamp = 0;
-  }
-  //---------------------------------------
-
-  //------------- OBD2 Daten regelmäßig abfragen -------------
-  if (ENABLE_OBD2 && currentMillis - last_obd_request_time >= OBD_INTERVAL_MS) {
-    for (byte i = 0; i < obd_pid_count; i++) {
-      requestAndSendOBDPID(obd_requested_pids[i]);
-    }
-    last_obd_request_time = currentMillis;
-  }
-  //----------------------------------------------------------
-
-  //--------------TWAI Status-----------
-  // Optional zur Fehlersuche
-  printTWAIStatus(); // Aktievieren / Deaktivieren  #define TWAI_DEBUG_FLAG 0
-  //-------------------------------------------------------
-
-  //-------------- Fahrzeugstatus & Sleep-Logik -------------
-  update_car_status();  // Spannung lesen & Status setzen (LED + car_status)
-  handleSleep();        // Verzögerung + Timeout abwarten → ggf. DeepSleep
-  //-------------------------------------------------------
-
-  //------------- Batteriespannung senden -----------
-  if (millis() - last_battery_send_time > 3000) {  //5000
-  sendBatteryVoltage();
-  last_battery_send_time = millis();
-  }
-  //-------------------------------------------------
-
-  // ------------LED-Test-------------
-  // Optional
-  ///*
-  if (digitalRead(SHIELD_BUTTON_PIN) == LOW) {
-    debugln("Taster wurde gedrückt! LED-Test");
-    ledtest();
-  }
-  //*/
-  //-------------------------------------------------------
-  //------------Reduziert Leistung des ESP-------------
-  //reduceHeat(); //Optional
-  //-------------------------------------------------------
-}
-// End region ================================== loop ==================================
 
 // region ================================== CAN Nachricht verarbeiten ==================================
 static void handleCANMessage(twai_message_t& message) {
@@ -416,58 +334,6 @@ static void handleCANMessage(twai_message_t& message) {
   debugln("");
 }
 // End region ================================== CAN Nachricht verarbeiten ==================================
-
-
-// region ================= OBD2 Anfrage senden und Antwort verarbeiten =================
-void requestAndSendOBDPID(byte pid) {
-  // ------------ Anfrage senden //------------
-  if (!sendOBDRequest(read_LiveData, pid)) {
-    debug("→ OBD PID 0x");
-    debug(pid, HEX);
-    debug(" [");
-    debug(getPIDName(pid));
-    debugln("] SEND FAIL");
-
-    snprintf(text_frame.payload, sizeof(text_frame.payload), "%02X,%s,ERROR,N/A", pid, getPIDName(pid));
-    text_frame.crc = crc16((uint8_t*)&text_frame, sizeof(text_frame) - 2);
-    esp_now_send(peerAddress, (uint8_t*)&text_frame, sizeof(text_frame));
-    return;
-  }
-  //--------------------------------------------
-
-  // ------------ Antwort empfangen ------------
-  byte responseData[8];
-  byte responseLen = 0;
-
-  if (receiveOBDResponse(read_LiveData, pid, responseData, responseLen)) {
-    PIDResult result = convertPID(pid, responseData, responseLen);
-
-    debug("← OBD PID: 0x");
-    debug(pid, HEX);
-    debug(" [");
-    debug(getPIDName(pid));
-    debug("] = ");
-    debug(result.value);
-    debug(" ");
-    debugln(result.unit);
-
-    snprintf(text_frame.payload, sizeof(text_frame.payload), "%02X,%s,%.2f,%s", pid, getPIDName(pid), result.value, result.unit);
-    text_frame.crc = crc16((uint8_t*)&text_frame, sizeof(text_frame) - 2);
-    esp_now_send(peerAddress, (uint8_t*)&text_frame, sizeof(text_frame));
-  } else {
-    debug("← OBD PID: 0x");
-    debug(pid, HEX);
-    debug(" [");
-    debug(getPIDName(pid));
-    debugln("] TIMEOUT");
-
-    snprintf(text_frame.payload, sizeof(text_frame.payload), "%02X,%s,ERROR,N/A", pid, getPIDName(pid));
-    text_frame.crc = crc16((uint8_t*)&text_frame, sizeof(text_frame) - 2);
-    esp_now_send(peerAddress, (uint8_t*)&text_frame, sizeof(text_frame));
-  }
-  // -------------------------------------------
-}
-// End region ================= OBD2 Anfrage senden und Antwort verarbeiten =================
 
 // region ================= OBD2 Anfrage senden =================
 bool sendOBDRequest(byte mode, byte pid) {
@@ -558,6 +424,108 @@ bool receiveOBDResponse(byte mode, byte pid, byte* outData, byte& outLen) {
 }
 // End region ================= OBD2 Antwort empfangen =================
 
+// reginon ================ calcConsumption ================
+void calcConsumption(byte pid, float value) {
+    if (pid == VEHICLE_SPEED) last_speed = value;
+    if (pid == ENGINE_FUEL_RATE) last_fuel_rate = value;
+
+    // Schutz vor Division durch 0
+    if (last_speed < 1.0) return;
+    if (last_fuel_rate < 0.1) return;
+
+    // Verbrauch in L/100 km
+    float consumption = (last_fuel_rate / last_speed) * 100.0;
+    consumption_sum += consumption;
+    consumption_count++;
+
+    // --- Wenn 10 Werte gesammelt → Mittelwert senden ---
+    if (consumption_count >= 10) {
+        float avg_consumption = consumption_sum / consumption_count;
+
+        snprintf(text_frame.payload, sizeof(text_frame.payload),
+                 "FUEL_CONS,AVG,%.2f,L100", avg_consumption);
+        text_frame.crc = crc16((uint8_t*)&text_frame, sizeof(text_frame) - 2);
+        esp_now_send(peerAddress, (uint8_t*)&text_frame, sizeof(text_frame));
+
+        consumption_sum = 0;
+        consumption_count = 0;
+    }
+}
+// end reginon ================ calcConsumption ================
+
+// region ================= OBD2 Anfrage senden und Antwort verarbeiten =================
+void sendOBDData(byte pid, const char* name, const char* value) {
+  snprintf(text_frame.payload, sizeof(text_frame.payload),
+           "%02X,%s,%s", pid, name, value);
+  text_frame.crc = crc16((uint8_t*)&text_frame, sizeof(text_frame) - 2);
+  esp_now_send(peerAddress, (uint8_t*)&text_frame, sizeof(text_frame));
+}
+// --- Die Hauptfunktion ---
+void requestAndSendOBDPID(byte pid) {
+  // ------------ Anfrage senden ------------
+  if (!sendOBDRequest(read_LiveData, pid)) {
+    debug("→ OBD PID 0x");
+    debug(pid, HEX);
+    debug(" [");
+    debug(getPIDName(pid));
+    debugln("] SEND FAIL");
+
+    sendOBDData(pid, "ERROR", "N/A");
+    return;
+  }
+  // ------------ Antwort empfangen ------------
+  byte responseData[8];
+  byte responseLen = 0;
+
+  if (receiveOBDResponse(read_LiveData, pid, responseData, responseLen)) {
+
+#if RAW_DATA_ONLY
+    // Rohdaten senden als HEX-String
+    char rawHex[3 * 8 + 1] = {0};
+    for (byte i = 0; i < responseLen; i++) {
+      sprintf(&rawHex[i * 3], "%02X ", responseData[i]);
+    }
+    sendOBDData(pid, getPIDName(pid), rawHex);
+
+#else
+    // Umrechnen in physikalische Werte
+    PIDResult result = convertPID(pid, responseData, responseLen);
+
+    debug("← OBD PID: 0x");
+    debug(pid, HEX);
+    debug(" [");
+    debug(getPIDName(pid));
+    debug("] = ");
+    debug(result.value);
+    debug(" ");
+    debugln(result.unit);
+
+    // Verbrauch berechnen
+    if (pid == VEHICLE_SPEED || pid == ENGINE_FUEL_RATE) {
+      calcConsumption(pid, result.value);
+    }
+
+    // Nur PIDs senden, die nicht für Verbrauchsberechnung reserviert sind
+    if (pid != VEHICLE_SPEED && pid != ENGINE_FUEL_RATE) {
+      char valueStr[16];
+      snprintf(valueStr, sizeof(valueStr), "%.2f %s", result.value, result.unit);
+      sendOBDData(pid, getPIDName(pid), valueStr);
+    }
+#endif
+
+  } else {
+    debug("← OBD PID: 0x");
+    debug(pid, HEX);
+    debug(" [");
+    debug(getPIDName(pid));
+    debugln("] TIMEOUT");
+
+    sendOBDData(pid, "ERROR", "N/A");
+  }
+}
+  // -------------------------------------------
+// End region ================= OBD2 Anfrage senden und Antwort verarbeiten =================
+
 // region ======================== Power ===============================
 // ------------ ESP32-Stromverbrauch senken (optional) ------------
 void reduceHeat() {
@@ -579,7 +547,6 @@ void handleSleep() {
 }
 
 void esp_deep_sleep() {
-
   esp_sleep_enable_timer_wakeup(SLEEP_PERIOD * 1000000);
   debugln(" ESP32........... SLEEP");
   debugln("------------------------");
@@ -636,8 +603,6 @@ VoltageMeasurement get_vin_voltage() {
   result.voltage = (avg / 4095.0) * 3.3 * VOLTAGE_CALCULATION_FAKTOR;
   return result;
 }
-
-
 // ------------ Fahrzeugstatus anhand Batteriespannung bestimmen ------------
 void update_car_status() {
   // Nur für 12V Blei-Säure-Batterien geeignet
@@ -763,22 +728,6 @@ void printTWAIStatus() {
 #endif
 // End region ================ TWAI Status ================
 
-// region ================ CRC ================
-uint16_t crc16(const uint8_t* data, size_t length) {
-  uint16_t crc = 0xFFFF;
-  for (size_t i = 0; i < length; ++i) {
-    crc ^= data[i];
-    for (int j = 0; j < 8; ++j) {
-      if (crc & 1)
-        crc = (crc >> 1) ^ 0xA001;
-      else
-        crc >>= 1;
-    }
-  }
-  return crc;
-}
-// end region ================ CRC ================
-
 // reginon ================ LED-Test ================
 void ledtest() {
   digitalWrite(SHIELD_LED_PIN, LOW);
@@ -787,11 +736,109 @@ void ledtest() {
   delay(500);
   blinkLED(SHIELD_LED_PIN2);
 }
-
 void blinkLED(uint8_t pin) {
-  
   digitalWrite(pin, HIGH);
   delay(50);
   digitalWrite(pin, LOW);
 }
 // end reginon ================ LED-Test ================
+
+// region ================================== loop ==================================
+void loop() {
+  currentMillis = millis();
+  uint32_t alerts_triggered;
+  twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(POLLING_RATE_MS));
+
+  //------------- CAN Empfang -------------
+  if (alerts_triggered & TWAI_ALERT_RX_DATA) {
+    twai_message_t message;
+    while (twai_receive(&message, 0) == ESP_OK) {
+      handleCANMessage(message);
+    }
+    last_can_msg_timestamp = millis();
+    return;
+  }
+  //---------------------------------------
+
+  //------------ Fehleranzeigen ------------
+  twai_status_info_t twaistatus;
+  twai_get_status_info(&twaistatus);
+
+  bool ledShouldBeOn = false;  // Variable to determine if LED should blink
+
+  if (alerts_triggered & TWAI_ALERT_ERR_PASS) {
+      debugln("Alert: TWAI controller has become error passive.");
+      ledShouldBeOn = true;
+      debugln(" CAN MSG..........ERROR");
+  }
+  if (alerts_triggered & TWAI_ALERT_BUS_ERROR) {
+      debugln("Alert: A (Bit, Stuff, CRC, Form, ACK) error has occurred on the bus.");
+      //Serial.printf("Bus error count: %d\n", twaistatus.bus_error_count);
+      ledShouldBeOn = true;
+      debugln(" CAN MSG......BUS ERROR");
+  }
+  if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL) {
+      debugln("Alert: The RX queue is full causing a received frame to be lost.");
+      //Serial.printf("RX buffered: %d\t", twaistatus.msgs_to_rx);
+      //Serial.printf("RX missed: %d\t", twaistatus.rx_missed_count);
+      //Serial.printf("RX overrun %d\n", twaistatus.rx_overrun_count);
+      ledShouldBeOn = true;
+      debugln(" CAN MSG.........Q FULL");
+  }
+  //---------------------------------------
+
+  //------------- LED Steuerung ------------
+      // blink LED if needed
+  if (ledShouldBeOn) {
+    digitalWrite(SHIELD_LED_PIN, HIGH);
+    led_last_on_timestamp = currentMillis;
+  }
+
+  if (currentMillis - led_last_on_timestamp >= 1000) {
+    digitalWrite(SHIELD_LED_PIN, LOW);
+    led_last_on_timestamp = 0;
+  }
+  //---------------------------------------
+
+  //------------- OBD2 Daten regelmäßig abfragen -------------
+  if (ENABLE_OBD2 && currentMillis - last_obd_request_time >= OBD_INTERVAL_MS) {
+    for (byte i = 0; i < obd_pid_count; i++) {
+      requestAndSendOBDPID(obd_requested_pids[i]);
+    }
+    last_obd_request_time = currentMillis;
+  }
+  //----------------------------------------------------------
+
+  //--------------TWAI Status-----------
+  // Optional zur Fehlersuche
+  #if TWAI_DEBUG_FLAG
+    printTWAIStatus(); // Aktievieren / Deaktivieren  #define TWAI_DEBUG_FLAG 0
+  #endif
+  //-------------------------------------------------------
+
+  //-------------- Fahrzeugstatus & Sleep-Logik -------------
+  update_car_status();  // Spannung lesen & Status setzen (LED + car_status)
+  handleSleep();        // Verzögerung + Timeout abwarten → ggf. DeepSleep
+  //-------------------------------------------------------
+
+  //------------- Batteriespannung senden -----------
+  if (millis() - last_battery_send_time > 3000) {  //5000
+  sendBatteryVoltage();
+  last_battery_send_time = millis();
+  }
+  //-------------------------------------------------
+
+  // ------------LED-Test-------------
+  // Optional
+  ///*
+  if (digitalRead(SHIELD_BUTTON_PIN) == LOW) {
+    debugln("Taster wurde gedrückt! LED-Test");
+    ledtest();
+  }
+  //*/
+  //-------------------------------------------------------
+  //------------Reduziert Leistung des ESP-------------
+  //reduceHeat(); //Optional
+  //-------------------------------------------------------
+}
+// End region ================================== loop ==================================
