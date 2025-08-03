@@ -2,7 +2,6 @@
 #include <Arduino.h>
 #include <PIDs.h>
 
-// ===================== Namespace =====================
 namespace Config {
 
     // ----------- Firmware -----------
@@ -18,8 +17,8 @@ namespace Config {
     constexpr int Baudrate = 115200;
 
     // ----------- CAN / OBD2 ---------
-    constexpr bool EnableCAN    = true;  // TWAI aktiv
-    constexpr bool EnableOBD2   = true;  // OBD2 aktiv
+    constexpr bool EnableCAN    = true;  
+    constexpr bool EnableOBD2   = true;
 
     constexpr int PollingRateMs = 500;
     constexpr int CanIdleTimeout = 500;
@@ -27,8 +26,7 @@ namespace Config {
 
     constexpr uint32_t ObdIntervalMs = 200;
 
-    // --------- OBD2 PIDs ---------
-    // Deine OBD2-PIDs sauber als constexpr Array
+    // ----------- OBD2 PIDs ----------
     inline constexpr byte ObdRequestedPids[] = {
         ENGINE_RPM,
         ENGINE_COOLANT_TEMP,
@@ -37,8 +35,9 @@ namespace Config {
         ENGINE_FUEL_RATE
     };
 
-    // Anzahl automatisch berechnen
-    inline constexpr size_t ObdPidCount = sizeof(ObdRequestedPids) / sizeof(ObdRequestedPids[0]);
+    inline constexpr size_t ObdPidCount =
+        sizeof(ObdRequestedPids) / sizeof(ObdRequestedPids[0]);
+
     // ----------- Pins ---------------
     constexpr int LedPin1 = 26;
     constexpr int LedPin2 = 27;
@@ -49,9 +48,19 @@ namespace Config {
 
     // ----------- Power --------------
     constexpr uint32_t StartStopDelayMs = 300000; // 5 Min
-    constexpr int CpuFrequency = 80;                   // MHz im Sleep
+    constexpr int CpuFrequency = 80;              // MHz im Sleep
     constexpr float VoltageCalcFactor = 4.81f;
     constexpr float VoltageChangeThreshold = 0.2f;
+
+    // ----------- WiFi ---------------
+    constexpr const char* WifiSsid     = "MeinOBDNetz";
+    constexpr const char* WifiPassword = "GeheimesPasswort123";
+    constexpr bool WifiEnable          = true;
+
+    // ----------- OTA ----------------
+    constexpr const char* OtaHostname  = "CAN_OBD2_Gateway";
+    constexpr const char* OtaPassword  = "Update123"; // optional
+    constexpr bool OtaEnable           = true;
 
     // ----------- ESP-NOW ------------
     constexpr bool UseEspNowEncryption = true;
