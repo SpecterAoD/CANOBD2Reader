@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <PIDs.h>
 
 // ===================== Namespace =====================
 namespace Config {
