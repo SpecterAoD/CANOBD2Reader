@@ -62,6 +62,10 @@ namespace Config {
     constexpr const char* OtaPassword  = "Update123"; // optional
     constexpr bool OtaEnable           = true;
 
+    // --- Update / GitHub ---
+    constexpr const char* UpdateURL =
+        "https://raw.githubusercontent.com/user/repo/main/firmware.bin";
+    
     // ----------- ESP-NOW ------------
     constexpr bool UseEspNowEncryption = true;
     constexpr uint8_t EspNowAesKey[16] = {
