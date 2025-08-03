@@ -24,6 +24,7 @@ namespace Logger {
     // ======== Allgemeines Debug ========
     inline void debug(const char* msg) {
         if (Config::DebugFlag && Config::SerialFlag) {
+            Serial.print("[DEBUG] ");
             Serial.println(msg);
         }
     }
@@ -37,7 +38,23 @@ namespace Logger {
         vsnprintf(buf, sizeof(buf), fmt, args);
         va_end(args);
 
+        Serial.print("[DEBUG] ");
         Serial.println(buf);
+    }
+
+    template<typename T>
+    inline void debugValue(const char* label, T value, const char* unit = "") {
+        if (Config::DebugFlag && Config::SerialFlag) {
+            Serial.print("[DEBUG] ");
+            Serial.print(label);
+            Serial.print(": ");
+            Serial.print(value);
+            if (unit && unit[0] != '\0') {
+                Serial.print(" ");
+                Serial.print(unit);
+            }
+            Serial.println();
+        }
     }
 
     // ======== Power Debug ========
@@ -48,11 +65,49 @@ namespace Logger {
         }
     }
 
+    template<typename T>
+    inline void powerValue(const char* label, T value, const char* unit = "") {
+        if (Config::PowerDebugFlag && Config::SerialFlag) {
+            Serial.print("[POWER] ");
+            Serial.print(label);
+            Serial.print(": ");
+            Serial.print(value);
+            if (unit && unit[0] != '\0') {
+                Serial.print(" ");
+                Serial.print(unit);
+            }
+            Serial.println();
+        }
+    }
+
     // ======== TWAI / CAN Debug ========
     inline void twai(const char* msg) {
         if (Config::TwaiDebugFlag && Config::SerialFlag) {
             Serial.print("[TWAI] ");
             Serial.println(msg);
+        }
+    }
+
+    // ======== OBD Debug ========
+    inline void obd(const char* msg) {
+        if (Config::DebugFlag && Config::SerialFlag) {
+            Serial.print("[OBD] ");
+            Serial.println(msg);
+        }
+    }
+
+    template<typename T>
+    inline void obdValue(const char* label, T value, const char* unit = "") {
+        if (Config::DebugFlag && Config::SerialFlag) {
+            Serial.print("[OBD] ");
+            Serial.print(label);
+            Serial.print(": ");
+            Serial.print(value);
+            if (unit && unit[0] != '\0') {
+                Serial.print(" ");
+                Serial.print(unit);
+            }
+            Serial.println();
         }
     }
 
