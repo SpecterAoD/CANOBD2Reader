@@ -7,10 +7,22 @@ namespace Config {
     // ----------- Firmware -----------
     constexpr const char* FirmwareVersion = "3.1203";
 
+    // ===== WebConsole Settings =====
+    inline bool EnableWebConsole = true;      // Aktiviert / deaktiviert Web-Konsole
+    inline const char* DebugAPSSID = "ESP_OBD_Debug";
+    inline const char* DebugAPPass = "12345678";
+    inline uint16_t WebConsolePort = 80;
+    inline size_t WebConsoleMaxLines = 50;    // Ringpuffergröße für Logs
+
+    // Start-Button: Muss gedrückt werden, bevor Init fortfährt
+    inline bool RequireWebStart = true;
+
     // ----------- Debug Flags --------
     constexpr bool DebugFlag       = false;  // Serielle Debug-Ausgaben
     constexpr bool TwaiDebugFlag   = false;  // TWAI/CAN Statusmeldungen
     constexpr bool PowerDebugFlag  = false;  // Batteriespannung & Power
+    constexpr bool CanDebugFlag = false;
+    constexpr bool OBD2DebugFlag = false;
     constexpr bool SerialFlag      = true;   // Serielle Ausgabe generell
 
     // ----------- Serial Settings ----
@@ -19,6 +31,7 @@ namespace Config {
     // ----------- CAN / OBD2 ---------
     constexpr bool EnableCAN    = true;  
     constexpr bool EnableOBD2   = true;
+    constexpr bool sendRAWData = false;
 
     constexpr int PollingRateMs = 500;
     constexpr int CanIdleTimeout = 500;
