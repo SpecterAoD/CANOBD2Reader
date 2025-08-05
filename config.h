@@ -5,8 +5,8 @@
 namespace Config {
 
     // ----------- Firmware -----------
-    constexpr const char* FirmwareVersion = "3.1203";
-
+    // constexpr const char* FirmwareVersion = "3.1203";
+    constexpr const char* FirmwareVerdion = "1.0.0";
     // ===== WebConsole Settings =====
     inline bool EnableWebConsole = true;      // Aktiviert / deaktiviert Web-Konsole
     inline const char* DebugAPSSID = "ESP_OBD_Debug";
