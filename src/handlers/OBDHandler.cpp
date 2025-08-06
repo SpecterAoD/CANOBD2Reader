@@ -1,6 +1,6 @@
-#include "OBDHandler.h"
-#include "Utils.h"
-#include "PID_Converter.h"
+#include "handlers/OBDHandler.h"
+#include "core/Utils.h"
+#include "handlers/PID_Converter.h"
 
 bool OBD2Handler::sendRequest(uint8_t mode, uint8_t pid) {
     twai_message_t request = {};
