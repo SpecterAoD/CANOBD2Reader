@@ -1,4 +1,4 @@
-#include "WebConsoleHandler.h"
+#include "handlers/WebConsoleHandler.h"
 
 void WebConsoleHandler::begin() {
     if (!Config::EnableWebConsole) return;
