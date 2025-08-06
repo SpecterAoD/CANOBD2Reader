@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include <driver/twai.h>
 #include "Logger.h"
-#include "config.h"
+#include "Config.h"
 
 class OBD2Handler {
 public:
