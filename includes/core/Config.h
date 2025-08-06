@@ -70,6 +70,10 @@ namespace Config {
     constexpr const char* WifiPassword = "GeheimesPasswort123";
     constexpr bool WifiEnable          = true;
 
+    // ----------- Bluetooth -----------
+    constexpr const char* BluetoothName = "ESP-BT";
+    constexpr bool BluetoothEnable = false;
+
     // ----------- OTA ----------------
     constexpr const char* OtaHostname  = "CAN_OBD2_Gateway";
     constexpr const char* OtaPassword  = "Update123"; // optional
