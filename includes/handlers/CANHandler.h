@@ -1,8 +1,8 @@
 #pragma once
 #include <Arduino.h>
 #include <driver/twai.h>
-#include "Logger.h"
-#include "Config.h"
+#include "core/Logger.h"
+#include "core/Config.h"
 
 class CANHandler {
 public:
