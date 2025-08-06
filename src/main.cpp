@@ -1,17 +1,17 @@
 #include <Arduino.h>
 
-#include "includes/core/Config.h"
-#include "includes/core/Logger.h"
-#include "includes/core/Utils.h"
+#include "core/Config.h"
+#include "core/Logger.h"
+#include "core/Utils.h"
 
-#include "includes/handlers/NetworkManager.h"
-#include "includes/handlers/OTAHandler.h"
-#include "includes/handlers/WebConsoleHandler.h"
-#include "includes/handlers/CANHandler.h"
-#include "includes/handlers/OBD2Handler.h"
-#include "includes/handlers/PIDs.h"
-#include "includes/handlers/UpdateManager.h"
-#include "includes/handlers/PID_Converter.h"
+#include "handlers/NetworkManager.h"
+#include "handlers/OTAHandler.h"
+#include "handlers/WebConsoleHandler.h"
+#include "handlers/CANHandler.h"
+#include "handlers/OBD2Handler.h"
+#include "handlers/PIDs.h"
+#include "handlers/UpdateManager.h"
+#include "handlers/PID_Converter.h"
 
 void setup() {
    // ---------------- Initialisierung ----------------
