@@ -3,7 +3,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <deque>
-#include "Config.h"
+#include "core/Config.h"
 
 class WebConsoleHandler {
 public:
