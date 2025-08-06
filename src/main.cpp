@@ -8,7 +8,7 @@
 #include "handlers/OTAHandler.h"
 #include "handlers/WebConsoleHandler.h"
 #include "handlers/CANHandler.h"
-#include "handlers/OBD2Handler.h"
+#include "handlers/OBDHandler.h"
 #include "handlers/PIDs.h"
 #include "handlers/UpdateManager.h"
 #include "handlers/PID_Converter.h"
