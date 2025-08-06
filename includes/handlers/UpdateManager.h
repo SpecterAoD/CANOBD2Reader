@@ -4,8 +4,8 @@
 #include <HTTPClient.h>
 #include <ArduinoOTA.h>
 #include <Update.h>
-#include "core/Config.h"
-#include "core/Logger.h"
+#include "Config.h"
+#include "Logger.h"
 
 namespace UpdateManager {
 

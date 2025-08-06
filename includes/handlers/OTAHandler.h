@@ -2,8 +2,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ArduinoOTA.h>
-#include "core/Config.h"
-#include "core/Logger.h"
+#include "Config.h"
+#include "Logger.h"
 
 namespace OTAHandler {
 

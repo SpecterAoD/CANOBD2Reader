@@ -1,4 +1,4 @@
-#include "handlers/UpdateManager.h"
+#include "UpdateManager.h"
 
 namespace UpdateManager {
 

@@ -1,6 +1,6 @@
 #pragma once
 #include <Arduino.h>
-#include "handlers/PIDs.h"
+#include "PIDs.h"
 
 namespace Config {
 

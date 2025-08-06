@@ -1,4 +1,4 @@
-#include "handlers/NetworkManager.h"
+#include "NetworkManager.h"
 
 namespace NetworkManager {
 

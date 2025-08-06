@@ -1,5 +1,5 @@
-#include "handlers/PID_Converter.h"
-#include "handlers/PIDs.h"
+#include "PID_Converter.h"
+#include "PIDs.h"
 
 // ==== Einzelne Konvertierer (je nach PID) ====
 

@@ -1,4 +1,4 @@
-#include "handlers/OTAHandler.h"
+#include "OTAHandler.h"
 
 namespace OTAHandler {
 

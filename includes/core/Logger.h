@@ -1,6 +1,6 @@
 #pragma once
 #include <Arduino.h>
-#include "core/Config.h"
+#include "Config.h"
 #include <driver/twai.h>
 
 namespace Logger {

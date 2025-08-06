@@ -1,6 +1,6 @@
-#include "handlers/CANHandler.h"
-#include "core/Config.h"
-#include "core/Utils.h"
+#include "CANHandler.h"
+#include "Config.h"
+#include "Utils.h"
 
 bool CANHandler::init() {
     Logger::debug(" CAN...............INIT");
