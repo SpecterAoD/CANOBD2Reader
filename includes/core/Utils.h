@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <esp_now.h>
-#include "Config.h"
+#include "core/Config.h"
 
 namespace Utils {
 
