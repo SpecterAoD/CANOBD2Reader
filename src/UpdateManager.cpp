@@ -23,7 +23,7 @@ namespace UpdateManager {
 
         ArduinoOTA.begin();
         Logger::alarm("[OTA] Ready, Host: ");
-        Logger::serialPrintln(Config::OtaHostname);
+        Logger::debug(Config::OtaHostname);
     }
 
     void handleOTA() {
@@ -34,7 +34,7 @@ namespace UpdateManager {
 
     // ============ Hotspot verbinden ============
     bool connectHotspot() {
-        Logger::serialPrintln("[Update] Verbindung mit Hotspot...");
+        Logger::debug("[Update] Verbindung mit Hotspot...");
         WiFi.mode(WIFI_STA);
         WiFi.begin(Config::WifiSSID, Config::WifiPassword);
 
@@ -46,10 +46,10 @@ namespace UpdateManager {
         Serial.println();
 
         if (WiFi.status() == WL_CONNECTED) {
-            Logger::serialPrintln("[Update] Hotspot verbunden!");
+            Logger::debug("[Update] Hotspot verbunden!");
             return true;
         } else {
-            Logger::serialPrintln("[Update] Hotspot Verbindung fehlgeschlagen.");
+            Logger::debug("[Update] Hotspot Verbindung fehlgeschlagen.");
             return false;
         }
     }
@@ -71,7 +71,7 @@ namespace UpdateManager {
 
         int httpCode = http.GET();
         if (httpCode != 200) {
-            Logger::serialPrintln("[Update] Konnte Version nicht abrufen.");
+            Logger::debug("[Update] Konnte Version nicht abrufen.");
             http.end();
             WiFi.disconnect(true);
             return false;
@@ -81,16 +81,16 @@ namespace UpdateManager {
         newVersion.trim();
         http.end();
 
-        Logger::serialPrint("[Update] Aktuelle FW: ");
-        Logger::serialPrintln(Config::FirmwareVersion);
-        Logger::serialPrint("[Update] Online FW: ");
-        Logger::serialPrintln(newVersion);
+        Logger::debug("[Update] Aktuelle FW: ");
+        Logger::debug(Config::FirmwareVersion);
+        Logger::debug("[Update] Online FW: ");
+        Logger::debug(newVersion);
 
         if (newVersion != Config::FirmwareVersion) {
             Logger::alarm("[Update] Neue Version gefunden!");
             return downloadAndUpdate();
         } else {
-            Logger::serialPrintln("[Update] Firmware aktuell.");
+            Logger::debug("[Update] Firmware aktuell.");
         }
 
         WiFi.disconnect(true);

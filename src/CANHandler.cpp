@@ -5,7 +5,7 @@
 bool CANHandler::init() {
     Logger::debug(" CAN...............INIT");
     Logger::debug(" TWAI Modus: ");
-    if (TWAI_OPERATION_MODE == TWAI_MODE_NORMAL) {
+    if (Condig::TWAI_OPERATION_MODE == Config::TWAI_MODE_NORMAL) {
         Logger::debug("NORMAL (Senden & Empfangen)");
     } else {
         Logger::debug("LISTEN_ONLY (Nur Empfangen)");
@@ -13,9 +13,9 @@ bool CANHandler::init() {
 
     // --- Treiber installieren ---
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
-        (gpio_num_t)SHIELD_CAN_TX, 
-        (gpio_num_t)SHIELD_CAN_RX, 
-        TWAI_OPERATION_MODE
+        (gpio_num_t)Config::SHIELD_CAN_TX, 
+        (gpio_num_t)Config::SHIELD_CAN_RX, 
+        Config::TWAI_OPERATION_MODE
     );
     g_config.rx_queue_len = 32;
     g_config.tx_queue_len = 2;
@@ -58,15 +58,7 @@ void CANHandler::handleMessage(twai_message_t& message) {
     Utils::sendCanFrame(message.identifier, message.data, message.data_length_code);
 
     // Debug-Ausgabe
-    Serial.print("← CAN ID: 0x");
-    Serial.print(message.identifier, HEX);
-    Serial.print(" Data: ");
-    for (int i = 0; i < message.data_length_code; i++) {
-        if (message.data[i] < 0x10) Serial.print("0");
-        Serial.print(message.data[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    Logger::canFrame(message.identifier, message.data, message.data_length_code)
 }
 
 void CANHandler::printStatus() {

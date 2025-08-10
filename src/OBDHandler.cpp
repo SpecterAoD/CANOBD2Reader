@@ -35,28 +35,28 @@ bool OBD2Handler::receiveResponse(uint8_t mode, uint8_t pid, uint8_t* outData, u
 }
 
 void OBD2Handler::calcConsumption(uint8_t pid, float value) {
-    using namespace Config;
+    //using namespace Config;
 
-    if (pid == VEHICLE_SPEED) LastSpeed = value;
-    if (pid == ENGINE_FUEL_RATE) LastFuelRate = value;
+    if (pid == VEHICLE_SPEED) Config::lastSpeed = value;
+    if (pid == ENGINE_FUEL_RATE) Config::lastFuelRate = value;
 
-    if (LastSpeed < 1.0 || LastFuelRate < 0.1) return;
+    if (Config::lastSpeed < 1.0 || Config::lastFuelRate < 0.1) return;
 
-    float consumption = (LastFuelRate / LastSpeed) * 100.0;
-    ConsumptionSum += consumption;
-    ConsumptionCount++;
+    float Config::consumption = (Config::lastFuelRate / Config::lastSpeed) * 100.0;
+    Config::consumptionSum += Config::consumption;
+    Config::consumptionCount++;
 
-    if (ConsumptionCount >= 10) {
-        float avg = ConsumptionSum / ConsumptionCount;
+    if (Config::consumptionCount >= 10) {
+        float avg = Config::consumptionSum / Config::consumptionCount;
         Utils::sendOBDValue(0xFE, "FUEL_CONS", avg, "L100");
 
-        ConsumptionSum = 0;
-        ConsumptionCount = 0;
+        Config::consumptionSum = 0;
+        Config::consumptionCount = 0;
     }
 }
 
 void OBD2Handler::requestAndSendPID(uint8_t pid) {
-    if (!sendRequest(Config::ReadLiveDataMode, pid)) {
+    if (!sendRequest(Config::ObdRequestedPids, pid)) {
         Utils::sendOBDError(pid, getPIDName(pid));
         return;
     }
@@ -64,11 +64,11 @@ void OBD2Handler::requestAndSendPID(uint8_t pid) {
     uint8_t responseData[8];
     uint8_t responseLen = 0;
 
-    if (receiveResponse(Config::ReadLiveDataMode, pid, responseData, responseLen)) {
+    if (receiveResponse(Config::ObdRequestedPids, pid, responseData, responseLen)) {
 
-#if RAW_DATA_ONLY
+if Config::sendRawDataOnly
         Utils::sendRawOBDData(pid, responseData, responseLen);
-#else
+else
         PIDResult result = convertPID(pid, responseData, responseLen);
 
         if (pid == VEHICLE_SPEED || pid == ENGINE_FUEL_RATE) {
@@ -78,7 +78,7 @@ void OBD2Handler::requestAndSendPID(uint8_t pid) {
         if (pid != VEHICLE_SPEED && pid != ENGINE_FUEL_RATE) {
             Utils::sendOBDValue(pid, getPIDName(pid), result.value, result.unit);
         }
-#endif
+endif
 
     } else {
         Utils::sendOBDError(pid, getPIDName(pid));

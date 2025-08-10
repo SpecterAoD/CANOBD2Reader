@@ -26,7 +26,7 @@ namespace OTAHandler {
             .onProgress([](unsigned int progress, unsigned int total) {
                 char buf[64];
                 snprintf(buf, sizeof(buf), "[OTA] Fortschritt: %u%%", (progress / (total / 100)));
-                Logger::serialPrintln(buf);
+                Logger::debug(buf);
             })
             .onError([](ota_error_t error) {
                 char buf[64];
@@ -35,7 +35,7 @@ namespace OTAHandler {
             });
 
         ArduinoOTA.begin();
-        Logger::serialPrintln("[OTA] Bereit für Updates.");
+        Logger::debug("[OTA] Bereit für Updates.");
     }
 
     void handleOTA() {

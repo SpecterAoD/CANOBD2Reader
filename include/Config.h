@@ -6,7 +6,7 @@ namespace Config {
 
     // ----------- Firmware -----------
     // constexpr const char* FirmwareVersion = "3.1203";
-    constexpr const char* FirmwareVerdion = "1.0.0";
+    constexpr const char* FirmwareVersion = "1.0.0";
     // ===== WebConsole Settings =====
     inline bool EnableWebConsole = true;      // Aktiviert / deaktiviert Web-Konsole
     inline const char* DebugAPSSID = "ESP_OBD_Debug";
@@ -18,11 +18,11 @@ namespace Config {
     inline bool RequireWebStart = true;
 
     // ----------- Debug Flags --------
-    constexpr bool DebugFlag       = false;  // Serielle Debug-Ausgaben
-    constexpr bool TwaiDebugFlag   = false;  // TWAI/CAN Statusmeldungen
-    constexpr bool PowerDebugFlag  = false;  // Batteriespannung & Power
-    constexpr bool CanDebugFlag = false;
-    constexpr bool OBD2DebugFlag = false;
+    constexpr bool DebugFlag       = true;  // Serielle Debug-Ausgaben
+    constexpr bool TwaiDebugFlag   = true;  // TWAI/CAN Statusmeldungen
+    constexpr bool PowerDebugFlag  = true;  // Batteriespannung & Power
+    constexpr bool CanDebugFlag = true;
+    constexpr bool OBD2DebugFlag = true;
     constexpr bool SerialFlag      = true;   // Serielle Ausgabe generell
 
     // ----------- Serial Settings ----
@@ -36,8 +36,10 @@ namespace Config {
     constexpr int PollingRateMs = 500;
     constexpr int CanIdleTimeout = 500;
     constexpr int SleepPeriodSec = 6;
-
+    constexpr bool sendRawDataOnly = false;
     constexpr uint32_t ObdIntervalMs = 200;
+    //constexpr const char* TWAI_OPERATION_MODE = "TWAI_MODE_LISTEN";
+    constexpr const char* TWAI_OPERATION_MODE = "TWAI_MODE_NORMAL";
 
     // ----------- OBD2 PIDs ----------
     inline constexpr byte ObdRequestedPids[] = {
@@ -55,8 +57,8 @@ namespace Config {
     constexpr int LedPin1 = 26;
     constexpr int LedPin2 = 27;
     constexpr int ButtonPin = 25;
-    constexpr int CanRxPin = 4;
-    constexpr int CanTxPin = 5;
+    constexpr int SHIELD_CAN_RX = 4;
+    constexpr int SHIELD_CAN_TX = 5;
     constexpr int VoltageDividerPin = 32;
 
     // ----------- Power --------------
@@ -78,11 +80,13 @@ namespace Config {
     constexpr const char* OtaHostname  = "CAN_OBD2_Gateway";
     constexpr const char* OtaPassword  = "Update123"; // optional
     constexpr bool OtaEnable           = true;
+    constexpr uint32_t UpdateIntervalMs = 10000;
 
     // --- Update / GitHub ---
-    constexpr const char* UpdateURL =
+    constexpr const char* UpdateCheckUrl =
         "https://raw.githubusercontent.com/user/repo/main/firmware.bin";
-    
+    constexpr const char* FirmwareBinUrl =
+        "https://raw.githubusercontent.com/user/repo/main/firmware.bin";
     // ----------- ESP-NOW ------------
     constexpr bool UseEspNowEncryption = true;
     constexpr uint8_t EspNowAesKey[16] = {
@@ -119,6 +123,12 @@ namespace Config {
     inline uint32_t lastCarRunningTime = 0;
     inline uint32_t lastBatterySendTime = 0;
     inline uint32_t ledTestStartTime = 0;
+    inline uint32_t lastSpeed = 0;
+    inline uint32_t lastFuelRate = 0;
+    inline float consumption = 0.0f;
+    inline float consumptionSum = 0.0f;
+    inline int consumptionCount = 0;
+
 
     inline bool carIsRunning = false;
     inline bool ledTestActive = false;

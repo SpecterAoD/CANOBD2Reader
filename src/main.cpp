@@ -51,8 +51,8 @@ void loop() {
     CANHandler::processIncoming(); // Empfängt & sendet an ESP-NOW
 
     // --------- OBD2-PIDs regelmäßig abfragen ----------
-    if (millis() - lastOBDRequest > Config::ObdRequestIntervalMs) {
-        lastOBDRequest = millis();
+    if (millis() - Config::lastObdRequestTime > Config::ObdRequestIntervalMs) {
+        Config::lastObdRequestTime = millis();
 
         for (uint8_t pid : Config::ObdRequestedPids) {
             OBD2Handler::requestAndSendPID(pid);
