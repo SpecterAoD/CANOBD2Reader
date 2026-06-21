@@ -5,7 +5,7 @@ namespace OTAHandler {
     void initOTA() {
         if (!Config::OtaEnable) return;
 
-        Logger::serialPrintln("[OTA] Initialisierung...");
+        Logger::debug("[OTA] Initialisierung...");
 
         // Hostname aus Config setzen
         ArduinoOTA.setHostname(Config::OtaHostname);

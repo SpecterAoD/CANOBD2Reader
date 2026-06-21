@@ -5,7 +5,7 @@
 bool CANHandler::init() {
     Logger::debug(" CAN...............INIT");
     Logger::debug(" TWAI Modus: ");
-    if (Condig::TWAI_OPERATION_MODE == Config::TWAI_MODE_NORMAL) {
+    if (Config::TWAI_OPERATION_MODE == TWAI_MODE_NORMAL) {
         Logger::debug("NORMAL (Senden & Empfangen)");
     } else {
         Logger::debug("LISTEN_ONLY (Nur Empfangen)");
@@ -53,12 +53,19 @@ bool CANHandler::configureAlerts() {
     return true;
 }
 
+void CANHandler::processIncoming() {
+    twai_message_t message;
+    while (twai_receive(&message, 0) == ESP_OK) {
+        handleMessage(message);
+    }
+}
+
 void CANHandler::handleMessage(twai_message_t& message) {
     // Sende CAN Frame via Utils
     Utils::sendCanFrame(message.identifier, message.data, message.data_length_code);
 
     // Debug-Ausgabe
-    Logger::canFrame(message.identifier, message.data, message.data_length_code)
+    Logger::canFrame(message);
 }
 
 void CANHandler::printStatus() {

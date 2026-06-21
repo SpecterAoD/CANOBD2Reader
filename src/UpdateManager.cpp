@@ -36,7 +36,7 @@ namespace UpdateManager {
     bool connectHotspot() {
         Logger::debug("[Update] Verbindung mit Hotspot...");
         WiFi.mode(WIFI_STA);
-        WiFi.begin(Config::WifiSSID, Config::WifiPassword);
+        WiFi.begin(Config::WifiSsid, Config::WifiPassword);
 
         unsigned long startAttemptTime = millis();
         while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {

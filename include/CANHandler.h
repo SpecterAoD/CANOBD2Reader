@@ -9,6 +9,9 @@ public:
     /// @brief Initialisiert den TWAI/CAN-Bus
     static bool init();
 
+    /// @brief Empfängt ausstehende CAN-Nachrichten und verarbeitet sie
+    static void processIncoming();
+
     /// @brief Behandelt eingehende CAN-Nachricht
     static void handleMessage(twai_message_t& message);
 

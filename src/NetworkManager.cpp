@@ -6,6 +6,13 @@ namespace NetworkManager {
     inline esp_now_peer_info_t peerInfo = {};
     inline BluetoothSerial btSerial;
 
+    void startAccessPoint(const char* ssid, const char* password) {
+        Logger::debugf("[WiFi] Starte Access Point SSID: %s", ssid);
+        WiFi.mode(WIFI_AP);
+        WiFi.softAP(ssid, password);
+        Logger::debugf("[WiFi] AP IP: %s", WiFi.softAPIP().toString().c_str());
+    }
+
     // ============= WiFi =============
     bool initWiFi(const char* ssid, const char* password) {
         Logger::debug("[WiFi] Initialisiere WiFi...");
