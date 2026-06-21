@@ -84,7 +84,7 @@ namespace UpdateManager {
         Logger::debug("[Update] Aktuelle FW: ");
         Logger::debug(Config::FirmwareVersion);
         Logger::debug("[Update] Online FW: ");
-        Logger::debug(newVersion);
+        Logger::debug(newVersion.c_str());
 
         if (newVersion != Config::FirmwareVersion) {
             Logger::alarm("[Update] Neue Version gefunden!");
