@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <driver/twai.h>
 #include "PIDs.h"
 
 namespace Config {
@@ -39,7 +40,7 @@ namespace Config {
     constexpr bool sendRawDataOnly = false;
     constexpr uint32_t ObdIntervalMs = 200;
     //constexpr const char* TWAI_OPERATION_MODE = "TWAI_MODE_LISTEN";
-    constexpr const char* TWAI_OPERATION_MODE = "TWAI_MODE_NORMAL";
+    constexpr twai_mode_t TWAI_OPERATION_MODE = TWAI_MODE_NORMAL;
 
     // ----------- OBD2 PIDs ----------
     inline constexpr byte ObdRequestedPids[] = {
@@ -123,8 +124,8 @@ namespace Config {
     inline uint32_t lastCarRunningTime = 0;
     inline uint32_t lastBatterySendTime = 0;
     inline uint32_t ledTestStartTime = 0;
-    inline uint32_t lastSpeed = 0;
-    inline uint32_t lastFuelRate = 0;
+    inline float lastSpeed = 0.0f;
+    inline float lastFuelRate = 0.0f;
     inline float consumption = 0.0f;
     inline float consumptionSum = 0.0f;
     inline int consumptionCount = 0;

@@ -21,6 +21,10 @@ namespace NetworkManager {
     bool initEspNow();
     bool initBluetooth(const String& deviceName = "ESP32_BT");
 
+    /// @brief Startet einen WiFi-Access-Point (für WebConsole / Debug-Modus)
+    void startAccessPoint(const char* ssid = Config::DebugAPSSID,
+                          const char* password = Config::DebugAPPass);
+
     // ==================== Daten senden ====================
     bool sendEspNow(const uint8_t* data, size_t length);
     bool sendWiFiTCP(const uint8_t* data, size_t length); // Optional: TCP/UDP später

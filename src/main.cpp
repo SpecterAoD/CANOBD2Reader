@@ -24,8 +24,8 @@ void setup() {
         WebConsoleHandler::begin();              // Webserver starten
 
         Logger::debug("Warte auf START-Button...");
-        while (!WebConsoleHandler::startRequested()) {
-            WebConsoleHandler::loop();           // Webserver aktiv halten
+        while (!WebConsoleHandler::isStarted()) {
+            WebConsoleHandler::handle();         // Webserver aktiv halten
             delay(100);
         }
         Logger::debug("WebConsole: Start bestätigt!");
@@ -33,25 +33,25 @@ void setup() {
         // Optional
     }
     // ------ init ------
-    NetworkManager::initESPNow();
+    NetworkManager::initEspNow();
     OTAHandler::initOTA();
     CANHandler::init();
 
 }
 void loop() {
 // --------- OTA prüfen ----------
-    OTAHandler::loop();
+    OTAHandler::handleOTA();
 
     // --------- WebConsole aktualisieren ----------
     if (Config::EnableWebConsole) {
-        WebConsoleHandler::loop();
+        WebConsoleHandler::handle();
     }
 
     // --------- CAN-Nachrichten empfangen ----------
     CANHandler::processIncoming(); // Empfängt & sendet an ESP-NOW
 
     // --------- OBD2-PIDs regelmäßig abfragen ----------
-    if (millis() - Config::lastObdRequestTime > Config::ObdRequestIntervalMs) {
+    if (millis() - Config::lastObdRequestTime > Config::ObdIntervalMs) {
         Config::lastObdRequestTime = millis();
 
         for (uint8_t pid : Config::ObdRequestedPids) {
