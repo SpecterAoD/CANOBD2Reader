@@ -1,6 +1,7 @@
 #include "CANHandler.h"
 #include "Config.h"
 #include "Utils.h"
+#include "CANDecoder.h"
 
 bool CANHandler::init() {
     Logger::debug(" CAN...............INIT");
@@ -61,8 +62,13 @@ void CANHandler::processIncoming() {
 }
 
 void CANHandler::handleMessage(twai_message_t& message) {
-    // Sende CAN Frame via Utils
+    // Binaeres Rohframe bleibt fuer externe Tools erhalten.
     Utils::sendCanFrame(message.identifier, message.data, message.data_length_code);
+
+    // Zusaetzlich eine lesbare Textauswertung fuer die Display-CAN-Seite senden.
+    CANDecoder::DecodedFrame decoded = CANDecoder::decode(message);
+    Utils::sendTelemetry("CAN", "RAW", "LastCAN", decoded.raw, "", "OK");
+    Utils::sendTelemetry("CAN", "HINT", "CANHint", decoded.hint, "", "OK");
 
     // Debug-Ausgabe
     Logger::canFrame(message);

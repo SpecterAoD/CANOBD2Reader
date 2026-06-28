@@ -15,14 +15,39 @@
 #include <Arduino.h>
 #include <esp_now.h>
 #include <WiFi.h>
+#include <string.h>
 #include "driver/twai.h"
-#include "PIDs.h"
-#include "PID_Converter.h"
+#if __has_include("PIDs.h")
+  #include "PIDs.h"
+#else
+  #include "../include/PIDs.h"
+#endif
+#if __has_include("PID_Converter.h")
+  #include "PID_Converter.h"
+#else
+  #include "../include/PID_Converter.h"
+#endif
+#if __has_include("TelemetryProtocol.h")
+  #include "TelemetryProtocol.h"
+#else
+  #include "../include/TelemetryProtocol.h"
+#endif
+#if __has_include("SimulationData.h")
+  #include "SimulationData.h"
+#else
+  #include "../include/SimulationData.h"
+#endif
+#if __has_include("CANDecoder.h")
+  #include "CANDecoder.h"
+#else
+  #include "../include/CANDecoder.h"
+#endif
 // End region ================================== Includes ==================================
 
 // region ================================== #define ==================================
-// --------- Firmeware ---------
-#define FIRMWARE_VER "3.1203"
+// --------- Firmware ---------
+#define FIRMWARE_VERSION "3.1204"
+#define TELEMETRY_PROTOCOL_VERSION 2
 // -----------------------------
 
 // ------ Debug Optionen -------
@@ -78,10 +103,17 @@
 #define SHIELD_VOLTAGE_DIVIDER 32
 
 // ------------ CAN / OBD2 ------------
-#define POLLING_RATE_MS 500
-#define CAN_IDLE_TIMEOUT 500
+#define POLLING_RATE_MS 250
+#define CAN_IDLE_TIMEOUT_MS 1500
+#define OBD_RESPONSE_TIMEOUT_MS 250
+#define OBD_TX_TIMEOUT_MS 50
+#define BATTERY_SEND_INTERVAL_MS 3000
+#define SUPPORTED_PID_REFRESH_INTERVAL_MS 60000
+#define DTC_QUERY_INTERVAL_MS 30000
 #define SLEEP_PERIOD 6 // 6
 #define RAW_DATA_ONLY 0  // 1 = nur Rohdaten senden, 0 = berechnete Werte senden
+#define ENABLE_TELEMETRY_SIMULATION 0  // 1 = ohne echten CAN/OBD-Bus simulierte Daten senden
+#define SIMULATION_SEND_INTERVAL_MS 250
 
 // ----------- Fahrzeug Status -----------
 #define CAR_IS_RUNNING 1
@@ -91,7 +123,7 @@
 // ----------- Power -----------
 #define START_STOP_DELAY_MS 300000 // 5 Minuten Wartezeit
 #define CPU_FREQUENCY 80 // CPU Frequenz im Sleep-Modus
-#define VOLTAGE_CALCULATION_FAKTOR 4.79   // 4.7 Spannungsteiler // 4.84 aus Tabelle errechnet
+#define VOLTAGE_CALCULATION_FACTOR 4.79   // 4.7 Spannungsteiler // 4.84 aus Tabelle errechnet
 #define VOLTAGE_CHANGE_THRESHOLD 0.2 // z. B. 0.2 V Unterschied
 
 // --- ESP-NOW Sicherheit ---
@@ -140,6 +172,17 @@ unsigned long last_car_running_time = 0;
 int car_status = 0;
 unsigned long sleep_trigger_time  = 0;
 unsigned long last_battery_send_time = 0;
+unsigned long last_supported_pid_refresh_time = 0;
+unsigned long last_dtc_query_time = 0;
+unsigned long last_simulation_send_time = 0;
+uint32_t telemetry_sequence = 0;
+uint32_t can_frame_count = 0;
+size_t simulation_sample_index = 0;
+bool can_bus_active = false;
+bool supported_pids_initialized = false;
+uint32_t supported_pids_01_20 = 0;
+uint32_t supported_pids_21_40 = 0;
+uint32_t supported_pids_41_60 = 0;
 float last_fuel_rate = 0.0;    // L/h
 float last_speed = 0.0;        // km/h
 float consumption_sum = 0.0;   // Summe für Mittelwert
@@ -150,10 +193,17 @@ int consumption_count = 0;     // Anzahl Messungen
 // region ========================== OBD2-Konfiguration ==========================
 // Moegliche Abfragen siehe PIDs.h
 const byte obd_requested_pids[] = {
-  //ENGINE_RPM
+  ENGINE_RPM,
+  ENGINE_LOAD,
   ENGINE_COOLANT_TEMP,
   VEHICLE_SPEED,
+  INTAKE_AIR_TEMP,
+  MAF_FLOW_RATE,
+  THROTTLE_POSITION,
+  FUEL_TANK_LEVEL_INPUT,
+  RUN_TIME_SINCE_ENGINE_START,
   CONTROL_MODULE_VOLTAGE,
+  AMBIENT_AIR_TEMP,
   ENGINE_FUEL_RATE,
   ENGINE_OIL_TEMP
 };
@@ -161,6 +211,20 @@ const byte obd_pid_count = sizeof(obd_requested_pids) / sizeof(obd_requested_pid
 const unsigned long OBD_INTERVAL_MS = 2000;
 
 // End region ========================== OBD2-Konfiguration ==========================
+
+// region ========================== Funktionsprototypen ==========================
+int getMeshID();
+bool initCAN();
+bool sendOBDRequest(byte mode, byte pid);
+bool receiveOBDResponse(byte mode, byte pid, byte* outData, byte& outLen);
+void sendTelemetry(const char* type, const char* key, const char* name, const char* value, const char* unit, const char* status);
+void sendStatusFrame(const char* key, const char* value, const char* status);
+void sendOBDData(byte pid, const char* name, const char* value, const char* unit, const char* status);
+void refreshSupportedPIDs();
+bool isPIDSupported(byte pid);
+void queryAndSendDTCs();
+void sendSimulationTelemetry();
+// End region ========================== Funktionsprototypen ==========================
 
 // region ================ CRC ================
 uint16_t crc16(const uint8_t* data, size_t length) {
@@ -232,7 +296,7 @@ int getMeshID() {
 
 // region ================================== Setup ==================================
 void setup() {
-#ifdef DEBUG_FLAG
+#if DEBUG_FLAG
   Serial.begin(BUDRATE);
   debugln(BUDRATE);
 #endif
@@ -249,9 +313,9 @@ void setup() {
   debugln("https://gitlab.com/MrDIYca/canabus");
   debugln("------------------------");
 
-  last_can_msg_timestamp = millis() - CAN_IDLE_TIMEOUT + 5;
+  last_can_msg_timestamp = millis() - CAN_IDLE_TIMEOUT_MS + 5;
 
-  if (!initESPNow() || (!initCAN())) {
+  if (!initESPNow() || (!ENABLE_TELEMETRY_SIMULATION && !initCAN())) {
     debugln(" SYSTEM......... FAIL");
     debugln(" SYSTEM......... FAIL");
     debugln(" ... restarting");
@@ -259,6 +323,8 @@ void setup() {
     ESP.restart();
   }
 
+  sendTelemetry("STATUS", "FW", "Firmware", FIRMWARE_VERSION, "", "OK");
+  sendTelemetry("STATUS", "PROTO", "Protocol", "2", "", "OK");
   digitalWrite(SHIELD_LED_PIN, HIGH);
 }
 // End region ================================== Setup ==================================
@@ -304,7 +370,8 @@ if (TWAI_OPERATION_MODE == TWAI_MODE_NORMAL) {
     debugln(" CAN....Alerts.....FAIL");
     return false;
   }
-  debugln(" CAN.................OK");
+    debugln(" CAN.................OK");
+  can_bus_active = true;
   return true;
 }
 // End region ================================== initCAN ==================================
@@ -322,6 +389,17 @@ static void handleCANMessage(twai_message_t& message) {
   can_frame.crc = crc16((uint8_t*)&can_frame, sizeof(esp_now_frame_t) - 2);
 
   esp_now_send(peerAddress, (uint8_t*)&can_frame, sizeof(can_frame));
+  can_bus_active = true;
+  can_frame_count++;
+
+  // Zusaetzlich zum binaeren CAN-Frame senden wir eine textbasierte Kurzfassung.
+  // Das Display kann diese ohne Kenntnis der Rohframe-Struktur darstellen.
+  CANDecoder::DecodedFrame decoded = CANDecoder::decode(message);
+  sendTelemetry("CAN", "RAW", "LastCAN", decoded.raw, "", "OK");
+  sendTelemetry("CAN", "HINT", "CANHint", decoded.hint, "", "OK");
+  char countValue[16];
+  snprintf(countValue, sizeof(countValue), "%lu", static_cast<unsigned long>(can_frame_count));
+  sendTelemetry("CAN", "COUNT", "CANCount", countValue, "frames", "OK");
 
   debug("← CAN ID: 0x");
   debug(message.identifier, HEX);
@@ -363,7 +441,7 @@ bool sendOBDRequest(byte mode, byte pid) {
     debug(request.data[i], HEX);
   }
 
-  esp_err_t result = twai_transmit(&request, pdMS_TO_TICKS(10));
+  esp_err_t result = twai_transmit(&request, pdMS_TO_TICKS(OBD_TX_TIMEOUT_MS));
 
   if (result == ESP_OK) {
     debugln(" [OK]");
@@ -382,10 +460,26 @@ bool sendOBDRequest(byte mode, byte pid) {
 }
 // End region ================= OBD2 Anfrage senden =================
 
+// region ================= DTC Anfrage senden =================
+bool sendDTCRequest() {
+  twai_message_t request = {};
+  request.identifier = 0x7DF;
+  request.extd = 0;
+  request.rtr = 0;
+  request.data_length_code = 8;
+  request.data[0] = 0x01;      // Ein Datenbyte: Mode 03
+  request.data[1] = read_DTCs;
+  for (int i = 2; i < 8; i++) request.data[i] = 0x55;
+
+  esp_err_t result = twai_transmit(&request, pdMS_TO_TICKS(OBD_TX_TIMEOUT_MS));
+  return result == ESP_OK;
+}
+// End region ================= DTC Anfrage senden =================
+
 // region ================= OBD2 Antwort empfangen =================
 bool receiveOBDResponse(byte mode, byte pid, byte* outData, byte& outLen) {
   unsigned long start = millis();
-  while (millis() - start < 200) {
+  while (millis() - start < OBD_RESPONSE_TIMEOUT_MS) {
     twai_message_t response;
     if (twai_receive(&response, pdMS_TO_TICKS(10)) == ESP_OK) {
       
@@ -400,9 +494,13 @@ bool receiveOBDResponse(byte mode, byte pid, byte* outData, byte& outLen) {
       debugln("");
 
 
-      if (response.identifier >= 0x7E8 && response.identifier <= 0x7EF) {
+      if (response.identifier >= 0x7E8 && response.identifier <= 0x7EF &&
+          response.data_length_code >= 3 && response.data_length_code <= 8) {
+        last_can_msg_timestamp = millis();
+        can_bus_active = true;
         if (response.data[1] == (mode | 0x40) && response.data[2] == pid) {
           outLen = response.data_length_code - 3;
+          if (outLen > 5) outLen = 5;
           memcpy(outData, &response.data[3], outLen);
 
           debug(" OBD RESP: ID=0x");
@@ -424,7 +522,180 @@ bool receiveOBDResponse(byte mode, byte pid, byte* outData, byte& outLen) {
 }
 // End region ================= OBD2 Antwort empfangen =================
 
-// reginon ================ calcConsumption ================
+bool receiveDTCResponse(byte* outData, byte& outLen) {
+  unsigned long start = millis();
+  while (millis() - start < OBD_RESPONSE_TIMEOUT_MS) {
+    twai_message_t response;
+    if (twai_receive(&response, pdMS_TO_TICKS(10)) == ESP_OK) {
+      if (response.identifier >= 0x7E8 && response.identifier <= 0x7EF &&
+          response.data_length_code >= 3 && response.data_length_code <= 8 &&
+          response.data[1] == (read_DTCs | 0x40)) {
+        last_can_msg_timestamp = millis();
+        can_bus_active = true;
+
+        outLen = response.data_length_code - 2;
+        if (outLen > 6) outLen = 6;
+        memcpy(outData, &response.data[2], outLen);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// region ================= Supported PIDs =================
+uint32_t bytesToMask(const byte* data, byte length) {
+  if (length < 4) return 0;
+  return (static_cast<uint32_t>(data[0]) << 24) |
+         (static_cast<uint32_t>(data[1]) << 16) |
+         (static_cast<uint32_t>(data[2]) << 8) |
+         static_cast<uint32_t>(data[3]);
+}
+
+bool querySupportedPidRange(byte rangePid, uint32_t& targetMask) {
+  byte responseData[8];
+  byte responseLen = 0;
+
+  if (!sendOBDRequest(read_LiveData, rangePid)) return false;
+  if (!receiveOBDResponse(read_LiveData, rangePid, responseData, responseLen)) return false;
+
+  targetMask = bytesToMask(responseData, responseLen);
+  return targetMask != 0;
+}
+
+bool isPIDSupported(byte pid) {
+  if (!supported_pids_initialized) return true;
+
+  byte rangeBase = 0x00;
+  uint32_t mask = supported_pids_01_20;
+  if (pid >= 0x21 && pid <= 0x40) {
+    rangeBase = 0x20;
+    mask = supported_pids_21_40;
+  } else if (pid >= 0x41 && pid <= 0x60) {
+    rangeBase = 0x40;
+    mask = supported_pids_41_60;
+  } else if (pid < 0x01 || pid > 0x20) {
+    return false;
+  }
+
+  const byte offset = pid - rangeBase;
+  if (offset == 0 || offset > 32) return false;
+  return (mask & (1UL << (32 - offset))) != 0;
+}
+
+void refreshSupportedPIDs() {
+  bool ok = querySupportedPidRange(SUPPORTED_PIDS_1_20, supported_pids_01_20);
+
+  if (ok && (supported_pids_01_20 & 0x00000001UL)) {
+    ok = querySupportedPidRange(SUPPORTED_PIDS_21_40, supported_pids_21_40);
+  }
+
+  if (ok && (supported_pids_21_40 & 0x00000001UL)) {
+    ok = querySupportedPidRange(SUPPORTED_PIDS_41_60, supported_pids_41_60);
+  }
+
+  supported_pids_initialized = ok;
+  sendStatusFrame("PID_SUPPORT", ok ? "READY" : "UNKNOWN", ok ? "OK" : "WARN");
+}
+// End region ================= Supported PIDs =================
+
+// region ================= DTCs lesen =================
+char dtcTypeChar(byte highBits) {
+  switch (highBits & 0x03) {
+    case 0: return 'P';
+    case 1: return 'C';
+    case 2: return 'B';
+    default: return 'U';
+  }
+}
+
+void appendDTC(char* buffer, size_t bufferSize, byte a, byte b) {
+  if (a == 0 && b == 0) return;
+
+  char code[8];
+  snprintf(code, sizeof(code), "%c%01X%03X",
+           dtcTypeChar(a >> 6),
+           (a >> 4) & 0x03,
+           ((a & 0x0F) << 8) | b);
+
+  const size_t used = strlen(buffer);
+  if (used >= bufferSize - 1) return;
+
+  snprintf(buffer + used, bufferSize - used, "%s%s", used > 0 ? " " : "", code);
+}
+
+void queryAndSendDTCs() {
+  byte responseData[8];
+  byte responseLen = 0;
+
+  if (!sendDTCRequest()) {
+    sendTelemetry("DTC", "ACTIVE", "DTC", "N/A", "", "SEND_FAIL");
+    return;
+  }
+
+  if (!receiveDTCResponse(responseData, responseLen)) {
+    sendTelemetry("DTC", "ACTIVE", "DTC", "N/A", "", "TIMEOUT");
+    return;
+  }
+
+  char dtcList[64] = {0};
+  for (byte i = 0; i + 1 < responseLen; i += 2) {
+    appendDTC(dtcList, sizeof(dtcList), responseData[i], responseData[i + 1]);
+  }
+
+  if (dtcList[0] == '\0') {
+    sendTelemetry("DTC", "ACTIVE", "DTC", "Keine", "", "OK");
+  } else {
+    sendTelemetry("DTC", "ACTIVE", "DTC", dtcList, "", "WARN");
+  }
+}
+// End region ================= DTCs lesen =================
+
+// region ================ Telemetrie senden ================
+void sendTelemetry(const char* type,
+                   const char* key,
+                   const char* name,
+                   const char* value,
+                   const char* unit,
+                   const char* status) {
+  TelemetryProtocol::buildPayload(text_frame.payload, sizeof(text_frame.payload),
+                                  type, key, name, value, unit, status,
+                                  ++telemetry_sequence);
+  text_frame.crc = TelemetryProtocol::crc16((uint8_t*)&text_frame, sizeof(text_frame) - 2);
+  esp_now_send(peerAddress, (uint8_t*)&text_frame, sizeof(text_frame));
+}
+
+void sendStatusFrame(const char* key, const char* value, const char* status) {
+  sendTelemetry("STATUS", key, key, value, "", status);
+}
+
+void sendSimulationTelemetry() {
+  if (millis() - last_simulation_send_time < SIMULATION_SEND_INTERVAL_MS) return;
+  last_simulation_send_time = millis();
+
+  const SimulationData::Sample& sample =
+      SimulationData::Samples[simulation_sample_index % SimulationData::SampleCount];
+
+  char value[16];
+  const float simulatedValue = SimulationData::valueForSample(sample, millis(), simulation_sample_index);
+  snprintf(value, sizeof(value), sample.decimals == 0 ? "%.0f" : "%.1f", simulatedValue);
+  sendTelemetry(sample.type, sample.key, sample.name, value, sample.unit, "OK");
+
+  simulation_sample_index++;
+
+  // Status-, CAN- und DTC-Pakete werden zwischen die Messwerte gemischt, damit
+  // alle Display-Seiten ohne Fahrzeug und ohne CAN-Transceiver getestet werden koennen.
+  if (simulation_sample_index % SimulationData::SampleCount == 0) {
+    sendStatusFrame("CAN", "SIMULATED", "OK");
+    sendTelemetry("CAN", "RAW", "LastCAN", "0x7E8 DLC8 04 41 0C 1A F8 55 55 55", "", "OK");
+    sendTelemetry("CAN", "HINT", "CANHint", "Simulierte OBD Antwort RPM", "", "OK");
+    sendTelemetry("CAN", "COUNT", "CANCount", "128", "frames", "OK");
+    sendTelemetry("DTC", "ACTIVE", "DTC", "P0133 P0420", "", "WARN");
+  }
+}
+// end region ================ Telemetrie senden ================
+
+// region ================ calcConsumption ================
 void calcConsumption(byte pid, float value) {
     if (pid == VEHICLE_SPEED) last_speed = value;
     if (pid == ENGINE_FUEL_RATE) last_fuel_rate = value;
@@ -442,23 +713,21 @@ void calcConsumption(byte pid, float value) {
     if (consumption_count >= 10) {
         float avg_consumption = consumption_sum / consumption_count;
 
-        snprintf(text_frame.payload, sizeof(text_frame.payload),
-                 "FUEL_CONS,AVG,%.2f,L100", avg_consumption);
-        text_frame.crc = crc16((uint8_t*)&text_frame, sizeof(text_frame) - 2);
-        esp_now_send(peerAddress, (uint8_t*)&text_frame, sizeof(text_frame));
+        char avgConsumption[16];
+        snprintf(avgConsumption, sizeof(avgConsumption), "%.2f", avg_consumption);
+        sendTelemetry("FUEL", "AVG", "AverageConsumption", avgConsumption, "L/100km", "OK");
 
         consumption_sum = 0;
         consumption_count = 0;
     }
 }
-// end reginon ================ calcConsumption ================
+// end region ================ calcConsumption ================
 
 // region ================= OBD2 Anfrage senden und Antwort verarbeiten =================
-void sendOBDData(byte pid, const char* name, const char* value) {
-  snprintf(text_frame.payload, sizeof(text_frame.payload),
-           "%02X,%s,%s", pid, name, value);
-  text_frame.crc = crc16((uint8_t*)&text_frame, sizeof(text_frame) - 2);
-  esp_now_send(peerAddress, (uint8_t*)&text_frame, sizeof(text_frame));
+void sendOBDData(byte pid, const char* name, const char* value, const char* unit, const char* status) {
+  char pidHex[4];
+  snprintf(pidHex, sizeof(pidHex), "%02X", pid);
+  sendTelemetry("OBD", pidHex, name, value, unit, status);
 }
 // --- Die Hauptfunktion ---
 void requestAndSendOBDPID(byte pid) {
@@ -470,7 +739,7 @@ void requestAndSendOBDPID(byte pid) {
     debug(getPIDName(pid));
     debugln("] SEND FAIL");
 
-    sendOBDData(pid, "ERROR", "N/A");
+    sendOBDData(pid, getPIDName(pid), "N/A", "", "SEND_FAIL");
     return;
   }
   // ------------ Antwort empfangen ------------
@@ -485,11 +754,15 @@ void requestAndSendOBDPID(byte pid) {
     for (byte i = 0; i < responseLen; i++) {
       sprintf(&rawHex[i * 3], "%02X ", responseData[i]);
     }
-    sendOBDData(pid, getPIDName(pid), rawHex);
+    sendOBDData(pid, getPIDName(pid), rawHex, "raw", "OK");
 
 #else
     // Umrechnen in physikalische Werte
     PIDResult result = convertPID(pid, responseData, responseLen);
+    if (strcmp(result.unit, "INVALID") == 0) {
+      sendOBDData(pid, getPIDName(pid), "N/A", "", "DATA_ERROR");
+      return;
+    }
 
     debug("← OBD PID: 0x");
     debug(pid, HEX);
@@ -506,11 +779,9 @@ void requestAndSendOBDPID(byte pid) {
     }
 
     // Nur PIDs senden, die nicht für Verbrauchsberechnung reserviert sind
-    if (pid != VEHICLE_SPEED && pid != ENGINE_FUEL_RATE) {
-      char valueStr[16];
-      snprintf(valueStr, sizeof(valueStr), "%.2f %s", result.value, result.unit);
-      sendOBDData(pid, getPIDName(pid), valueStr);
-    }
+    char valueStr[16];
+    snprintf(valueStr, sizeof(valueStr), "%.2f", result.value);
+    sendOBDData(pid, getPIDName(pid), valueStr, result.unit, "OK");
 #endif
 
   } else {
@@ -520,7 +791,7 @@ void requestAndSendOBDPID(byte pid) {
     debug(getPIDName(pid));
     debugln("] TIMEOUT");
 
-    sendOBDData(pid, "ERROR", "N/A");
+    sendOBDData(pid, getPIDName(pid), "N/A", "", "TIMEOUT");
   }
 }
   // -------------------------------------------
@@ -541,7 +812,7 @@ void handleSleep() {
   if (car_status == CAR_IS_OFF &&
       (currentMillis - last_car_running_time > START_STOP_DELAY_MS) &&
       (currentMillis - last_obd_request_time >= OBD_INTERVAL_MS)) {
-      //(currentMillis - last_can_msg_timestamp > CAN_IDLE_TIMEOUT)) {
+      //(currentMillis - last_can_msg_timestamp > CAN_IDLE_TIMEOUT_MS)) {
     esp_deep_sleep();
   }
 }
@@ -600,7 +871,7 @@ VoltageMeasurement get_vin_voltage() {
 
   VoltageMeasurement result;
   result.adc_raw = avg;
-  result.voltage = (avg / 4095.0) * 3.3 * VOLTAGE_CALCULATION_FAKTOR;
+  result.voltage = (avg / 4095.0) * 3.3 * VOLTAGE_CALCULATION_FACTOR;
   return result;
 }
 // ------------ Fahrzeugstatus anhand Batteriespannung bestimmen ------------
@@ -641,15 +912,14 @@ void sendBatteryVoltage() {
 
   // Optional: Warnung bei Grenzwerten
   if (voltage < 11.5 || voltage > 14.8) {
-    snprintf(text_frame.payload, sizeof(text_frame.payload),
-             "BATTERY,ALERT,%.2f,V", voltage);
+    char voltageStr[16];
+    snprintf(voltageStr, sizeof(voltageStr), "%.2f", voltage);
+    sendTelemetry("BATTERY", "VOLTAGE", "BatteryVoltage", voltageStr, "V", "ALERT");
   } else {
-    snprintf(text_frame.payload, sizeof(text_frame.payload),
-             "BATTERY,VOLTAGE,%.2f,V", voltage);
+    char voltageStr[16];
+    snprintf(voltageStr, sizeof(voltageStr), "%.2f", voltage);
+    sendTelemetry("BATTERY", "VOLTAGE", "BatteryVoltage", voltageStr, "V", "OK");
   }
-
-  text_frame.crc = crc16((uint8_t*)&text_frame, sizeof(text_frame) - 2);
-  esp_now_send(peerAddress, (uint8_t*)&text_frame, sizeof(text_frame));
 }
 
 // End region ======================== Power ===============================
@@ -728,7 +998,7 @@ void printTWAIStatus() {
 #endif
 // End region ================ TWAI Status ================
 
-// reginon ================ LED-Test ================
+// region ================ LED-Test ================
 void ledtest() {
   digitalWrite(SHIELD_LED_PIN, LOW);
   digitalWrite(SHIELD_LED_PIN2, LOW);
@@ -741,11 +1011,17 @@ void blinkLED(uint8_t pin) {
   delay(50);
   digitalWrite(pin, LOW);
 }
-// end reginon ================ LED-Test ================
+// end region ================ LED-Test ================
 
 // region ================================== loop ==================================
 void loop() {
   currentMillis = millis();
+
+  if (ENABLE_TELEMETRY_SIMULATION) {
+    sendSimulationTelemetry();
+    return;
+  }
+
   uint32_t alerts_triggered;
   twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(POLLING_RATE_MS));
 
@@ -770,12 +1046,14 @@ void loop() {
       debugln("Alert: TWAI controller has become error passive.");
       ledShouldBeOn = true;
       debugln(" CAN MSG..........ERROR");
+      sendStatusFrame("CAN", "ERROR_PASSIVE", "WARN");
   }
   if (alerts_triggered & TWAI_ALERT_BUS_ERROR) {
       debugln("Alert: A (Bit, Stuff, CRC, Form, ACK) error has occurred on the bus.");
       //Serial.printf("Bus error count: %d\n", twaistatus.bus_error_count);
       ledShouldBeOn = true;
       debugln(" CAN MSG......BUS ERROR");
+      sendStatusFrame("CAN", "BUS_ERROR", "ERROR");
   }
   if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL) {
       debugln("Alert: The RX queue is full causing a received frame to be lost.");
@@ -784,6 +1062,7 @@ void loop() {
       //Serial.printf("RX overrun %d\n", twaistatus.rx_overrun_count);
       ledShouldBeOn = true;
       debugln(" CAN MSG.........Q FULL");
+      sendStatusFrame("CAN", "RX_QUEUE_FULL", "ERROR");
   }
   //---------------------------------------
 
@@ -802,9 +1081,32 @@ void loop() {
 
   //------------- OBD2 Daten regelmäßig abfragen -------------
   if (ENABLE_OBD2 && currentMillis - last_obd_request_time >= OBD_INTERVAL_MS) {
+    can_bus_active = (currentMillis - last_can_msg_timestamp) <= CAN_IDLE_TIMEOUT_MS;
+    sendStatusFrame("CAN", can_bus_active ? "ACTIVE" : "IDLE", can_bus_active ? "OK" : "TIMEOUT");
+
+    if (!supported_pids_initialized ||
+        currentMillis - last_supported_pid_refresh_time >= SUPPORTED_PID_REFRESH_INTERVAL_MS) {
+      refreshSupportedPIDs();
+      last_supported_pid_refresh_time = currentMillis;
+    }
+
+    static bool unsupported_pid_reported[obd_pid_count] = {false};
     for (byte i = 0; i < obd_pid_count; i++) {
+      if (!isPIDSupported(obd_requested_pids[i])) {
+        if (!unsupported_pid_reported[i]) {
+          sendOBDData(obd_requested_pids[i], getPIDName(obd_requested_pids[i]), "N/A", "", "UNSUPPORTED");
+          unsupported_pid_reported[i] = true;
+        }
+        continue;
+      }
       requestAndSendOBDPID(obd_requested_pids[i]);
     }
+
+    if (currentMillis - last_dtc_query_time >= DTC_QUERY_INTERVAL_MS) {
+      queryAndSendDTCs();
+      last_dtc_query_time = currentMillis;
+    }
+
     last_obd_request_time = currentMillis;
   }
   //----------------------------------------------------------
@@ -812,7 +1114,7 @@ void loop() {
   //--------------TWAI Status-----------
   // Optional zur Fehlersuche
   #if TWAI_DEBUG_FLAG
-    printTWAIStatus(); // Aktievieren / Deaktivieren  #define TWAI_DEBUG_FLAG 0
+    printTWAIStatus(); // Aktivieren / Deaktivieren: #define TWAI_DEBUG_FLAG 0
   #endif
   //-------------------------------------------------------
 
@@ -822,7 +1124,7 @@ void loop() {
   //-------------------------------------------------------
 
   //------------- Batteriespannung senden -----------
-  if (millis() - last_battery_send_time > 3000) {  //5000
+  if (millis() - last_battery_send_time > BATTERY_SEND_INTERVAL_MS) {
   sendBatteryVoltage();
   last_battery_send_time = millis();
   }

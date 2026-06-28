@@ -49,7 +49,9 @@ void OBD2Handler::calcConsumption(uint8_t pid, float value) {
 
     if (Config::consumptionCount >= 10) {
         float avg = Config::consumptionSum / Config::consumptionCount;
-        Utils::sendOBDValue(0xFE, "FUEL_CONS", avg, "L100");
+        char avgText[16];
+        snprintf(avgText, sizeof(avgText), "%.2f", avg);
+        Utils::sendTelemetry("FUEL", "AVG", "AverageConsumption", avgText, "L/100km", "OK");
 
         Config::consumptionSum = 0.0f;
         Config::consumptionCount = 0;
@@ -75,9 +77,7 @@ void OBD2Handler::requestAndSendPID(uint8_t pid) {
                 calcConsumption(pid, result.value);
             }
 
-            if (pid != VEHICLE_SPEED && pid != ENGINE_FUEL_RATE) {
-                Utils::sendOBDValue(pid, getPIDName(pid), result.value, result.unit);
-            }
+            Utils::sendOBDValue(pid, getPIDName(pid), result.value, result.unit);
         }
     } else {
         Utils::sendOBDError(pid, getPIDName(pid));

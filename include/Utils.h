@@ -2,22 +2,13 @@
 #include <Arduino.h>
 #include <esp_now.h>
 #include "Config.h"
+#include "TelemetryProtocol.h"
 
 namespace Utils {
 
     // ============ CRC ============
     inline uint16_t crc16(const uint8_t* data, size_t length) {
-        uint16_t crc = 0xFFFF;
-        for (size_t i = 0; i < length; ++i) {
-            crc ^= data[i];
-            for (int j = 0; j < 8; ++j) {
-                if (crc & 1)
-                    crc = (crc >> 1) ^ 0xA001;
-                else
-                    crc >>= 1;
-            }
-        }
-        return crc;
+        return TelemetryProtocol::crc16(data, length);
     }
 
     // ============ ESP-NOW SEND ============
@@ -28,9 +19,22 @@ namespace Utils {
 
         strncpy(textFrame.payload, payload, sizeof(textFrame.payload));
         textFrame.payload[sizeof(textFrame.payload)-1] = '\0';
-        textFrame.crc = crc16(reinterpret_cast<uint8_t*>(&textFrame), sizeof(textFrame) - 2);
+        textFrame.crc = TelemetryProtocol::crc16(reinterpret_cast<uint8_t*>(&textFrame), sizeof(textFrame) - 2);
 
         esp_now_send(EspNowPeerMac, reinterpret_cast<uint8_t*>(&textFrame), sizeof(textFrame));
+    }
+
+    inline void sendTelemetry(const char* type,
+                              const char* key,
+                              const char* name,
+                              const char* value,
+                              const char* unit,
+                              const char* status) {
+        static uint32_t sequence = 0;
+        char payload[TelemetryProtocol::MaxPayloadLength];
+        TelemetryProtocol::buildPayload(payload, sizeof(payload),
+                                        type, key, name, value, unit, status, ++sequence);
+        sendTextFrame(payload);
     }
 
     /// @brief Sendet CAN-Datenframe über ESP-NOW
@@ -62,16 +66,18 @@ namespace Utils {
 
     /// @brief Sendet ein OBD2-Ergebnis (berechneter Wert + Einheit)
     inline void sendOBDValue(byte pid, const char* name, float value, const char* unit) {
-        char buffer[64];
-        snprintf(buffer, sizeof(buffer), "%02X,%s,%.2f,%s", pid, name, value, unit);
-        sendTextFrame(buffer);
+        char pidHex[4];
+        char valueText[16];
+        snprintf(pidHex, sizeof(pidHex), "%02X", pid);
+        snprintf(valueText, sizeof(valueText), "%.2f", value);
+        sendTelemetry("OBD", pidHex, name, valueText, unit, "OK");
     }
 
     /// @brief Sendet ein OBD2-Fehlerframe
     inline void sendOBDError(byte pid, const char* name) {
-        char buffer[64];
-        snprintf(buffer, sizeof(buffer), "%02X,%s,ERROR,N/A", pid, name);
-        sendTextFrame(buffer);
+        char pidHex[4];
+        snprintf(pidHex, sizeof(pidHex), "%02X", pid);
+        sendTelemetry("OBD", pidHex, name, "N/A", "", "TIMEOUT");
     }
 
 }

@@ -13,6 +13,8 @@ public:
     static void processIncoming();
 
     /// @brief Behandelt eingehende CAN-Nachricht
+    /// Neben dem binaeren Rohframe wird eine lesbare CAN-Zusammenfassung fuer
+    /// die Display-CAN-Seite erzeugt.
     static void handleMessage(twai_message_t& message);
 
     /// @brief Prüft und druckt den aktuellen Status (optional)
