@@ -13,6 +13,9 @@ public:
     static bool receiveResponse(uint8_t mode, uint8_t pid, uint8_t* outData, uint8_t& outLen);
 
     /// @brief Fordert PID an und sendet Ergebnis via Utils
+    /// Alle erfolgreichen Werte werden im gemeinsamen Telemetrieformat gesendet.
+    /// Werte, die fuer abgeleitete Berechnungen gebraucht werden, werden nicht
+    /// mehr unterdrueckt, damit das Display vollstaendig synchron bleibt.
     static void requestAndSendPID(uint8_t pid);
 
     /// @brief Berechnet und sendet Verbrauch aus Speed + FuelRate

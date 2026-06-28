@@ -39,15 +39,29 @@ namespace Config {
     constexpr int SleepPeriodSec = 6;
     constexpr bool sendRawDataOnly = false;
     constexpr uint32_t ObdIntervalMs = 200;
+    constexpr uint32_t SupportedPidRefreshIntervalMs = 60000;
+    constexpr uint32_t DtcQueryIntervalMs = 30000;
+    // Schaltet einen reinen ESP-NOW-Kommunikationstest frei. In diesem Modus
+    // koennen Sender und Display ohne Fahrzeug/CAN-Transceiver getestet werden.
+    constexpr bool EnableTelemetrySimulation = false;
+    constexpr uint32_t SimulationIntervalMs = 250;
     //constexpr const char* TWAI_OPERATION_MODE = "TWAI_MODE_LISTEN";
     constexpr twai_mode_t TWAI_OPERATION_MODE = TWAI_MODE_NORMAL;
 
     // ----------- OBD2 PIDs ----------
     inline constexpr byte ObdRequestedPids[] = {
         ENGINE_RPM,
+        ENGINE_LOAD,
         ENGINE_COOLANT_TEMP,
-        ENGINE_OIL_TEMP,
         VEHICLE_SPEED,
+        INTAKE_AIR_TEMP,
+        MAF_FLOW_RATE,
+        THROTTLE_POSITION,
+        FUEL_TANK_LEVEL_INPUT,
+        RUN_TIME_SINCE_ENGINE_START,
+        CONTROL_MODULE_VOLTAGE,
+        AMBIENT_AIR_TEMP,
+        ENGINE_OIL_TEMP,
         ENGINE_FUEL_RATE
     };
 
