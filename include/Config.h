@@ -36,7 +36,7 @@ namespace Config {
         constexpr bool EnableSenderOta = true;
 
         // Sender-Simulation: sendet ohne Fahrzeug/CAN-Transceiver Testwerte.
-        constexpr bool EnableSenderTelemetrySimulation = false;
+        constexpr bool EnableSenderTelemetrySimulation = true;
 
         // Display-Simulation: erzeugt lokal Testwerte fuer alle Display-Seiten.
         constexpr bool EnableDisplayInternalSimulation = false;
