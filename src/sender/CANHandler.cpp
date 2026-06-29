@@ -3,6 +3,9 @@
 #include "Utils.h"
 #include "CANDecoder.h"
 
+bool CANHandler::driverInstalled = false;
+bool CANHandler::driverStarted = false;
+
 bool CANHandler::init() {
     Logger::debug(" CAN...............INIT");
     Logger::debug(" TWAI Modus: ");
@@ -28,16 +31,23 @@ bool CANHandler::init() {
         Logger::debug(" CAN....Driver....FAIL");
         return false;
     }
+    driverInstalled = true;
     Logger::debug(" CAN....Install......OK");
 
     // --- Treiber starten ---
     if (twai_start() != ESP_OK) {
         Logger::debug(" CAN....Start......FAIL");
+        shutdown();
         return false;
     }
+    driverStarted = true;
     Logger::debug(" CAN....Start........OK");
 
-    return configureAlerts();
+    if (!configureAlerts()) {
+        shutdown();
+        return false;
+    }
+    return true;
 }
 
 bool CANHandler::configureAlerts() {
@@ -54,6 +64,17 @@ bool CANHandler::configureAlerts() {
     return true;
 }
 
+void CANHandler::shutdown() {
+    if (driverStarted) {
+        twai_stop();
+        driverStarted = false;
+    }
+    if (driverInstalled) {
+        twai_driver_uninstall();
+        driverInstalled = false;
+    }
+}
+
 void CANHandler::processIncoming() {
     twai_message_t message;
     while (twai_receive(&message, 0) == ESP_OK) {
@@ -62,10 +83,8 @@ void CANHandler::processIncoming() {
 }
 
 void CANHandler::handleMessage(twai_message_t& message) {
-    // Binaeres Rohframe bleibt fuer externe Tools erhalten.
-    Utils::sendCanFrame(message.identifier, message.data, message.data_length_code);
-
-    // Zusaetzlich eine lesbare Textauswertung fuer die Display-CAN-Seite senden.
+    // Send one canonical CAN telemetry payload. The old raw duplicate was
+    // removed because the display now consumes the shared TelemetryPacket format.
     CANDecoder::DecodedFrame decoded = CANDecoder::decode(message);
     Utils::sendTelemetry("CAN", "RAW", "LastCAN", decoded.raw, "", "OK");
     Utils::sendTelemetry("CAN", "HINT", "CANHint", decoded.hint, "", "OK");

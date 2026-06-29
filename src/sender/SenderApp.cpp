@@ -31,10 +31,12 @@
   #include "../include/PID_Converter.h"
 #endif
 #if __has_include("TelemetryProtocol.h")
-  #include "TelemetryProtocol.h"
+#include "TelemetryProtocol.h"
 #else
   #include "../include/TelemetryProtocol.h"
 #endif
+#include "TelemetryCodec.h"
+#include "TelemetrySequence.h"
 #if __has_include("SimulationData.h")
   #include "SimulationData.h"
 #else
@@ -62,7 +64,7 @@
 // End region ================================== #define ==================================
 
 namespace {
-constexpr size_t kMaxPayloadLength = TelemetryProtocol::MaxPayloadLength;
+constexpr size_t kMaxPayloadLength = ProjectConfig::TelemetryPayloadSize;
 constexpr uint8_t kLedPin1 = Config::Sender::LedPin1;
 constexpr uint8_t kLedPin2 = Config::Sender::LedPin2;
 constexpr uint8_t kButtonPin = Config::Sender::ButtonPin;
@@ -78,10 +80,7 @@ constexpr uint32_t kSimulationSendIntervalMs = Config::Sender::SimulationInterva
 }
 
 // region ================================== struct ==================================
-typedef struct {
-  char payload[kMaxPayloadLength];  // Textbasierter Frame für OBD2-Daten
-  uint16_t crc;
-} esp_now_text_frame_t;
+using EspNowTelemetryFrame = Telemetry::TelemetryPacket;
 
 // End region ================================== struct ==================================
 
@@ -127,7 +126,8 @@ void blinkLED(uint8_t pin);
 int esp_now_mesh_id;
 uint8_t peerAddress[6] = {};
 
-esp_now_text_frame_t text_frame;
+EspNowTelemetryFrame text_frame;
+char last_telemetry_payload[kMaxPayloadLength] = {};
 esp_now_peer_info_t peerInfo = {};
 
 bool initESPNow() {
@@ -379,10 +379,22 @@ void sendTelemetry(const char* type,
                    const char* value,
                    const char* unit,
                    const char* status) {
-  TelemetryProtocol::buildPayload(text_frame.payload, sizeof(text_frame.payload),
+  TelemetryProtocol::buildPayload(last_telemetry_payload, sizeof(last_telemetry_payload),
                                   type, key, name, value, unit, status,
-                                  ++telemetry_sequence);
-  text_frame.crc = TelemetryProtocol::crc16((uint8_t*)&text_frame, sizeof(text_frame) - 2);
+                                  telemetry_sequence = Telemetry::nextSequence());
+
+  const Telemetry::PacketType packetType =
+      strcmp(type, "OBD") == 0 ? Telemetry::PacketType::Obd :
+      strcmp(type, "CAN") == 0 ? Telemetry::PacketType::Can :
+      strcmp(type, "DTC") == 0 ? Telemetry::PacketType::Diagnostic :
+      strcmp(type, "STATUS") == 0 ? Telemetry::PacketType::Status :
+      Telemetry::PacketType::Text;
+
+  Telemetry::TelemetryCodec::encodeText(text_frame,
+                                        packetType,
+                                        telemetry_sequence,
+                                        millis(),
+                                        last_telemetry_payload);
   const esp_err_t sendResult = esp_now_send(peerAddress, (uint8_t*)&text_frame, sizeof(text_frame));
   if (sendResult == ESP_OK) {
     ++telemetry_send_ok;
@@ -397,7 +409,7 @@ void sendTelemetry(const char* type,
   }
 
   maybeLogTelemetrySendSummary();
-  WebConsoleHandler::recordTelemetry(text_frame.payload);
+  WebConsoleHandler::recordTelemetry(last_telemetry_payload);
   if (strcmp(status, "OK") != 0) {
     last_error_text = String(type) + "/" + key + ": " + status;
   }
@@ -464,7 +476,7 @@ void updateWebConsoleStatus() {
   status.lastCanAgeMs = last_can_msg_timestamp == 0 ? 0 : millis() - last_can_msg_timestamp;
   status.canState = can_driver_ready ? (can_bus_active ? "ACTIVE" : "IDLE") : "INIT_FAIL";
   status.lastDtc = last_dtc_text;
-  status.lastTelemetry = String(text_frame.payload);
+  status.lastTelemetry = String(last_telemetry_payload);
   status.lastError = last_error_text;
   WebConsoleHandler::updateRuntimeStatus(status);
 }

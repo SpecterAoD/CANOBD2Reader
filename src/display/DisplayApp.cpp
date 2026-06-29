@@ -15,6 +15,7 @@ namespace DisplayApp {
 
   void tick() {
     DisplayOta::handle();
+    DisplayReceiver::processQueuedPackets();
     DisplaySimulation::update();
     DisplayUi::handleButton();
     DisplayUi::renderIfDue();
