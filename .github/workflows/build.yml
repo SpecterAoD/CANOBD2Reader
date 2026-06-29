@@ -6,62 +6,123 @@ on:
       - main
       - master
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
     runs-on: ubuntu-24.04
 
     env:
-      PLATFORMIO_CI_SRC: src
-      FIRMWARE_NAME: CAN_OBD2_Gateway
-      VERSION_FILE: version.txt
+      VERSION_FILE: VERSION.txt
 
     steps:
-    # --- Checkout Repository ---
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    # --- Setup Python ---
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
-    # --- Install PlatformIO ---
-    - name: Install PlatformIO
-      run: |
-        pip install --upgrade pip
-        pip install platformio
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install platformio
 
-    # --- Version Auto-Increment ---
-    - name: Auto Increment Version
-      id: version
-      run: |
-        if [ ! -f $VERSION_FILE ]; then
-          echo "1.0.0" > $VERSION_FILE
-        fi
-        old_version=$(cat $VERSION_FILE)
-        IFS='.' read -r major minor patch <<< "$old_version"
-        patch=$((patch+1))
-        new_version="$major.$minor.$patch"
-        echo "$new_version" > $VERSION_FILE
-        echo "version=$new_version" >> $GITHUB_ENV
-        echo "Firmware version: $new_version"
+      - name: Calculate firmware version
+        shell: bash
+        run: |
+          set -euo pipefail
 
-    # --- Build Firmware ---
-    - name: Build Firmware
-      run: |
-        platformio run
+          if [ ! -f "$VERSION_FILE" ]; then
+            echo "V1.0.0" > "$VERSION_FILE"
+          fi
 
-    # --- Rename BIN with Version ---
-    - name: Prepare Artifact
-      run: |
-        mkdir -p output
-        cp .pio/build/*/firmware.bin output/${FIRMWARE_NAME}_${{ env.version }}.bin
+          raw_version="$(tr -d '\r\n[:space:]' < "$VERSION_FILE")"
+          raw_version="${raw_version#v}"
+          raw_version="${raw_version#V}"
 
-    # --- Upload Artifact ---
-    - name: Upload firmware
-      uses: actions/upload-artifact@v4
-      with:
-        name: firmware
-        path: output/
+          IFS='.' read -r major minor patch <<< "$raw_version"
+          major="${major:-1}"
+          minor="${minor:-0}"
+          patch="${patch:-0}"
+
+          if [[ ! "$major" =~ ^[0-9]+$ ]]; then major=1; fi
+          if [[ ! "$minor" =~ ^[0-9]+$ ]]; then minor=0; fi
+          if [[ ! "$patch" =~ ^[0-9]+$ ]]; then patch=0; fi
+
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            patch=$((patch + 1))
+            version="${major}.${minor}.${patch}"
+            version_tag="V${version}"
+            echo "$version_tag" > "$VERSION_FILE"
+          else
+            version="${major}.${minor}.${patch}-pr${{ github.event.number }}.${{ github.run_number }}"
+            version_tag="V${version}"
+          fi
+
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "VERSION_TAG=$version_tag" >> "$GITHUB_ENV"
+          echo "CANOBD2_FIRMWARE_VERSION=$version_tag" >> "$GITHUB_ENV"
+          echo "Firmware version: $version_tag"
+
+      - name: Commit version bump
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- "$VERSION_FILE"; then
+            echo "VERSION.txt already up to date"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$VERSION_FILE"
+          git commit -m "chore: bump firmware version to $VERSION_TAG [skip ci]"
+          git push
+
+      - name: Build sender and display firmware
+        run: |
+          platformio run -e sender -e display
+
+      - name: Prepare firmware artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+
+          cp .pio/build/sender/firmware.bin "output/CAN_OBD2_sender_${VERSION_TAG}.bin"
+          cp .pio/build/display/firmware.bin "output/CAN_OBD2_display_${VERSION_TAG}.bin"
+          cp .pio/build/sender/firmware.elf "output/CAN_OBD2_sender_${VERSION_TAG}.elf"
+          cp .pio/build/display/firmware.elf "output/CAN_OBD2_display_${VERSION_TAG}.elf"
+
+          {
+            echo "{"
+            echo "  \"version\": \"${VERSION_TAG}\","
+            echo "  \"commit\": \"${GITHUB_SHA}\","
+            echo "  \"sender_bin\": \"CAN_OBD2_sender_${VERSION_TAG}.bin\","
+            echo "  \"display_bin\": \"CAN_OBD2_display_${VERSION_TAG}.bin\""
+            echo "}"
+          } > output/firmware_manifest.json
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CAN_OBD2_firmware_${{ env.VERSION_TAG }}
+          path: output/
+
+      - name: Create GitHub release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: firmware-${{ env.VERSION_TAG }}
+          name: CAN OBD2 Firmware ${{ env.VERSION_TAG }}
+          files: output/*
+          generate_release_notes: true

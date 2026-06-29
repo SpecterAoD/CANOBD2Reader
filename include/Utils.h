@@ -21,7 +21,7 @@ namespace Utils {
         textFrame.payload[sizeof(textFrame.payload)-1] = '\0';
         textFrame.crc = TelemetryProtocol::crc16(reinterpret_cast<uint8_t*>(&textFrame), sizeof(textFrame) - 2);
 
-        esp_now_send(EspNowPeerMac, reinterpret_cast<uint8_t*>(&textFrame), sizeof(textFrame));
+        esp_now_send(Config::Network::DisplayPeerMac, reinterpret_cast<uint8_t*>(&textFrame), sizeof(textFrame));
     }
 
     inline void sendTelemetry(const char* type,
@@ -48,7 +48,7 @@ namespace Utils {
         memcpy(canFrame.data, data, canFrame.len);
 
         canFrame.crc = crc16(reinterpret_cast<uint8_t*>(&canFrame), sizeof(canFrame) - 2);
-        esp_now_send(EspNowPeerMac, reinterpret_cast<uint8_t*>(&canFrame), sizeof(canFrame));
+        esp_now_send(Config::Network::DisplayPeerMac, reinterpret_cast<uint8_t*>(&canFrame), sizeof(canFrame));
     }
 
     /// @brief Sendet ein OBD2-Rohdatenframe als Hex-String
