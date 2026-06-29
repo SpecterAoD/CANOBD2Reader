@@ -3,18 +3,26 @@
 #include <Arduino.h>
 #include <driver/twai.h>
 
-#include "common_config.h"
+#include "BuildConfig.h"
+#include "DisplayConfig.h"
 #include "PIDs.h"
+#include "ProjectConfig.h"
+#include "SenderConfig.h"
 
 namespace Config {
+
+    // Config.h is the application-facing compatibility facade. New constants
+    // should be added to ProjectConfig, BuildConfig, SenderConfig or
+    // DisplayConfig first, then exposed here only when existing modules need
+    // the historical Config::<Area>::<Name> access pattern.
 
     // =========================================================================
     // Projekt / Firmware
     // =========================================================================
     namespace Project {
-        constexpr const char* FirmwareVersion = CANOBD2_FIRMWARE_VERSION;
-        constexpr uint8_t ProtocolVersion = CANOBD2_PROTOCOL_VERSION;
-        constexpr const char* TargetName = CANOBD2_TARGET_NAME;
+        constexpr const char* FirmwareVersion = ProjectConfig::FirmwareVersion;
+        constexpr uint8_t ProtocolVersion = ProjectConfig::ProtocolVersion;
+        constexpr const char* TargetName = ProjectConfig::TargetName;
         constexpr int Baudrate = 115200;
     }
 
@@ -22,9 +30,9 @@ namespace Config {
     // Feature Flags
     // =========================================================================
     namespace Feature {
-        constexpr bool EnableBluetooth = CANOBD2_ENABLE_BLUETOOTH;
-        constexpr bool EnableSenderWebConsole = CANOBD2_ENABLE_SENDER_WEBCONSOLE;
-        constexpr bool EnableDisplayWebOta = CANOBD2_ENABLE_DISPLAY_OTA;
+        constexpr bool EnableBluetooth = BuildConfig::BluetoothEnabled;
+        constexpr bool EnableSenderWebConsole = BuildConfig::SenderWebConsoleEnabled;
+        constexpr bool EnableDisplayWebOta = BuildConfig::DisplayOtaEnabled;
         constexpr bool EnableSenderOta = true;
 
         // Sender-Simulation: sendet ohne Fahrzeug/CAN-Transceiver Testwerte.
@@ -62,7 +70,7 @@ namespace Config {
 
         // ESP-NOW: Sender sendet an die Display-MAC; Display akzeptiert nur die
         // Sender-MAC. Beide Werte muessen zu den realen Geraeten passen.
-        constexpr uint8_t EspNowChannel = 1;
+        constexpr uint8_t EspNowChannel = ProjectConfig::EspNowChannel;
         constexpr bool UseEspNowEncryption = true;
         constexpr uint8_t EspNowAesKey[16] = {
             0x3A, 0x7F, 0xC2, 0x91, 0x18, 0x5D, 0xE0, 0xB3,
@@ -76,62 +84,62 @@ namespace Config {
     // Display-Hardware und UI-Timing
     // =========================================================================
     namespace Display {
-        constexpr uint8_t Rotation = 1;
+        constexpr uint8_t Rotation = DisplayConfigValues::Rotation;
 
         // LilyGO T-Display S3: Pin 15 schaltet die Displayversorgung frei.
         // Wenn eine Board-Revision diesen Pin nicht nutzt, auf -1 setzen.
-        constexpr int8_t PowerPin = 15;
+        constexpr int8_t PowerPin = DisplayConfigValues::PowerPin;
         constexpr uint8_t PowerOnLevel = HIGH;
-        constexpr uint16_t PowerStabilizeMs = 60;
+        constexpr uint16_t PowerStabilizeMs = DisplayConfigValues::PowerStabilizeMs;
 
-        constexpr uint8_t BacklightPin = 38;
-        constexpr uint8_t BacklightOn = 255;
-        constexpr uint8_t NextPageButtonPin = 0;
-        constexpr uint8_t PageCount = 7;
+        constexpr uint8_t BacklightPin = DisplayConfigValues::BacklightPin;
+        constexpr uint8_t BacklightOn = DisplayConfigValues::BacklightOn;
+        constexpr uint8_t NextPageButtonPin = DisplayConfigValues::NextPageButtonPin;
+        constexpr uint8_t PageCount = DisplayConfigValues::PageCount;
 
-        constexpr uint32_t ScreenRefreshMs = 120;
-        constexpr uint32_t ForceFullRenderMs = 1200;
-        constexpr bool UseSegmentValueRenderer = false;
-        constexpr bool EnableStartupValueOverlay = false;
-        constexpr uint32_t StartupValueOverlayMs = 10000;
-        constexpr float SpeedSmoothingAlpha = 0.28f;
-        constexpr float RpmSmoothingAlpha = 0.20f;
-        constexpr uint32_t ConnectionTimeoutMs = 3000;
-        constexpr uint32_t ValueTimeoutMs = 5000;
-        constexpr uint32_t ButtonDebounceMs = 250;
+        constexpr uint32_t ScreenRefreshMs = DisplayConfigValues::RefreshMs;
+        constexpr uint32_t ForceFullRenderMs = DisplayConfigValues::ForceFullRenderMs;
+        constexpr bool UseSegmentValueRenderer = DisplayConfigValues::UseSegmentValueRenderer;
+        constexpr bool EnableStartupValueOverlay = DisplayConfigValues::EnableStartupValueOverlay;
+        constexpr uint32_t StartupValueOverlayMs = DisplayConfigValues::StartupValueOverlayMs;
+        constexpr float SpeedSmoothingAlpha = DisplayConfigValues::SpeedSmoothingAlpha;
+        constexpr float RpmSmoothingAlpha = DisplayConfigValues::RpmSmoothingAlpha;
+        constexpr uint32_t ConnectionTimeoutMs = DisplayConfigValues::ConnectionTimeoutMs;
+        constexpr uint32_t ValueTimeoutMs = DisplayConfigValues::ValueTimeoutMs;
+        constexpr uint32_t ButtonDebounceMs = DisplayConfigValues::ButtonDebounceMs;
     }
 
     // =========================================================================
     // Sender-Hardware, CAN/OBD2 und Power-Management
     // =========================================================================
     namespace Sender {
-        constexpr bool EnableCAN = true;
-        constexpr bool EnableOBD2 = true;
-        constexpr bool SendRawData = false;
-        constexpr bool SendRawDataOnly = false;
+        constexpr bool EnableCAN = SenderConfig::EnableCAN;
+        constexpr bool EnableOBD2 = SenderConfig::EnableOBD2;
+        constexpr bool SendRawData = SenderConfig::SendRawData;
+        constexpr bool SendRawDataOnly = SenderConfig::SendRawDataOnly;
 
-        constexpr int LedPin1 = 26;
-        constexpr int LedPin2 = 27;
-        constexpr int ButtonPin = 25;
-        constexpr int ShieldCanRx = 4;
-        constexpr int ShieldCanTx = 5;
-        constexpr int VoltageDividerPin = 32;
+        constexpr int LedPin1 = SenderConfig::LedPin1;
+        constexpr int LedPin2 = SenderConfig::LedPin2;
+        constexpr int ButtonPin = SenderConfig::ButtonPin;
+        constexpr int ShieldCanRx = SenderConfig::CanRxPin;
+        constexpr int ShieldCanTx = SenderConfig::CanTxPin;
+        constexpr int VoltageDividerPin = SenderConfig::VoltageDividerPin;
 
-        constexpr int PollingRateMs = 500;
-        constexpr int CanIdleTimeoutMs = 500;
-        constexpr int SleepPeriodSec = 6;
-        constexpr uint32_t ObdIntervalMs = 200;
-        constexpr uint32_t ObdResponseTimeoutMs = 250;
-        constexpr uint32_t ObdTxTimeoutMs = 50;
-        constexpr uint32_t BatterySendIntervalMs = 3000;
-        constexpr uint32_t SimulationIntervalMs = 250;
-        constexpr uint32_t SupportedPidRefreshIntervalMs = 60000;
-        constexpr uint32_t DtcQueryIntervalMs = 30000;
-        constexpr uint32_t StartStopDelayMs = 300000;
-        constexpr int CpuFrequency = 80;
+        constexpr int PollingRateMs = SenderConfig::PollingRateMs;
+        constexpr int CanIdleTimeoutMs = SenderConfig::CanIdleTimeoutMs;
+        constexpr int SleepPeriodSec = SenderConfig::SleepPeriodSec;
+        constexpr uint32_t ObdIntervalMs = SenderConfig::ObdPollIntervalMs;
+        constexpr uint32_t ObdResponseTimeoutMs = SenderConfig::ObdResponseTimeoutMs;
+        constexpr uint32_t ObdTxTimeoutMs = SenderConfig::ObdTxTimeoutMs;
+        constexpr uint32_t BatterySendIntervalMs = SenderConfig::BatterySendIntervalMs;
+        constexpr uint32_t SimulationIntervalMs = SenderConfig::SimulationIntervalMs;
+        constexpr uint32_t SupportedPidRefreshIntervalMs = SenderConfig::SupportedPidRefreshMs;
+        constexpr uint32_t DtcQueryIntervalMs = SenderConfig::DtcQueryIntervalMs;
+        constexpr uint32_t StartStopDelayMs = SenderConfig::StartStopDelayMs;
+        constexpr int CpuFrequency = SenderConfig::CpuFrequency;
 
-        constexpr float VoltageCalcFactor = 4.81f;
-        constexpr float VoltageChangeThreshold = 0.2f;
+        constexpr float VoltageCalcFactor = SenderConfig::VoltageCalcFactor;
+        constexpr float VoltageChangeThreshold = SenderConfig::VoltageChangeThreshold;
 
         constexpr twai_mode_t TwaiOperationMode = TWAI_MODE_NORMAL;
     }
