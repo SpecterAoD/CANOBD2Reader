@@ -254,21 +254,6 @@ namespace Config {
         float voltage = 0.0f;
     };
 
-    struct EspNowTextFrame {
-        char payload[128]{};
-        uint16_t crc = 0;
-    };
-
-    struct EspNowCanFrame {
-        uint8_t magic = 0x42;
-        uint32_t timestamp = 0;
-        int meshId = 0;
-        uint32_t canId = 0;
-        uint8_t len = 0;
-        uint8_t data[8]{};
-        uint16_t crc = 0;
-    };
-
     inline uint32_t currentMillis = 0;
     inline uint32_t lastCanMsgTimestamp = 0;
     inline uint32_t lastObdRequestTime = 0;
@@ -285,6 +270,4 @@ namespace Config {
     inline bool ledTestActive = false;
     inline uint8_t ledTestStep = 0;
 
-    inline EspNowTextFrame textFrame;
-    inline EspNowCanFrame canFrame;
 }

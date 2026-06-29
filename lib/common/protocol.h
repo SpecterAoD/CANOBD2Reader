@@ -1,18 +1,13 @@
 #pragma once
 
 #include <Arduino.h>
-#include "shared_types.h"
+#include <stddef.h>
+#include <stdint.h>
 
 namespace TelemetryProtocol {
 
-constexpr size_t MaxPayloadLength = CommonTypes::MaxPayloadLength;
+constexpr size_t MaxPayloadLength = 160;
 constexpr uint8_t Version = 2;
-
-using TextFrame = CommonTypes::EspNowTextFrame;
-
-uint16_t crc16(const uint8_t* data, size_t length);
-void finalizeFrame(TextFrame& frame);
-bool validateFrame(const TextFrame& frame);
 
 void buildPayload(char* out,
                   size_t outSize,

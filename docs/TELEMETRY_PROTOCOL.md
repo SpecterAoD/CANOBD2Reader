@@ -1,51 +1,76 @@
 # Telemetry Protocol
 
-Sender and display use the same ESP-NOW text frame from `lib/common/protocol.h`:
+Sender and display exchange one canonical ESP-NOW packet type:
+`Telemetry::TelemetryPacket` from `lib/telemetry/TelemetryPacket.h`.
+
+## Binary packet
 
 ```cpp
-typedef struct {
-  char payload[128];
-  uint16_t crc;
-} esp_now_text_frame_t;
+struct TelemetryPacket {
+    uint16_t magic;
+    uint8_t version;
+    uint8_t type;
+    uint32_t sequence;
+    uint32_t timestamp;
+    uint16_t payloadLength;
+    uint8_t payload[ProjectConfig::TelemetryPayloadSize];
+    uint16_t crc;
+};
 ```
 
-The CRC is calculated over the struct excluding the final `crc` field.
+Validation is centralized in `TelemetryCodec`:
 
-Payload format:
+- fixed packet size
+- magic number `ProjectConfig::ProtocolMagic`
+- protocol version `ProjectConfig::ProtocolVersion`
+- payload length
+- CRC16/Modbus over the header and payload fields before `crc`
+
+Invalid packets are dropped by the display before UI state is updated.
+
+## Text payload
+
+The payload remains a compact CSV line so the web console, serial output and
+display debug page stay readable:
 
 ```text
 TYPE,KEY,NAME,VALUE,UNIT,STATUS,SEQ
 ```
 
-Fields:
+The packet header sequence is authoritative for packet-loss detection. The CSV
+sequence is kept for diagnostics only.
 
-- `TYPE`: `OBD`, `BATTERY`, `FUEL`, `DTC`, or `STATUS`
-- `KEY`: PID hex value or logical key
-- `NAME`: stable display name
-- `VALUE`: numeric value or `N/A`
-- `UNIT`: physical unit, empty for pure status values
-- `STATUS`: `OK`, `WARN`, `ALERT`, `TIMEOUT`, `SEND_FAIL`, or `ERROR`
-- `SEQ`: sender-side packet counter for packet-loss estimation
+Examples:
 
-Current display pages consume these names:
+```text
+OBD,0C,RPM,1850.00,rpm,OK,42
+OBD,05,CoolantTemp,89.00,degC,OK,43
+BATTERY,VOLTAGE,BatteryVoltage,12.64,V,OK,44
+STATUS,CAN,CAN,ACTIVE,,OK,45
+CAN,RAW,LastCAN,0x7E8 DLC8 04 41 0C 1A F8 55 55 55,,OK,46
+DTC,ACTIVE,DTC,P0133 P0420,,WARN,47
+```
+
+## Packet types
+
+- `Text`
+- `Status`
+- `Obd`
+- `Can`
+- `Diagnostic`
+
+## Display fields
 
 - Main: `Speed`, `RPM`, `CoolantTemp`, `BatteryVoltage`
-- Engine: `OilTemp`, `CoolantTemp`, `EngineLoad`, `IntakeTemp`
-- Consumption: `AverageConsumption`, `FuelRate`, `Speed`, `Throttle`
+- Engine: `OilTemp`, `EngineLoad`, `Throttle`, `IntakeTemp`
+- Consumption: `InstantConsumption`, `AverageConsumption`, `FuelRate`
 - Additional values: `MAF`, `FuelLevel`, `RunTime`, `AmbientTemp`
 - CAN page: `LastCAN`, `CANHint`, `CANCount`
-- Diagnostics: `CAN`, packet counters, CRC errors, last payload
+- Diagnostics: CAN/OBD/ESP-NOW status, sequence, packet loss, firmware version
 - Error codes: `DTC`
 
-The sender periodically queries supported PID ranges (`0x00`, `0x20`, `0x40`) and skips unsupported live-data PIDs after support detection. DTCs are queried with OBD mode `0x03` and sent as a space-separated code list.
+## Backward compatibility
 
-Simulation:
-
-- Sender flag: `ENABLE_TELEMETRY_SIMULATION`
-- Display-only flag: `ENABLE_DISPLAY_INTERNAL_SIMULATION`
-- Shared simulated values: `lib/common/simulation_data.h`
-
-Backward compatibility:
-
-- Old battery packets like `BATTERY,VOLTAGE,12.4,V` are still accepted.
-- Old three-field OBD packets like `0C,RPM,1800 rpm` are still accepted, but provide less status information.
+The display still accepts a few old CSV shapes during migration, but new sender
+code must send `TelemetryPacket` only. New logic must not introduce additional
+ESP-NOW frame formats.

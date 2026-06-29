@@ -50,5 +50,3 @@ struct DisplayTelemetryValue {
   uint32_t sequence = 0;
   uint32_t updatedAt = 0;
 };
-
-using DisplayCanFrame = Config::EspNowCanFrame;

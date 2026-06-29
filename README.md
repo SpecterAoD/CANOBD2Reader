@@ -266,7 +266,13 @@ Für Web-OTA vom iPhone werden normalerweise nur die `.bin`-Dateien benötigt.
 
 ## Telemetrie-Protokoll
 
-Sender und Display verwenden ein gemeinsames CRC-geschütztes ESP-NOW-Textpaket:
+Sender und Display verwenden ein gemeinsames CRC-geschütztes ESP-NOW-Binärpaket:
+
+- `lib/telemetry/TelemetryPacket.h`
+- `lib/telemetry/TelemetryCodec.h`
+- `lib/telemetry/TelemetrySequence.h`
+
+Der Payload bleibt als lesbare CSV-Zeile aufgebaut:
 
 ```text
 TYPE,KEY,NAME,VALUE,UNIT,STATUS,SEQ
@@ -281,7 +287,37 @@ BATTERY,VOLTAGE,BatteryVoltage,12.64,V,OK,44
 STATUS,CAN,CAN,ACTIVE,,OK,45
 ```
 
-Die gemeinsame Implementierung liegt in `lib/common/protocol.h` und `lib/common/protocol.cpp`.
+Die Display-Seite validiert Paketgröße, Magic Number, Protokollversion und CRC,
+bevor Werte in die UI übernommen werden. Die Sequenznummer im Paketheader ist
+maßgeblich für Paketverlust-Erkennung; die CSV-Sequenz dient nur der Diagnose.
+
+Details: `docs/TELEMETRY_PROTOCOL.md`
+
+## Architektur und Tests
+
+Zusätzliche Dokumentation:
+
+- `docs/ARCHITECTURE.md`: Modulaufteilung, Datenfluss, OTA und Legacy-Ablage
+- `docs/ISOTP.md`: ISO-TP-Reassembly, Flow-Control und OBD-II-Integration
+- `docs/TELEMETRY_PROTOCOL.md`: Paketformat und Display-Felder
+
+Native Unit Tests:
+
+```bash
+platformio test -e native
+```
+
+Unter Windows benötigt `env:native` einen installierten C/C++-Compiler
+(`gcc`/`g++`, z. B. über MSYS2/MinGW). GitHub Actions führt diese Tests auf
+Linux automatisch aus.
+
+Aktuell abgedeckt:
+
+- CRC16
+- PID-Dekoder
+- ISO-TP Single/First/Consecutive Frames und Fehlerfälle
+- TelemetryCodec
+- zentrale Konfiguration
 
 ## Display-Seiten
 

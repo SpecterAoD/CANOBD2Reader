@@ -2,5 +2,5 @@
 
 namespace DisplayReceiver {
   void begin();
+  void processQueuedPackets();
 }
-
