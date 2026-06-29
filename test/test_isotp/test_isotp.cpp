@@ -29,10 +29,17 @@ void test_isotp_sequence_error() {
     TEST_ASSERT_EQUAL(static_cast<int>(IsoTp::Status::SequenceError), static_cast<int>(reassembler.processFrame(wrong)));
 }
 
-void test_isotp_buffer_overflow() {
+void test_isotp_accepts_maximum_first_frame_length() {
     IsoTp::IsoTpReassembler reassembler;
     IsoTp::CanFrame first{0x7E8, 8, {0x1F, 0xFF, 0, 1, 2, 3, 4, 5}};
-    TEST_ASSERT_EQUAL(static_cast<int>(IsoTp::Status::BufferOverflow), static_cast<int>(reassembler.processFrame(first)));
+    TEST_ASSERT_EQUAL(static_cast<int>(IsoTp::Status::InProgress), static_cast<int>(reassembler.processFrame(first)));
+    TEST_ASSERT_EQUAL_UINT(6, reassembler.payload().length);
+}
+
+void test_isotp_rejects_invalid_first_frame_length() {
+    IsoTp::IsoTpReassembler reassembler;
+    IsoTp::CanFrame first{0x7E8, 8, {0x10, 0x06, 0, 1, 2, 3, 4, 5}};
+    TEST_ASSERT_EQUAL(static_cast<int>(IsoTp::Status::InvalidLength), static_cast<int>(reassembler.processFrame(first)));
 }
 
 int main(int, char**) {
@@ -40,6 +47,7 @@ int main(int, char**) {
     RUN_TEST(test_isotp_single_frame);
     RUN_TEST(test_isotp_first_and_consecutive_frame);
     RUN_TEST(test_isotp_sequence_error);
-    RUN_TEST(test_isotp_buffer_overflow);
+    RUN_TEST(test_isotp_accepts_maximum_first_frame_length);
+    RUN_TEST(test_isotp_rejects_invalid_first_frame_length);
     return UNITY_END();
 }
