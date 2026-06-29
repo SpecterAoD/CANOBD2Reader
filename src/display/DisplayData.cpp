@@ -1,0 +1,199 @@
+#include "DisplayData.h"
+
+namespace {
+  float g_filteredSpeed = 0.0f;
+  float g_filteredRpm = 0.0f;
+  bool g_speedInitialized = false;
+  bool g_rpmInitialized = false;
+
+  bool isSpeedMetric(const String& key, const String& name) {
+    return key == "0D" || key == "Speed" || name == "Speed" || name == "VehicleSpeed";
+  }
+
+  bool isRpmMetric(const String& key, const String& name) {
+    return key == "0C" || key == "RPM" || name == "RPM" || name == "EngineRPM";
+  }
+
+  String smoothNumericValue(const String& key, const String& name, const String& inputValue) {
+    String numericRaw = inputValue;
+    numericRaw.replace(",", ".");
+    const float parsed = numericRaw.toFloat();
+
+    if (isSpeedMetric(key, name)) {
+      if (!g_speedInitialized) {
+        g_filteredSpeed = parsed;
+        g_speedInitialized = true;
+      } else {
+        g_filteredSpeed = g_filteredSpeed + (parsed - g_filteredSpeed) * DisplayConfig::SpeedSmoothingAlpha;
+      }
+      return String(g_filteredSpeed, 1);
+    }
+
+    if (isRpmMetric(key, name)) {
+      if (!g_rpmInitialized) {
+        g_filteredRpm = parsed;
+        g_rpmInitialized = true;
+      } else {
+        g_filteredRpm = g_filteredRpm + (parsed - g_filteredRpm) * DisplayConfig::RpmSmoothingAlpha;
+      }
+      return String(g_filteredRpm, 1);
+    }
+
+    return inputValue;
+  }
+
+  DisplayTelemetryValue* findAlias(const char* a, const char* b = nullptr, const char* c = nullptr) {
+    using namespace DisplayData;
+    DisplayTelemetryValue* value = nullptr;
+    if (a != nullptr) value = findValue(String(a));
+    if (value == nullptr && b != nullptr) value = findValue(String(b));
+    if (value == nullptr && c != nullptr) value = findValue(String(c));
+    return value;
+  }
+
+  DisplayTelemetryValue* resolveMetric(const char* name) {
+    using namespace DisplayData;
+    if (name == nullptr) return nullptr;
+
+    String n(name);
+    if (n == "Speed") return findAlias("Speed", "VehicleSpeed", "0D");
+    if (n == "RPM") return findAlias("RPM", "EngineRPM", "0C");
+    if (n == "CoolantTemp") return findAlias("CoolantTemp", "EngineCoolantTemp", "05");
+    if (n == "BatteryVoltage") return findAlias("BatteryVoltage", "ControlVoltage", "VOLTAGE");
+    if (n == "OilTemp") return findAlias("OilTemp", "EngineOilTemp", "5C");
+    if (n == "EngineLoad") return findAlias("EngineLoad", "Load", "04");
+    if (n == "IntakeTemp") return findAlias("IntakeTemp", "IntakeAirTemp", "0F");
+    if (n == "AverageConsumption") return findAlias("AverageConsumption", "AVG");
+    if (n == "FuelRate") return findAlias("FuelRate", "EngineFuelRate", "5E");
+    if (n == "Throttle") return findAlias("Throttle", "ThrottlePosition", "11");
+    if (n == "MAF") return findAlias("MAF", "MassAirFlow", "10");
+    if (n == "FuelLevel") return findAlias("FuelLevel", "2F");
+    if (n == "RunTime") return findAlias("RunTime", "Runtime", "1F");
+    if (n == "AmbientTemp") return findAlias("AmbientTemp", "46");
+    return findAlias(name);
+  }
+
+  bool hasNumericContent(const String& text) {
+    for (size_t i = 0; i < text.length(); ++i) {
+      const char ch = text[i];
+      if ((ch >= '0' && ch <= '9') || ch == '-' || ch == '+') return true;
+    }
+    return false;
+  }
+}
+
+namespace DisplayData {
+  DisplayTelemetryValue values[28];
+  uint8_t valueCount = 0;
+  uint8_t currentPage = 0;
+  uint8_t lastRenderedPage = 255;
+  uint32_t lastScreenRefresh = 0;
+  uint32_t lastReceivedAt = 0;
+  uint32_t lastButtonAt = 0;
+  uint32_t receivedPackets = 0;
+  uint32_t droppedPackets = 0;
+  uint32_t crcErrors = 0;
+  uint32_t lastSequence = 0;
+  String lastRawPayload = "";
+  String lastError = "Keine Daten";
+  uint32_t lastInternalSimulationUpdate = 0;
+  size_t internalSimulationIndex = 0;
+  bool renderDirty = true;
+
+  void markDirty() {
+    renderDirty = true;
+  }
+
+  DisplayTelemetryValue* findValue(const String& name) {
+    for (uint8_t i = 0; i < valueCount; i++) {
+      if (values[i].name == name || values[i].key == name) return &values[i];
+    }
+    return nullptr;
+  }
+
+  DisplayTelemetryValue* upsertValue(const String& type,
+                                     const String& key,
+                                     const String& name,
+                                     const String& value,
+                                     const String& unit,
+                                     const String& status,
+                                     uint32_t sequence) {
+    DisplayTelemetryValue* existing = findValue(name);
+    if (existing == nullptr) existing = findValue(key);
+
+    if (existing == nullptr) {
+      if (valueCount >= (sizeof(values) / sizeof(values[0]))) {
+        droppedPackets++;
+        lastError = "Werteliste voll";
+        return nullptr;
+      }
+      existing = &values[valueCount++];
+    }
+
+    const String smoothedValue = smoothNumericValue(key, name, value);
+
+    existing->type = type;
+    existing->key = key;
+    existing->name = name;
+    existing->value = smoothedValue;
+    existing->unit = unit;
+    existing->status = status;
+    existing->sequence = sequence;
+    existing->updatedAt = millis();
+    renderDirty = true;
+    return existing;
+  }
+
+  bool isConnected() {
+    return lastReceivedAt > 0 && millis() - lastReceivedAt <= DisplayConfig::ConnectionTimeoutMs;
+  }
+
+  bool isFresh(const DisplayTelemetryValue* value) {
+    if (value == nullptr || millis() - value->updatedAt > DisplayConfig::ValueTimeoutMs) return false;
+    String status = value->status;
+    status.toUpperCase();
+    if (status == "TIMEOUT" || status == "UNSUPPORTED" || status == "ERROR" || status == "SEND_FAIL") return false;
+    return true;
+  }
+
+  String displayValue(const char* name, uint8_t decimals) {
+    DisplayTelemetryValue* value = resolveMetric(name);
+    if (!isFresh(value)) return "--";
+    if (value->value == "N/A" || value->value.length() == 0) return "--";
+
+    String raw = value->value;
+    raw.trim();
+
+    String result;
+    if (hasNumericContent(raw)) {
+      String numericRaw = raw;
+      numericRaw.replace(",", ".");
+      result = String(numericRaw.toFloat(), static_cast<unsigned int>(decimals));
+    } else {
+      result = raw;
+    }
+
+    if (value->unit.length() > 0 && result.indexOf(value->unit) < 0) result += " " + value->unit;
+    return result;
+  }
+
+  String displayText(const char* name) {
+    DisplayTelemetryValue* value = resolveMetric(name);
+    if (value == nullptr || millis() - value->updatedAt > DisplayConfig::ValueTimeoutMs) return "--";
+    if (value->value.length() == 0 || value->value == "N/A") return "--";
+    return value->value;
+  }
+
+  uint16_t valueColor(const char* name) {
+    DisplayTelemetryValue* value = resolveMetric(name);
+    if (!isFresh(value)) return DisplayConfig::Muted;
+
+    float numericValue = value->value.toFloat();
+    String n = String(name);
+    if (n == "CoolantTemp" && numericValue >= 105.0f) return DisplayConfig::Error;
+    if (n == "OilTemp" && numericValue >= 125.0f) return DisplayConfig::Error;
+    if (n == "BatteryVoltage" && (numericValue < 11.5f || numericValue > 14.8f)) return DisplayConfig::Warn;
+    if (n == "RPM" && numericValue >= 4200.0f) return DisplayConfig::Warn;
+    return DisplayConfig::Text;
+  }
+}

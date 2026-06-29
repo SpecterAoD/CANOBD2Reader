@@ -1,0 +1,238 @@
+#include "WebConsoleHandler.h"
+#include <Update.h>
+#include "Logger.h"
+
+namespace {
+    constexpr size_t MaxLogLineLength = 180;
+
+    String clipped(const String& value, size_t maxLength) {
+        if (value.length() <= maxLength) return value;
+        return value.substring(0, maxLength - 3) + "...";
+    }
+}
+
+void WebConsoleHandler::begin() {
+#if !CANOBD2_ENABLE_SENDER_WEBCONSOLE
+    return;
+#endif
+    if (!Config::Feature::EnableSenderWebConsole) return;
+
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.softAP(Config::Network::SenderWebSsid,
+                Config::Network::SenderWebPassword,
+                Config::Network::EspNowChannel);
+
+    Logger::setSink([](const char* msg) {
+        WebConsoleHandler::log(String(msg));
+    });
+
+    log("[WebConsole] AP gestartet: " + WiFi.softAPIP().toString());
+
+    server.on("/", HTTP_GET, handleRoot);
+    server.on("/log", HTTP_GET, handleLog);
+    server.on("/status", HTTP_GET, handleStatus);
+    server.on("/start", HTTP_POST, handleStart);
+    server.on("/restart", HTTP_POST, handleRestart);
+    server.on("/update", HTTP_GET, handleUpdatePage);
+    server.on("/update", HTTP_POST, handleUpdateFinished, handleUpdateUpload);
+    server.begin();
+}
+
+void WebConsoleHandler::handle() {
+#if !CANOBD2_ENABLE_SENDER_WEBCONSOLE
+    return;
+#endif
+    if (Config::Feature::EnableSenderWebConsole) {
+        server.handleClient();
+    }
+}
+
+void WebConsoleHandler::log(const String& msg) {
+#if !CANOBD2_ENABLE_SENDER_WEBCONSOLE
+    if (Config::Debug::Serial) Serial.println(msg);
+    return;
+#endif
+    const String line = clipped(String(millis() / 1000) + "s " + msg, MaxLogLineLength);
+    if (logBuffer.size() >= Config::Network::WebConsoleMaxLines) {
+        logBuffer.pop_front();
+    }
+    logBuffer.push_back(line);
+
+    if (Config::Debug::Serial) {
+        Serial.println(msg);
+    }
+}
+
+void WebConsoleHandler::recordTelemetry(const char* payload) {
+    runtimeStatus.lastTelemetry = clipped(String(payload), 120);
+}
+
+void WebConsoleHandler::updateRuntimeStatus(const WebConsoleRuntimeStatus& status) {
+    runtimeStatus = status;
+}
+
+String WebConsoleHandler::jsonEscape(const String& value) {
+    String escaped;
+    escaped.reserve(value.length() + 8);
+    for (uint16_t i = 0; i < value.length(); ++i) {
+        const char c = value[i];
+        if (c == '"' || c == '\\') {
+            escaped += '\\';
+            escaped += c;
+        } else if (c == '\n') {
+            escaped += "\\n";
+        } else if (c == '\r') {
+            escaped += "\\r";
+        } else {
+            escaped += c;
+        }
+    }
+    return escaped;
+}
+
+void WebConsoleHandler::handleRoot() {
+    static const char html[] PROGMEM = R"rawliteral(
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>CAN OBD2 Sender</title>
+<style>
+:root{color-scheme:dark;--bg:#070b12;--panel:#111827;--card:#182235;--text:#f8fafc;--muted:#94a3b8;--ok:#22c55e;--warn:#f59e0b;--err:#ef4444;--accent:#38bdf8}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-x:hidden}
+.wrap{width:100%;max-width:430px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 14px)}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.title{font-size:20px;font-weight:800}.sub{font-size:12px;color:var(--muted)}
+.pill{padding:6px 10px;border-radius:999px;background:#263244;color:var(--muted);font-size:12px}.pill.ok{color:#052e16;background:var(--ok)}.pill.warn{color:#431407;background:var(--warn)}.pill.err{color:#450a0a;background:var(--err)}
+.nav{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;position:sticky;top:0;background:rgba(7,11,18,.92);backdrop-filter:blur(10px);padding:8px 0;z-index:2}
+button,.btn{border:0;border-radius:14px;padding:11px 8px;background:#1f2937;color:var(--text);font-weight:700;font-size:13px;text-decoration:none;text-align:center}
+button.active{background:var(--accent);color:#042f3d}.page{display:none}.page.active{display:block}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.card{background:var(--card);border:1px solid #263244;border-radius:18px;padding:12px;min-height:78px}.wide{grid-column:1/-1}.label{font-size:12px;color:var(--muted);margin-bottom:8px}.value{font-size:24px;font-weight:800;word-break:break-word}.small{font-size:13px;color:var(--muted);line-height:1.35}.okText{color:var(--ok)}.warnText{color:var(--warn)}.errText{color:var(--err)}
+pre{white-space:pre-wrap;word-break:break-word;background:#020617;color:#86efac;border-radius:16px;padding:12px;min-height:250px;max-height:58vh;overflow:auto;font-size:12px}
+input[type=file]{width:100%;padding:12px;border-radius:14px;background:#0f172a;color:var(--text);border:1px solid #263244}.actions{display:grid;gap:9px;margin-top:10px}.danger{background:#7f1d1d}.primary{background:#075985}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><div><div class="title">CAN OBD2 Sender</div><div class="sub" id="ip">WebConsole</div></div><div id="run" class="pill warn">Warte</div></header>
+<nav class="nav">
+<button data-page="dash" class="active">Status</button>
+<button data-page="diag">Diag</button>
+<button data-page="log">Log</button>
+<button data-page="ota">OTA</button>
+</nav>
+<section id="dash" class="page active"><div class="grid">
+<div class="card"><div class="label">CAN</div><div id="can" class="value">--</div></div>
+<div class="card"><div class="label">OBD2</div><div id="obd" class="value">--</div></div>
+<div class="card"><div class="label">Batterie</div><div id="bat" class="value">--</div></div>
+<div class="card"><div class="label">Telemetrie</div><div id="seq" class="value">--</div></div>
+<div class="card wide"><div class="label">Letztes Paket</div><div id="tel" class="small">--</div></div>
+</div><div class="actions"><button id="start" class="primary">Sender starten</button></div></section>
+<section id="diag" class="page"><div class="grid">
+<div class="card"><div class="label">PID Support</div><div id="pid" class="value">--</div></div>
+<div class="card"><div class="label">Letzter CAN</div><div id="canage" class="value">--</div></div>
+<div class="card wide"><div class="label">DTC / Fehlercodes</div><div id="dtc" class="value">--</div></div>
+<div class="card wide"><div class="label">Fehlerstatus</div><div id="err" class="small">--</div></div>
+</div></section>
+<section id="log" class="page"><pre id="logs">Lade Log...</pre></section>
+<section id="ota" class="page"><div class="card wide"><div class="label">Firmware über Web hochladen</div><div class="small">Nur passende <code>firmware.bin</code> für <b>env:sender</b> verwenden. Gerät startet nach erfolgreichem Update neu.</div></div>
+<form class="actions" method="POST" action="/update" enctype="multipart/form-data"><input type="file" name="firmware" accept=".bin"><button class="primary" type="submit">OTA Update starten</button></form>
+<div class="actions"><button id="restart" class="danger">Sender neu starten</button></div></section>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active')});
+function yn(v){return v?'aktiv':'aus'}function cls(el,state){el.className='value '+(state?'okText':'warnText')}
+async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('run').textContent=s.started?'läuft':'gestoppt';$('run').className='pill '+(s.started?'ok':'warn');$('can').textContent=s.canState;cls($('can'),s.canActive);$('obd').textContent=yn(s.obdActive);cls($('obd'),s.obdActive);$('bat').textContent=s.battery.toFixed(2)+' V';$('seq').textContent=s.seq;$('tel').textContent=s.lastTelemetry;$('pid').textContent=s.pidSupport?'bereit':'unbekannt';cls($('pid'),s.pidSupport);$('canage').textContent=(s.lastCanAge/1000).toFixed(1)+'s';$('dtc').textContent=s.lastDtc||'--';$('err').textContent=s.lastError||'OK';}catch(e){$('run').textContent='offline';$('run').className='pill err'}}
+async function refreshLog(){try{$('logs').textContent=await fetch('/log',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
+$('start').onclick=async()=>{await fetch('/start',{method:'POST'});refresh()}
+$('restart').onclick=async()=>{if(confirm('Sender wirklich neu starten?'))await fetch('/restart',{method:'POST'})}
+setInterval(refresh,1000);setInterval(refreshLog,1500);refresh();refreshLog();
+</script>
+</body></html>
+)rawliteral";
+    server.send_P(200, "text/html", html);
+}
+
+void WebConsoleHandler::handleLog() {
+    String page;
+    for (auto &line : logBuffer) {
+        page += line + "\n";
+    }
+    server.send(200, "text/plain; charset=utf-8", page);
+}
+
+void WebConsoleHandler::handleStatus() {
+    WebConsoleRuntimeStatus s = runtimeStatus;
+    String json;
+    json.reserve(512);
+    json += "{";
+    json += "\"started\":" + String(isStarted() ? "true" : "false") + ",";
+    json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
+    json += "\"uptime\":" + String(s.uptimeMs) + ",";
+    json += "\"canActive\":" + String(s.canActive ? "true" : "false") + ",";
+    json += "\"obdActive\":" + String(s.obdActive ? "true" : "false") + ",";
+    json += "\"pidSupport\":" + String(s.pidSupportReady ? "true" : "false") + ",";
+    json += "\"simulation\":" + String(s.simulationActive ? "true" : "false") + ",";
+    json += "\"battery\":" + String(s.batteryVoltage, 2) + ",";
+    json += "\"seq\":" + String(s.telemetrySequence) + ",";
+    json += "\"lastCanAge\":" + String(s.lastCanAgeMs) + ",";
+    json += "\"canState\":\"" + jsonEscape(s.canState) + "\",";
+    json += "\"lastDtc\":\"" + jsonEscape(s.lastDtc) + "\",";
+    json += "\"lastTelemetry\":\"" + jsonEscape(s.lastTelemetry) + "\",";
+    json += "\"lastError\":\"" + jsonEscape(s.lastError) + "\"";
+    json += "}";
+    server.send(200, "application/json", json);
+}
+
+void WebConsoleHandler::handleStart() {
+    startRequested = true;
+    log("[WebConsole] Start freigegeben");
+    server.send(200, "text/plain", "System gestartet");
+}
+
+void WebConsoleHandler::handleRestart() {
+    server.send(200, "text/plain", "Neustart");
+    delay(250);
+    ESP.restart();
+}
+
+void WebConsoleHandler::handleUpdatePage() {
+    server.sendHeader("Location", "/#ota");
+    server.send(302, "text/plain", "");
+}
+
+void WebConsoleHandler::handleUpdateFinished() {
+    const bool ok = !Update.hasError();
+    server.send(200, "text/plain", ok ? "Update erfolgreich, Neustart..." : "Update fehlgeschlagen");
+    if (ok) {
+        log("[WebOTA] Update erfolgreich, Neustart");
+        delay(500);
+        ESP.restart();
+    }
+}
+
+void WebConsoleHandler::handleUpdateUpload() {
+    HTTPUpload& upload = server.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+        updateInProgress = true;
+        log("[WebOTA] Upload gestartet: " + upload.filename);
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+            log("[WebOTA] Update.begin fehlgeschlagen");
+        }
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            log("[WebOTA] Schreibfehler");
+        }
+    } else if (upload.status == UPLOAD_FILE_END) {
+        if (Update.end(true)) {
+            log("[WebOTA] Upload abgeschlossen: " + String(upload.totalSize) + " Bytes");
+        } else {
+            log("[WebOTA] Update.end fehlgeschlagen");
+        }
+        updateInProgress = false;
+    } else if (upload.status == UPLOAD_FILE_ABORTED) {
+        Update.end();
+        updateInProgress = false;
+        log("[WebOTA] Upload abgebrochen");
+    }
+}

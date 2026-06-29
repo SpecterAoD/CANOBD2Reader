@@ -4,36 +4,47 @@
 #include <driver/twai.h>
 
 namespace Logger {
+    using Sink = void (*)(const char*);
+    inline Sink sink = nullptr;
+
+    inline void setSink(Sink newSink) {
+        sink = newSink;
+    }
+
+    inline void emit(const char* msg) {
+        if (sink) sink(msg);
+    }
 
     // ======== Initialisierung ========
     inline void initDebug() {
-        if (Config::SerialFlag) {
-            Serial.begin(Config::Baudrate);
+        if (Config::Debug::Serial) {
+            Serial.begin(Config::Project::Baudrate);
             delay(100);  // USB stabilisieren
             Serial.println();
             Serial.print("Firmware: ");
-            Serial.println(Config::FirmwareVersion);
+            Serial.println(Config::Project::FirmwareVersion);
             Serial.print("Baudrate: ");
-            Serial.println(Config::Baudrate);
+            Serial.println(Config::Project::Baudrate);
 
-            if (Config::DebugFlag)       Serial.println("[INFO] Debug aktiviert");
-            if (Config::TwaiDebugFlag)   Serial.println("[INFO] TWAI Debug aktiviert");
-            if (Config::PowerDebugFlag)  Serial.println("[INFO] Power Debug aktiviert");
-            if (Config::CanDebugFlag)    Serial.println("[INFO] CAN Debug aktiviert");
-            if (Config::OBD2DebugFlag)   Serial.println("[INFO] OBD2 Debug aktiviert");
+            if (Config::Debug::General) Serial.println("[INFO] Debug aktiviert");
+            if (Config::Debug::Twai)    Serial.println("[INFO] TWAI Debug aktiviert");
+            if (Config::Debug::Power)   Serial.println("[INFO] Power Debug aktiviert");
+            if (Config::Debug::Can)     Serial.println("[INFO] CAN Debug aktiviert");
+            if (Config::Debug::Obd2)    Serial.println("[INFO] OBD2 Debug aktiviert");
         }
     }
 
     // ======== Allgemeines Debug ========
     inline void debug(const char* msg) {
-        if (Config::DebugFlag && Config::SerialFlag) {
+        emit(msg);
+        if (Config::Debug::General && Config::Debug::Serial) {
             Serial.print("[DEBUG] ");
             Serial.println(msg);
         }
     }
 
     inline void debugf(const char* fmt, ...) {
-        if (!(Config::DebugFlag && Config::SerialFlag)) return;
+        if (!(Config::Debug::General && Config::Debug::Serial)) return;
 
         char buf[128];
         va_list args;
@@ -43,11 +54,12 @@ namespace Logger {
 
         Serial.print("[DEBUG] ");
         Serial.println(buf);
+        emit(buf);
     }
 
     template<typename T>
     inline void debugValue(const char* label, T value, const char* unit = "") {
-        if (Config::DebugFlag && Config::SerialFlag) {
+        if (Config::Debug::General && Config::Debug::Serial) {
             Serial.print("[DEBUG] ");
             Serial.print(label);
             Serial.print(": ");
@@ -57,12 +69,16 @@ namespace Logger {
                 Serial.print(unit);
             }
             Serial.println();
+            char buf[128];
+            snprintf(buf, sizeof(buf), "%s: %s%s", label, String(value).c_str(), unit && unit[0] ? unit : "");
+            emit(buf);
         }
     }
 
     // ======== Power Debug ========
     inline void power(const char* msg) {
-        if (Config::PowerDebugFlag && Config::SerialFlag) {
+        emit(msg);
+        if (Config::Debug::Power && Config::Debug::Serial) {
             Serial.print("[POWER] ");
             Serial.println(msg);
         }
@@ -70,7 +86,7 @@ namespace Logger {
 
     template<typename T>
     inline void powerValue(const char* label, T value, const char* unit = "") {
-        if (Config::PowerDebugFlag && Config::SerialFlag) {
+        if (Config::Debug::Power && Config::Debug::Serial) {
             Serial.print("[POWER] ");
             Serial.print(label);
             Serial.print(": ");
@@ -85,21 +101,23 @@ namespace Logger {
 
     // ======== TWAI / CAN Debug ========
     inline void twai(const char* msg) {
-        if (Config::TwaiDebugFlag && Config::SerialFlag) {
+        emit(msg);
+        if (Config::Debug::Twai && Config::Debug::Serial) {
             Serial.print("[TWAI] ");
             Serial.println(msg);
         }
     }
 
     inline void can(const char* msg) {
-        if (Config::CanDebugFlag && Config::SerialFlag) {
+        emit(msg);
+        if (Config::Debug::Can && Config::Debug::Serial) {
             Serial.print("[CAN] ");
             Serial.println(msg);
         }
     }
 
     inline void canFrame(const twai_message_t& message) {
-        if (Config::CanDebugFlag && Config::SerialFlag) {
+        if (Config::Debug::Can && Config::Debug::Serial) {
             Serial.print("[CAN] ID=0x");
             Serial.print(message.identifier, HEX);
             Serial.print(" DLC=");
@@ -116,14 +134,15 @@ namespace Logger {
 
     // ======== OBD2 Debug ========
     inline void obd(const char* msg) {
-        if (Config::OBD2DebugFlag && Config::SerialFlag) {
+        emit(msg);
+        if (Config::Debug::Obd2 && Config::Debug::Serial) {
             Serial.print("[OBD2] ");
             Serial.println(msg);
         }
     }
 
     inline void obdFrame(uint8_t pid, const uint8_t* data, uint8_t len) {
-        if (Config::OBD2DebugFlag && Config::SerialFlag) {
+        if (Config::Debug::Obd2 && Config::Debug::Serial) {
             Serial.print("[OBD2] PID 0x");
             Serial.print(pid, HEX);
             Serial.print(" Data=");
@@ -138,7 +157,7 @@ namespace Logger {
 
     template<typename T>
     inline void obdValue(const char* label, T value, const char* unit = "") {
-        if (Config::OBD2DebugFlag && Config::SerialFlag) {
+        if (Config::Debug::Obd2 && Config::Debug::Serial) {
             Serial.print("[OBD2] ");
             Serial.print(label);
             Serial.print(": ");
@@ -152,7 +171,8 @@ namespace Logger {
     }
     // ======== Warn Debug (immer wenn Serial aktive) ========
     inline void warn(const char* msg) {
-        if (Config::SerialFlag) {
+        emit(msg);
+        if (Config::Debug::Serial) {
             Serial.print(" [WARN] ");
             Serial.println(msg);
         }
@@ -160,7 +180,8 @@ namespace Logger {
     }
     // ======== Alarm Debug (immer wenn Serial aktiv) ========
     inline void alarm(const char* msg) {
-        if (Config::SerialFlag) {
+        emit(msg);
+        if (Config::Debug::Serial) {
             Serial.print("[ALARM] ");
             Serial.println(msg);
         }
@@ -168,7 +189,8 @@ namespace Logger {
     }
     // ======== criticl Debug (immer wenn Serial aktiv) ========
     inline void critical(const char* msg) {
-        if (Config::SerialFlag) {
+        emit(msg);
+        if (Config::Debug::Serial) {
             Serial.print("[CRITICAL] ");
             Serial.println(msg);
         }

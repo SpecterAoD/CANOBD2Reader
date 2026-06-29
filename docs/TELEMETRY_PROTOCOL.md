@@ -1,6 +1,6 @@
 # Telemetry Protocol
 
-Sender and display use the same ESP-NOW text frame:
+Sender and display use the same ESP-NOW text frame from `lib/common/protocol.h`:
 
 ```cpp
 typedef struct {
@@ -43,7 +43,7 @@ Simulation:
 
 - Sender flag: `ENABLE_TELEMETRY_SIMULATION`
 - Display-only flag: `ENABLE_DISPLAY_INTERNAL_SIMULATION`
-- Shared simulated values: `include/SimulationData.h`
+- Shared simulated values: `lib/common/simulation_data.h`
 
 Backward compatibility:
 
