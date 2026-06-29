@@ -4,10 +4,15 @@
 
 namespace {
     constexpr size_t MaxLogLineLength = 180;
+    String webOtaStatus = "Bereit";
 
     String clipped(const String& value, size_t maxLength) {
         if (value.length() <= maxLength) return value;
         return value.substring(0, maxLength - 3) + "...";
+    }
+
+    String updateErrorText(const char* prefix) {
+        return String(prefix) + ", error=" + String(Update.getError());
     }
 }
 
@@ -121,6 +126,7 @@ input[type=file]{width:100%;padding:12px;border-radius:14px;background:#0f172a;c
 <button data-page="ota">OTA</button>
 </nav>
 <section id="dash" class="page active"><div class="grid">
+<div class="card wide"><div class="label">Firmware</div><div class="small">Version: <span id="fw">--</span><br>Target: <span id="target">--</span><br>Protocol: <span id="proto">--</span><br>Build: <span id="build">--</span></div></div>
 <div class="card"><div class="label">CAN</div><div id="can" class="value">--</div></div>
 <div class="card"><div class="label">OBD2</div><div id="obd" class="value">--</div></div>
 <div class="card"><div class="label">Batterie</div><div id="bat" class="value">--</div></div>
@@ -135,14 +141,15 @@ input[type=file]{width:100%;padding:12px;border-radius:14px;background:#0f172a;c
 </div></section>
 <section id="log" class="page"><pre id="logs">Lade Log...</pre></section>
 <section id="ota" class="page"><div class="card wide"><div class="label">Firmware über Web hochladen</div><div class="small">Nur passende <code>firmware.bin</code> für <b>env:sender</b> verwenden. Gerät startet nach erfolgreichem Update neu.</div></div>
+<div class="card wide"><div class="label">OTA Status</div><div id="otastatus" class="value">--</div><div class="small">Frei: <span id="freeota">--</span> · Sketch: <span id="sketch">--</span> · Flash: <span id="flash">--</span></div></div>
 <form class="actions" method="POST" action="/update" enctype="multipart/form-data"><input type="file" name="firmware" accept=".bin"><button class="primary" type="submit">OTA Update starten</button></form>
 <div class="actions"><button id="restart" class="danger">Sender neu starten</button></div></section>
 </div>
 <script>
 const $=id=>document.getElementById(id);
 document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active')});
-function yn(v){return v?'aktiv':'aus'}function cls(el,state){el.className='value '+(state?'okText':'warnText')}
-async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('run').textContent=s.started?'läuft':'gestoppt';$('run').className='pill '+(s.started?'ok':'warn');$('can').textContent=s.canState;cls($('can'),s.canActive);$('obd').textContent=yn(s.obdActive);cls($('obd'),s.obdActive);$('bat').textContent=s.battery.toFixed(2)+' V';$('seq').textContent=s.seq;$('tel').textContent=s.lastTelemetry;$('pid').textContent=s.pidSupport?'bereit':'unbekannt';cls($('pid'),s.pidSupport);$('canage').textContent=(s.lastCanAge/1000).toFixed(1)+'s';$('dtc').textContent=s.lastDtc||'--';$('err').textContent=s.lastError||'OK';}catch(e){$('run').textContent='offline';$('run').className='pill err'}}
+function yn(v){return v?'aktiv':'aus'}function cls(el,state){el.className='value '+(state?'okText':'warnText')}function bytes(v){return Math.round((v||0)/1024)+' KB'}
+async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('otastatus').textContent=s.otaStatus;$('freeota').textContent=bytes(s.freeSketchSpace);$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('run').textContent=s.started?'läuft':'gestoppt';$('run').className='pill '+(s.started?'ok':'warn');$('can').textContent=s.canState;cls($('can'),s.canActive);$('obd').textContent=yn(s.obdActive);cls($('obd'),s.obdActive);$('bat').textContent=s.battery.toFixed(2)+' V';$('seq').textContent=s.seq;$('tel').textContent=s.lastTelemetry;$('pid').textContent=s.pidSupport?'bereit':'unbekannt';cls($('pid'),s.pidSupport);$('canage').textContent=(s.lastCanAge/1000).toFixed(1)+'s';$('dtc').textContent=s.lastDtc||'--';$('err').textContent=s.lastError||'OK';}catch(e){$('run').textContent='offline';$('run').className='pill err'}}
 async function refreshLog(){try{$('logs').textContent=await fetch('/log',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
 $('start').onclick=async()=>{await fetch('/start',{method:'POST'});refresh()}
 $('restart').onclick=async()=>{if(confirm('Sender wirklich neu starten?'))await fetch('/restart',{method:'POST'})}
@@ -166,6 +173,14 @@ void WebConsoleHandler::handleStatus() {
     String json;
     json.reserve(512);
     json += "{";
+    json += "\"firmware\":\"" + jsonEscape(Config::Project::FirmwareVersion) + "\",";
+    json += "\"target\":\"" + jsonEscape(Config::Project::TargetName) + "\",";
+    json += "\"protocol\":" + String(Config::Project::ProtocolVersion) + ",";
+    json += "\"buildTime\":\"" + jsonEscape(String(__DATE__) + " " + String(__TIME__)) + "\",";
+    json += "\"otaStatus\":\"" + jsonEscape(webOtaStatus) + "\",";
+    json += "\"freeSketchSpace\":" + String(ESP.getFreeSketchSpace()) + ",";
+    json += "\"sketchSize\":" + String(ESP.getSketchSize()) + ",";
+    json += "\"flashSize\":" + String(ESP.getFlashChipSize()) + ",";
     json += "\"started\":" + String(isStarted() ? "true" : "false") + ",";
     json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
     json += "\"uptime\":" + String(s.uptimeMs) + ",";
@@ -203,8 +218,12 @@ void WebConsoleHandler::handleUpdatePage() {
 
 void WebConsoleHandler::handleUpdateFinished() {
     const bool ok = !Update.hasError();
-    server.send(200, "text/plain", ok ? "Update erfolgreich, Neustart..." : "Update fehlgeschlagen");
+    if (!ok && webOtaStatus == "Bereit") {
+        webOtaStatus = updateErrorText("Update fehlgeschlagen");
+    }
+    server.send(ok ? 200 : 500, "text/plain", ok ? "Update erfolgreich, Neustart..." : webOtaStatus);
     if (ok) {
+        webOtaStatus = "Update erfolgreich, Neustart";
         log("[WebOTA] Update erfolgreich, Neustart");
         delay(500);
         ESP.restart();
@@ -215,24 +234,30 @@ void WebConsoleHandler::handleUpdateUpload() {
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
         updateInProgress = true;
+        webOtaStatus = "Upload gestartet: " + upload.filename;
         log("[WebOTA] Upload gestartet: " + upload.filename);
         if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-            log("[WebOTA] Update.begin fehlgeschlagen");
+            webOtaStatus = updateErrorText("Update.begin fehlgeschlagen");
+            log("[WebOTA] " + webOtaStatus);
         }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
         if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-            log("[WebOTA] Schreibfehler");
+            webOtaStatus = updateErrorText("Schreibfehler");
+            log("[WebOTA] " + webOtaStatus);
         }
     } else if (upload.status == UPLOAD_FILE_END) {
         if (Update.end(true)) {
+            webOtaStatus = "Upload abgeschlossen: " + String(upload.totalSize) + " Bytes";
             log("[WebOTA] Upload abgeschlossen: " + String(upload.totalSize) + " Bytes");
         } else {
-            log("[WebOTA] Update.end fehlgeschlagen");
+            webOtaStatus = updateErrorText("Update.end fehlgeschlagen");
+            log("[WebOTA] " + webOtaStatus);
         }
         updateInProgress = false;
     } else if (upload.status == UPLOAD_FILE_ABORTED) {
         Update.end();
         updateInProgress = false;
-        log("[WebOTA] Upload abgebrochen");
+        webOtaStatus = "Upload abgebrochen";
+        log("[WebOTA] " + webOtaStatus);
     }
 }

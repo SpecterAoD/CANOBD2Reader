@@ -128,7 +128,7 @@ platformio device monitor -e display
 `platformio.ini` verwendet für beide Environments:
 
 ```ini
-board_build.partitions = min_spiffs.csv
+board_build.partitions = partitions/ota_4mb.csv
 ```
 
 Das erhält ein OTA-kompatibles Layout mit zwei App-Partitionen für typische 4-MB-ESP32-Boards. OTA wird nicht im Code deaktiviert.
@@ -152,6 +152,36 @@ Runtime-Verhalten:
 - Sender startet OTA über `OTAHandler`. Wenn keine WLAN-Verbindung vorhanden ist, wird der zentrale Sender-SoftAP `Config::Network::SenderWebSsid` gestartet.
 - Display besitzt ein eigenes `DisplayOta`-Modul und startet bei aktiviertem Flag den zentralen Display-SoftAP `Config::Network::DisplayWebSsid`.
 - Beide Geräte verwenden `WIFI_AP_STA`, damit OTA/WebConsole und ESP-NOW parallel grundsätzlich möglich bleiben.
+
+### OTA-Version und Status pruefen
+
+`partitions/ota_4mb.csv` stellt `ota_0` und `ota_1` mit je `0x1D0000`
+Bytes bereit. Beide Weboberflaechen zeigen Firmware-Version, Target,
+Protokollversion, Build-Zeit, freien OTA-Speicher, Sketch-Groesse,
+Flash-Groesse, IP und Laufzeit. Dieselben Werte sind unter `/status` als JSON
+verfuegbar.
+
+Nach einem Web-OTA kann die installierte Version direkt geprueft werden:
+
+- Sender: `http://192.168.4.1/status` im WLAN `ESP_OBD_Debug`
+- Display: `http://192.168.4.1/status` im WLAN `CANOBD2_Display_OTA`
+
+Wichtige JSON-Felder:
+
+```json
+{
+  "firmware": "V1.0.0",
+  "target": "sender",
+  "protocol": 2,
+  "freeSketchSpace": 1900544,
+  "sketchSize": 854745,
+  "flashSize": 4194304
+}
+```
+
+OTA-Fehler erscheinen direkt in der Weboberflaeche und im `/status` Feld
+`otaStatus`. Typische Ursachen sind eine falsche `.bin` fuer das Zielgeraet,
+zu wenig freier OTA-Speicher oder ein abgebrochener Upload.
 
 ## Debug-/Feature-Flags
 

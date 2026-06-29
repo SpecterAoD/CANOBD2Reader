@@ -4,20 +4,22 @@
 // Environment-spezifische Schalter kommen aus platformio.ini per -DENV_SENDER
 // bzw. -DENV_DISPLAY. Gemeinsame Projektkonstanten bleiben hier an einer Stelle.
 
-#include <Arduino.h>
-
-#define CANOBD2_PROTOCOL_VERSION 2
-
-#ifndef CANOBD2_FIRMWARE_VERSION
-  #define CANOBD2_FIRMWARE_VERSION "3.1205"
+#ifndef CANOBD2_PROTOCOL_VERSION
+  #define CANOBD2_PROTOCOL_VERSION 1
 #endif
 
-#if defined(ENV_SENDER)
-  #define CANOBD2_TARGET_NAME "sender"
-#elif defined(ENV_DISPLAY)
-  #define CANOBD2_TARGET_NAME "display"
-#else
-  #define CANOBD2_TARGET_NAME "unknown"
+#ifndef CANOBD2_FIRMWARE_VERSION
+  #define CANOBD2_FIRMWARE_VERSION "V0.0.0-dev"
+#endif
+
+#ifndef CANOBD2_TARGET_NAME
+  #if defined(ENV_SENDER)
+    #define CANOBD2_TARGET_NAME "sender"
+  #elif defined(ENV_DISPLAY)
+    #define CANOBD2_TARGET_NAME "display"
+  #else
+    #define CANOBD2_TARGET_NAME "unknown"
+  #endif
 #endif
 
 // OTA bleibt pro Environment aktiviert; die konkrete Nutzung/Upload-Methode wird

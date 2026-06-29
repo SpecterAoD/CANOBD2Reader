@@ -9,6 +9,11 @@
 namespace {
   WebServer server(Config::Network::WebServerPort);
   bool webUpdateInProgress = false;
+  String webOtaStatus = "Bereit";
+
+  String updateErrorText(const char* prefix) {
+    return String(prefix) + ", error=" + String(Update.getError());
+  }
 
   String jsonEscape(const String& value) {
     String escaped;
@@ -56,12 +61,15 @@ button{border:0;border-radius:14px;padding:13px 10px;background:#075985;color:va
 <input type="file" name="firmware" accept=".bin">
 <button type="submit">Display Firmware hochladen</button>
 </form>
+<div class="card"><div class="label">Firmware</div><div class="small">Version: <span id="fw">--</span><br>Target: <span id="target">--</span><br>Protocol: <span id="proto">--</span><br>Build: <span id="build">--</span></div></div>
+<div class="card"><div class="label">OTA Speicher</div><div id="ota" class="value">--</div><div class="small">Sketch: <span id="sketch">--</span> · Flash: <span id="flash">--</span></div></div>
 <div class="card"><div class="label">Status</div><div id="status" class="value">--</div><div id="detail" class="small">--</div></div>
 <button class="danger" id="restart">Display neu starten</button>
 </div>
 <script>
 const $=id=>document.getElementById(id);
-async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('status').textContent=s.update?'Update läuft':'Bereit';$('detail').textContent=s.lastError||'Keine Fehler';$('state').textContent=s.update?'Update':'OK';$('state').className='pill '+(s.update?'err':'ok')}catch(e){$('state').textContent='offline';$('state').className='pill err'}}
+function bytes(v){return Math.round((v||0)/1024)+' KB'}
+async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('ota').textContent=bytes(s.freeSketchSpace)+' frei';$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('status').textContent=s.update?'Update läuft':'Bereit';$('detail').textContent=s.otaStatus+' · '+(s.lastError||'Keine Fehler');$('state').textContent=s.update?'Update':'OK';$('state').className='pill '+(s.update?'err':'ok')}catch(e){$('state').textContent='offline';$('state').className='pill err'}}
 $('restart').onclick=async()=>{if(confirm('Display wirklich neu starten?'))await fetch('/restart',{method:'POST'})}
 setInterval(refresh,1000);refresh();
 </script>
@@ -72,8 +80,16 @@ setInterval(refresh,1000);refresh();
 
   void handleStatus() {
     String json;
-    json.reserve(220);
+    json.reserve(520);
     json += "{";
+    json += "\"firmware\":\"" + jsonEscape(Config::Project::FirmwareVersion) + "\",";
+    json += "\"target\":\"" + jsonEscape(Config::Project::TargetName) + "\",";
+    json += "\"protocol\":" + String(Config::Project::ProtocolVersion) + ",";
+    json += "\"buildTime\":\"" + jsonEscape(String(__DATE__) + " " + String(__TIME__)) + "\",";
+    json += "\"otaStatus\":\"" + jsonEscape(webOtaStatus) + "\",";
+    json += "\"freeSketchSpace\":" + String(ESP.getFreeSketchSpace()) + ",";
+    json += "\"sketchSize\":" + String(ESP.getSketchSize()) + ",";
+    json += "\"flashSize\":" + String(ESP.getFlashChipSize()) + ",";
     json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
     json += "\"uptime\":" + String(millis()) + ",";
     json += "\"update\":" + String(webUpdateInProgress ? "true" : "false") + ",";
@@ -90,9 +106,13 @@ setInterval(refresh,1000);refresh();
 
   void handleUpdateFinished() {
     const bool ok = !Update.hasError();
-    server.send(200, "text/plain", ok ? "Update erfolgreich, Neustart..." : "Update fehlgeschlagen");
-    DisplayData::lastError = ok ? "Web-OTA erfolgreich" : "Web-OTA fehlgeschlagen";
+    if (!ok && webOtaStatus == "Bereit") {
+      webOtaStatus = updateErrorText("Update fehlgeschlagen");
+    }
+    server.send(ok ? 200 : 500, "text/plain", ok ? "Update erfolgreich, Neustart..." : webOtaStatus);
+    DisplayData::lastError = ok ? "Web-OTA erfolgreich" : webOtaStatus;
     if (ok) {
+      webOtaStatus = "Update erfolgreich, Neustart";
       delay(500);
       ESP.restart();
     }
@@ -102,25 +122,31 @@ setInterval(refresh,1000);refresh();
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
       webUpdateInProgress = true;
-      DisplayData::lastError = "Web-OTA Upload gestartet";
+      webOtaStatus = "Upload gestartet: " + upload.filename;
+      DisplayData::lastError = webOtaStatus;
       if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-        DisplayData::lastError = "Update.begin fehlgeschlagen";
+        webOtaStatus = updateErrorText("Update.begin fehlgeschlagen");
+        DisplayData::lastError = webOtaStatus;
       }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
       if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-        DisplayData::lastError = "Web-OTA Schreibfehler";
+        webOtaStatus = updateErrorText("Web-OTA Schreibfehler");
+        DisplayData::lastError = webOtaStatus;
       }
     } else if (upload.status == UPLOAD_FILE_END) {
       if (Update.end(true)) {
-        DisplayData::lastError = "Web-OTA abgeschlossen";
+        webOtaStatus = "Web-OTA abgeschlossen: " + String(upload.totalSize) + " Bytes";
+        DisplayData::lastError = webOtaStatus;
       } else {
-        DisplayData::lastError = "Update.end fehlgeschlagen";
+        webOtaStatus = updateErrorText("Update.end fehlgeschlagen");
+        DisplayData::lastError = webOtaStatus;
       }
       webUpdateInProgress = false;
     } else if (upload.status == UPLOAD_FILE_ABORTED) {
       Update.end();
       webUpdateInProgress = false;
-      DisplayData::lastError = "Web-OTA abgebrochen";
+      webOtaStatus = "Web-OTA abgebrochen";
+      DisplayData::lastError = webOtaStatus;
     }
   }
 }
