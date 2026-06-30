@@ -190,9 +190,11 @@ namespace DisplayData {
 
     float numericValue = value->value.toFloat();
     String n = String(name);
-    if (n == "CoolantTemp" && numericValue >= 105.0f) return DisplayConfig::Error;
+    if (n == "CoolantTemp" && numericValue >= DisplayConfig::CoolantCriticalC) return DisplayConfig::Error;
+    if (n == "CoolantTemp" && numericValue >= DisplayConfig::CoolantWarnC) return DisplayConfig::Warn;
     if (n == "OilTemp" && numericValue >= 125.0f) return DisplayConfig::Error;
-    if (n == "BatteryVoltage" && (numericValue < 11.5f || numericValue > 14.8f)) return DisplayConfig::Warn;
+    if (n == "BatteryVoltage" && numericValue <= DisplayConfig::VoltageCriticalLow) return DisplayConfig::Error;
+    if (n == "BatteryVoltage" && (numericValue <= DisplayConfig::VoltageWarnLow || numericValue > 14.8f)) return DisplayConfig::Warn;
     if (n == "RPM" && numericValue >= 4200.0f) return DisplayConfig::Warn;
     return DisplayConfig::Text;
   }

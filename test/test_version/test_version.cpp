@@ -4,6 +4,9 @@
 #include "ProjectConfig.h"
 #include "common_config.h"
 
+void setUp() {}
+void tearDown() {}
+
 void test_firmware_version_is_available() {
     TEST_ASSERT_NOT_NULL(ProjectConfig::FirmwareVersion);
     TEST_ASSERT_TRUE(std::strlen(ProjectConfig::FirmwareVersion) > 0);

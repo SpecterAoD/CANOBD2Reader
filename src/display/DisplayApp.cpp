@@ -4,9 +4,11 @@
 #include "DisplaySimulation.h"
 #include "DisplayOta.h"
 #include "DisplayUi.h"
+#include "RuntimeSimulation.h"
 
 namespace DisplayApp {
   void begin() {
+    Simulation::RuntimeSimulation::resetForBoot();
     Serial.begin(115200);
     DisplayUi::begin();
     DisplayOta::begin();

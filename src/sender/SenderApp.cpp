@@ -37,6 +37,9 @@
 #endif
 #include "TelemetryCodec.h"
 #include "TelemetrySequence.h"
+#include "RuntimeSimulation.h"
+#include "ObdSimulation.h"
+#include "IsoTpSimulation.h"
 #if __has_include("SimulationData.h")
   #include "SimulationData.h"
 #else
@@ -93,6 +96,7 @@ unsigned long last_battery_send_time = 0;
 unsigned long last_supported_pid_refresh_time = 0;
 unsigned long last_dtc_query_time = 0;
 unsigned long last_simulation_send_time = 0;
+unsigned long last_led_test_change_time = 0;
 uint32_t telemetry_sequence = 0;
 uint32_t telemetry_send_ok = 0;
 uint32_t telemetry_send_fail = 0;
@@ -100,6 +104,7 @@ uint32_t telemetry_last_summary_ms = 0;
 size_t simulation_sample_index = 0;
 bool can_bus_active = false;
 bool can_driver_ready = false;
+bool led_test_active = false;
 bool supported_pids_initialized = false;
 uint32_t supported_pids_01_20 = 0;
 uint32_t supported_pids_21_40 = 0;
@@ -119,7 +124,7 @@ void refreshSupportedPIDs();
 bool isPIDSupported(byte pid);
 void queryAndSendDTCs();
 void sendSimulationTelemetry();
-void blinkLED(uint8_t pin);
+void handleLedTestButton();
 // End region ========================== Funktionsprototypen ==========================
 
 // region ================================== ESP-NOW ==================================
@@ -177,6 +182,7 @@ int getMeshID() {
 
 // region ================================== Setup ==================================
 void SenderApp::begin() {
+  Simulation::RuntimeSimulation::resetForBoot();
   Serial.begin(Config::Project::Baudrate);
   debugln(Config::Project::Baudrate);
 
@@ -195,7 +201,7 @@ void SenderApp::begin() {
   last_can_msg_timestamp = millis() - kCanIdleTimeoutMs + 5;
 
   const bool espNowReady = initESPNow();
-  can_driver_ready = Config::Feature::EnableSenderTelemetrySimulation || CANHandler::init();
+  can_driver_ready = Simulation::RuntimeSimulation::enabled() || CANHandler::init();
 
   WebConsoleHandler::begin();
   OTAHandler::initOTA();
@@ -430,7 +436,7 @@ void maybeLogTelemetrySendSummary() {
                 static_cast<unsigned long>(telemetry_sequence),
                 static_cast<unsigned long>(telemetry_send_ok),
                 static_cast<unsigned long>(telemetry_send_fail),
-                Config::Feature::EnableSenderTelemetrySimulation ? "on" : "off");
+                Simulation::RuntimeSimulation::enabled() ? "on" : "off");
   telemetry_last_summary_ms = now;
 }
 
@@ -442,24 +448,35 @@ void sendSimulationTelemetry() {
   if (millis() - last_simulation_send_time < kSimulationSendIntervalMs) return;
   last_simulation_send_time = millis();
 
-  const SimulationData::Sample& sample =
-      SimulationData::Samples[simulation_sample_index % SimulationData::SampleCount];
-
+  const auto scenario = Simulation::RuntimeSimulation::scenario();
+  const auto simulated = Simulation::simulatedPidValue(simulation_sample_index, millis(), scenario);
   char value[16];
-  const float simulatedValue = SimulationData::valueForSample(sample, millis(), simulation_sample_index);
-  snprintf(value, sizeof(value), sample.decimals == 0 ? "%.0f" : "%.1f", simulatedValue);
-  sendTelemetry(sample.type, sample.key, sample.name, value, sample.unit, "OK");
+  snprintf(value, sizeof(value), simulated.decimals == 0 ? "%.0f" : "%.1f", simulated.value);
+  sendTelemetry(simulated.type,
+                simulated.key,
+                simulated.name,
+                strcmp(simulated.status, "OK") == 0 ? value : "N/A",
+                simulated.unit,
+                simulated.status);
 
   simulation_sample_index++;
 
   // Status-, CAN- und DTC-Pakete werden zwischen die Messwerte gemischt, damit
   // alle Display-Seiten ohne Fahrzeug und ohne CAN-Transceiver getestet werden koennen.
-  if (simulation_sample_index % SimulationData::SampleCount == 0) {
+  if (simulation_sample_index % Simulation::simulatedPidCount() == 0) {
+    const auto isoTp = Simulation::buildIsoTpSequence(scenario);
     sendStatusFrame("CAN", "SIMULATED", "OK");
+    sendStatusFrame("OBD", isoTp.timeoutExpected ? "TIMEOUT" : "SIMULATED", isoTp.timeoutExpected ? "TIMEOUT" : "OK");
+    sendStatusFrame("SIM", Simulation::RuntimeSimulation::enabled() ? "ACTIVE" : "INACTIVE", "OK");
+    sendTelemetry("STATUS", "SIM_SCENARIO", "SimScenario", Simulation::RuntimeSimulation::scenarioName(), "", "OK");
+    sendTelemetry("STATUS", "SIM_DETAIL", "SimDetail", Simulation::scenarioDiagnosticText(scenario), "", "OK");
     sendTelemetry("CAN", "RAW", "LastCAN", "0x7E8 DLC8 04 41 0C 1A F8 55 55 55", "", "OK");
-    sendTelemetry("CAN", "HINT", "CANHint", "Simulierte OBD Antwort RPM", "", "OK");
+    sendTelemetry("CAN", "HINT", "CANHint", Simulation::scenarioDiagnosticText(scenario), "", isoTp.negativeResponse ? "ERROR" : (isoTp.timeoutExpected ? "TIMEOUT" : "OK"));
     sendTelemetry("CAN", "COUNT", "CANCount", "128", "frames", "OK");
-    sendTelemetry("DTC", "ACTIVE", "DTC", "P0133 P0420", "", "WARN");
+    sendTelemetry("DTC", "ACTIVE", "DTC",
+                  scenario == Simulation::Scenario::NormalSingleFrame ? "Keine" : "P0133 P0420",
+                  "",
+                  scenario == Simulation::Scenario::NormalSingleFrame ? "OK" : "WARN");
   }
 }
 // end region ================ Telemetrie senden ================
@@ -469,7 +486,8 @@ void updateWebConsoleStatus() {
   status.canActive = can_bus_active;
   status.obdActive = Config::Sender::EnableOBD2;
   status.pidSupportReady = supported_pids_initialized;
-  status.simulationActive = Config::Feature::EnableSenderTelemetrySimulation;
+  status.simulationActive = Simulation::RuntimeSimulation::enabled();
+  status.simulationScenario = Simulation::RuntimeSimulation::scenarioName();
   status.batteryVoltage = SenderPower::getLastVoltage();
   status.uptimeMs = millis();
   status.telemetrySequence = telemetry_sequence;
@@ -484,18 +502,18 @@ void updateWebConsoleStatus() {
 // end region ================ PRINT_CAN_FLAG ================
 
 // region ================ LED-Test ================
-void ledtest() {
-  digitalWrite(kLedPin1, LOW);
-  digitalWrite(kLedPin2, LOW);
-  blinkLED(kLedPin1);
-  delay(500);
-  blinkLED(kLedPin2);
+void handleLedTestButton() {
+  const bool pressed = digitalRead(kButtonPin) == LOW;
+  if (pressed == led_test_active) return;
+  if (millis() - last_led_test_change_time < Config::Sender::LedTestDebounceMs) return;
+
+  led_test_active = pressed;
+  last_led_test_change_time = millis();
+  digitalWrite(kLedPin1, pressed ? HIGH : LOW);
+  digitalWrite(kLedPin2, pressed ? HIGH : LOW);
+  WebConsoleHandler::log(pressed ? "[Sender] LED-Test aktiv" : "[Sender] LED-Test beendet");
 }
-void blinkLED(uint8_t pin) {
-  digitalWrite(pin, HIGH);
-  delay(50);
-  digitalWrite(pin, LOW);
-}
+
 // end region ================ LED-Test ================
 
 // region ================================== loop ==================================
@@ -504,8 +522,9 @@ void SenderApp::tick() {
   OTAHandler::handleOTA();
   WebConsoleHandler::handle();
   updateWebConsoleStatus();
+  handleLedTestButton();
 
-  if (Config::Feature::EnableSenderTelemetrySimulation) {
+  if (Simulation::RuntimeSimulation::enabled()) {
     sendSimulationTelemetry();
     return;
   }
@@ -628,15 +647,6 @@ void SenderApp::tick() {
   }
   //-------------------------------------------------
 
-  // ------------LED-Test-------------
-  // Optional
-  ///*
-  if (digitalRead(kButtonPin) == LOW) {
-    debugln("Taster wurde gedrückt! LED-Test");
-    ledtest();
-  }
-  //*/
-  //-------------------------------------------------------
   //------------Reduziert Leistung des ESP-------------
   //SenderPower::reduceHeat(); // Optional
   //-------------------------------------------------------

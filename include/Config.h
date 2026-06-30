@@ -8,6 +8,7 @@
 #include "PIDs.h"
 #include "ProjectConfig.h"
 #include "SenderConfig.h"
+#include "SimulationConfig.h"
 
 namespace Config {
 
@@ -36,10 +37,10 @@ namespace Config {
         constexpr bool EnableSenderOta = true;
 
         // Sender-Simulation: sendet ohne Fahrzeug/CAN-Transceiver Testwerte.
-        constexpr bool EnableSenderTelemetrySimulation = false;
+        constexpr bool EnableSenderTelemetrySimulation = SimulationConfig::EnableSimulationByDefault;
 
         // Display-Simulation: erzeugt lokal Testwerte fuer alle Display-Seiten.
-        constexpr bool EnableDisplayInternalSimulation = false;
+        constexpr bool EnableDisplayInternalSimulation = SimulationConfig::EnableSimulationByDefault;
     }
 
     // =========================================================================
@@ -96,6 +97,9 @@ namespace Config {
         constexpr uint8_t BacklightOn = DisplayConfigValues::BacklightOn;
         constexpr uint8_t NextPageButtonPin = DisplayConfigValues::NextPageButtonPin;
         constexpr uint8_t PageCount = DisplayConfigValues::PageCount;
+        constexpr uint8_t MainPageIndex = DisplayConfigValues::MainPageIndex;
+        constexpr uint32_t LongPressMs = DisplayConfigValues::LongPressMs;
+        constexpr bool EnableGraphPages = DisplayConfigValues::EnableGraphPages;
 
         constexpr uint32_t ScreenRefreshMs = DisplayConfigValues::RefreshMs;
         constexpr uint32_t ForceFullRenderMs = DisplayConfigValues::ForceFullRenderMs;
@@ -107,6 +111,10 @@ namespace Config {
         constexpr uint32_t ConnectionTimeoutMs = DisplayConfigValues::ConnectionTimeoutMs;
         constexpr uint32_t ValueTimeoutMs = DisplayConfigValues::ValueTimeoutMs;
         constexpr uint32_t ButtonDebounceMs = DisplayConfigValues::ButtonDebounceMs;
+        constexpr float CoolantWarnC = DisplayConfigValues::CoolantWarnC;
+        constexpr float CoolantCriticalC = DisplayConfigValues::CoolantCriticalC;
+        constexpr float VoltageWarnLow = DisplayConfigValues::VoltageWarnLow;
+        constexpr float VoltageCriticalLow = DisplayConfigValues::VoltageCriticalLow;
     }
 
     // =========================================================================
@@ -133,6 +141,7 @@ namespace Config {
         constexpr uint32_t ObdTxTimeoutMs = SenderConfig::ObdTxTimeoutMs;
         constexpr uint32_t BatterySendIntervalMs = SenderConfig::BatterySendIntervalMs;
         constexpr uint32_t SimulationIntervalMs = SenderConfig::SimulationIntervalMs;
+        constexpr uint32_t LedTestDebounceMs = SenderConfig::LedTestDebounceMs;
         constexpr uint32_t SupportedPidRefreshIntervalMs = SenderConfig::SupportedPidRefreshMs;
         constexpr uint32_t DtcQueryIntervalMs = SenderConfig::DtcQueryIntervalMs;
         constexpr uint32_t StartStopDelayMs = SenderConfig::StartStopDelayMs;

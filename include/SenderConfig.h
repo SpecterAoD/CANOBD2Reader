@@ -25,6 +25,7 @@ constexpr uint32_t ObdResponseTimeoutMs = 250;
 constexpr uint32_t ObdTxTimeoutMs = 50;
 constexpr uint32_t BatterySendIntervalMs = 3000;
 constexpr uint32_t SimulationIntervalMs = 250;
+constexpr uint32_t LedTestDebounceMs = 50;
 constexpr uint32_t SupportedPidRefreshMs = 60000;
 constexpr uint32_t DtcQueryIntervalMs = 30000;
 constexpr uint32_t StartStopDelayMs = 300000;

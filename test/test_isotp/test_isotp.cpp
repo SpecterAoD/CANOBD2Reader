@@ -1,6 +1,9 @@
 #include <unity.h>
 #include "IsoTpReassembler.h"
 
+void setUp() {}
+void tearDown() {}
+
 void test_isotp_single_frame() {
     IsoTp::IsoTpReassembler reassembler;
     IsoTp::CanFrame frame{0x7E8, 4, {0x03, 0x41, 0x0D, 0x64}};

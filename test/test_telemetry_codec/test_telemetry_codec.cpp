@@ -2,6 +2,9 @@
 #include <cstring>
 #include "TelemetryCodec.h"
 
+void setUp() {}
+void tearDown() {}
+
 void test_telemetry_encode_decode() {
     Telemetry::TelemetryPacket encoded{};
     TEST_ASSERT_TRUE(Telemetry::TelemetryCodec::encodeText(encoded, Telemetry::PacketType::Obd, 7, 1234, "OBD,0C,RPM,1000,rpm,OK,7"));

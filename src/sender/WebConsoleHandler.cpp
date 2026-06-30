@@ -1,6 +1,8 @@
 #include "WebConsoleHandler.h"
 #include <Update.h>
 #include "Logger.h"
+#include "RuntimeSimulation.h"
+#include "SimulationTypes.h"
 
 namespace {
     constexpr size_t MaxLogLineLength = 180;
@@ -14,6 +16,7 @@ namespace {
     String updateErrorText(const char* prefix) {
         return String(prefix) + ", error=" + String(Update.getError());
     }
+
 }
 
 void WebConsoleHandler::begin() {
@@ -38,6 +41,13 @@ void WebConsoleHandler::begin() {
     server.on("/status", HTTP_GET, handleStatus);
     server.on("/start", HTTP_POST, handleStart);
     server.on("/restart", HTTP_POST, handleRestart);
+    server.on("/api/restart", HTTP_POST, handleApiRestart);
+    server.on("/api/simulation", HTTP_GET, handleSimulationStatus);
+    server.on("/api/simulation/on", HTTP_POST, handleSimulationOn);
+    server.on("/api/simulation/off", HTTP_POST, handleSimulationOff);
+    server.on("/api/simulation/toggle", HTTP_POST, handleSimulationToggle);
+    server.on("/api/simulation/scenario", HTTP_GET, handleSimulationStatus);
+    server.on("/api/simulation/scenario", HTTP_POST, handleSimulationScenario);
     server.on("/update", HTTP_GET, handleUpdatePage);
     server.on("/update", HTTP_POST, handleUpdateFinished, handleUpdateUpload);
     server.begin();
@@ -136,6 +146,8 @@ input[type=file]{width:100%;padding:12px;border-radius:14px;background:#0f172a;c
 <section id="diag" class="page"><div class="grid">
 <div class="card"><div class="label">PID Support</div><div id="pid" class="value">--</div></div>
 <div class="card"><div class="label">Letzter CAN</div><div id="canage" class="value">--</div></div>
+<div class="card wide"><div class="label">Simulation</div><div id="sim" class="value">--</div><div class="small">Szenario: <span id="scenario">--</span></div></div>
+<div class="card wide"><div class="label">Simulationsszenario</div><select id="scenarioSelect" style="width:100%;padding:11px;border-radius:12px;background:#0f172a;color:#f8fafc;border:1px solid #263244"></select><div class="actions"><button id="simToggle">Simulation umschalten</button><button id="simOn" class="primary">Simulation einschalten</button><button id="simOff">Simulation ausschalten</button></div></div>
 <div class="card wide"><div class="label">DTC / Fehlercodes</div><div id="dtc" class="value">--</div></div>
 <div class="card wide"><div class="label">Fehlerstatus</div><div id="err" class="small">--</div></div>
 </div></section>
@@ -147,13 +159,20 @@ input[type=file]{width:100%;padding:12px;border-radius:14px;background:#0f172a;c
 </div>
 <script>
 const $=id=>document.getElementById(id);
+const scenarios=['NormalSingleFrame','NormalMultiFrameVin','NormalMultiFrameDtc','FlowControlRequired','TimeoutAfterFirstFrame','SequenceError','BufferOverflow','MultipleEcusResponse','NegativeResponse'];
+scenarios.forEach(x=>{let o=document.createElement('option');o.value=x;o.textContent=x;$('scenarioSelect').appendChild(o)});
 document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active')});
 function yn(v){return v?'aktiv':'aus'}function cls(el,state){el.className='value '+(state?'okText':'warnText')}function bytes(v){return Math.round((v||0)/1024)+' KB'}
 async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('otastatus').textContent=s.otaStatus;$('freeota').textContent=bytes(s.freeSketchSpace);$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('run').textContent=s.started?'läuft':'gestoppt';$('run').className='pill '+(s.started?'ok':'warn');$('can').textContent=s.canState;cls($('can'),s.canActive);$('obd').textContent=yn(s.obdActive);cls($('obd'),s.obdActive);$('bat').textContent=s.battery.toFixed(2)+' V';$('seq').textContent=s.seq;$('tel').textContent=s.lastTelemetry;$('pid').textContent=s.pidSupport?'bereit':'unbekannt';cls($('pid'),s.pidSupport);$('canage').textContent=(s.lastCanAge/1000).toFixed(1)+'s';$('dtc').textContent=s.lastDtc||'--';$('err').textContent=s.lastError||'OK';}catch(e){$('run').textContent='offline';$('run').className='pill err'}}
 async function refreshLog(){try{$('logs').textContent=await fetch('/log',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
+async function refreshSimulation(){try{let s=await fetch('/api/simulation',{cache:'no-store'}).then(r=>r.json());$('sim').textContent=s.simulation?'aktiv':'inaktiv';$('sim').className='value '+(s.simulation?'okText':'warnText');$('scenario').textContent=s.scenario||'--';$('scenarioSelect').value=s.scenario||'NormalSingleFrame'}catch(e){}}
 $('start').onclick=async()=>{await fetch('/start',{method:'POST'});refresh()}
-$('restart').onclick=async()=>{if(confirm('Sender wirklich neu starten?'))await fetch('/restart',{method:'POST'})}
-setInterval(refresh,1000);setInterval(refreshLog,1500);refresh();refreshLog();
+$('restart').onclick=async()=>{if(confirm('Sender wirklich neu starten?'))await fetch('/api/restart',{method:'POST'})}
+$('simToggle').onclick=async()=>{await fetch('/api/simulation/toggle',{method:'POST'});refreshSimulation()}
+$('simOn').onclick=async()=>{await fetch('/api/simulation/on',{method:'POST'});refreshSimulation()}
+$('simOff').onclick=async()=>{await fetch('/api/simulation/off',{method:'POST'});refreshSimulation()}
+$('scenarioSelect').onchange=async()=>{await fetch('/api/simulation/scenario?scenario='+encodeURIComponent($('scenarioSelect').value),{method:'POST'});refreshSimulation()}
+setInterval(refresh,1000);setInterval(refreshLog,1500);setInterval(refreshSimulation,1000);refresh();refreshLog();refreshSimulation();
 </script>
 </body></html>
 )rawliteral";
@@ -188,6 +207,7 @@ void WebConsoleHandler::handleStatus() {
     json += "\"obdActive\":" + String(s.obdActive ? "true" : "false") + ",";
     json += "\"pidSupport\":" + String(s.pidSupportReady ? "true" : "false") + ",";
     json += "\"simulation\":" + String(s.simulationActive ? "true" : "false") + ",";
+    json += "\"simulationScenario\":\"" + jsonEscape(s.simulationScenario) + "\",";
     json += "\"battery\":" + String(s.batteryVoltage, 2) + ",";
     json += "\"seq\":" + String(s.telemetrySequence) + ",";
     json += "\"lastCanAge\":" + String(s.lastCanAgeMs) + ",";
@@ -206,9 +226,62 @@ void WebConsoleHandler::handleStart() {
 }
 
 void WebConsoleHandler::handleRestart() {
-    server.send(200, "text/plain", "Neustart");
-    delay(250);
+    handleApiRestart();
+}
+
+void WebConsoleHandler::handleApiRestart() {
+    log("[WebConsole] Neustart angefordert");
+    server.send(200, "application/json", "{\"restart\":true}");
+    delay(300);
     ESP.restart();
+}
+
+String WebConsoleHandler::simulationJson() {
+    String json;
+    json.reserve(160);
+    json += "{";
+    json += "\"simulation\":" + String(Simulation::RuntimeSimulation::enabled() ? "true" : "false") + ",";
+    json += "\"scenario\":\"" + jsonEscape(Simulation::RuntimeSimulation::scenarioName()) + "\"";
+    json += "}";
+    return json;
+}
+
+void WebConsoleHandler::handleSimulationStatus() {
+    server.send(200, "application/json", simulationJson());
+}
+
+void WebConsoleHandler::handleSimulationOn() {
+    Simulation::RuntimeSimulation::setEnabled(true);
+    log("[Simulation] eingeschaltet");
+    server.send(200, "application/json", simulationJson());
+}
+
+void WebConsoleHandler::handleSimulationOff() {
+    Simulation::RuntimeSimulation::setEnabled(false);
+    log("[Simulation] ausgeschaltet");
+    server.send(200, "application/json", simulationJson());
+}
+
+void WebConsoleHandler::handleSimulationToggle() {
+    Simulation::RuntimeSimulation::toggle();
+    log(String("[Simulation] ") + (Simulation::RuntimeSimulation::enabled() ? "eingeschaltet" : "ausgeschaltet"));
+    server.send(200, "application/json", simulationJson());
+}
+
+void WebConsoleHandler::handleSimulationScenario() {
+    String raw = server.arg("scenario");
+    if (raw.length() == 0) raw = server.arg("plain");
+    raw.trim();
+
+    Simulation::Scenario scenario;
+    if (!Simulation::parseScenario(raw.c_str(), scenario)) {
+        server.send(400, "application/json", "{\"error\":\"invalid scenario\"}");
+        return;
+    }
+
+    Simulation::RuntimeSimulation::setScenario(scenario);
+    log("[Simulation] Szenario: " + String(Simulation::RuntimeSimulation::scenarioName()));
+    server.send(200, "application/json", simulationJson());
 }
 
 void WebConsoleHandler::handleUpdatePage() {

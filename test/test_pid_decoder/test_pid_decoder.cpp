@@ -1,6 +1,9 @@
 #include <unity.h>
 #include "PidDecoder.h"
 
+void setUp() {}
+void tearDown() {}
+
 void test_pid_rpm() {
     const uint8_t data[] = {0x1A, 0xF8};
     const auto value = Obd::decodePid(0x0C, data, sizeof(data));

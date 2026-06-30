@@ -1,11 +1,15 @@
 #include "DisplaySimulation.h"
 #include "DisplayData.h"
+#include "RuntimeSimulation.h"
+#include "ObdSimulation.h"
+#include "IsoTpSimulation.h"
 #include "SimulationData.h"
+#include <cstring>
 
 namespace DisplaySimulation {
   void update() {
     using namespace DisplayData;
-    if (!DisplayConfig::EnableInternalSimulation) return;
+    if (!Simulation::RuntimeSimulation::enabled()) return;
     if (millis() - lastInternalSimulationUpdate < DisplayConfig::ScreenRefreshMs) return;
 
     if (internalSimulationIndex == 0) {
@@ -14,28 +18,35 @@ namespace DisplaySimulation {
 
     lastInternalSimulationUpdate = millis();
 
-    for (size_t sampleIndex = 0; sampleIndex < SimulationData::SampleCount; ++sampleIndex) {
-      const SimulationData::Sample& sample = SimulationData::Samples[sampleIndex];
+    const auto scenario = Simulation::RuntimeSimulation::scenario();
+    for (size_t sampleIndex = 0; sampleIndex < Simulation::simulatedPidCount(); ++sampleIndex) {
+      const auto sample = Simulation::simulatedPidValue(sampleIndex, millis(), scenario);
 
       char value[16];
-      const float simulatedValue =
-          SimulationData::valueForSample(sample, millis(), internalSimulationIndex + sampleIndex);
-      snprintf(value, sizeof(value), sample.decimals == 0 ? "%.0f" : "%.1f", simulatedValue);
+      snprintf(value, sizeof(value), sample.decimals == 0 ? "%.0f" : "%.1f", sample.value);
       upsertValue(sample.type,
                   sample.key,
                   sample.name,
-                  value,
+                  strcmp(sample.status, "OK") == 0 ? value : "N/A",
                   sample.unit,
-                  "OK",
+                  sample.status,
                   static_cast<uint32_t>(internalSimulationIndex + sampleIndex + 1));
     }
 
-    internalSimulationIndex += SimulationData::SampleCount;
+    internalSimulationIndex += Simulation::simulatedPidCount();
     lastReceivedAt = millis();
+    const auto isoTp = Simulation::buildIsoTpSequence(scenario);
     upsertValue("STATUS", "CAN", "CAN", "SIMULATED", "", "OK", internalSimulationIndex);
-    upsertValue("CAN", "RAW", "LastCAN", "0x7E8 DLC8 04 41 0C 1A F8 55 55 55", "", "OK", internalSimulationIndex + 1);
-    upsertValue("CAN", "HINT", "CANHint", "Lokale CAN-Simulation", "", "OK", internalSimulationIndex + 2);
+    upsertValue("STATUS", "OBD", "OBD", isoTp.timeoutExpected ? "TIMEOUT" : "SIMULATED", "", isoTp.timeoutExpected ? "TIMEOUT" : "OK", internalSimulationIndex + 1);
+    upsertValue("STATUS", "SIM", "Simulation", Simulation::RuntimeSimulation::enabled() ? "aktiv" : "inaktiv", "", "OK", internalSimulationIndex + 2);
+    upsertValue("STATUS", "SIM_SCENARIO", "SimScenario", Simulation::RuntimeSimulation::scenarioName(), "", "OK", internalSimulationIndex + 3);
+    upsertValue("CAN", "RAW", "LastCAN", "0x7E8 DLC8 04 41 0C 1A F8 55 55 55", "", "OK", internalSimulationIndex + 4);
+    upsertValue("CAN", "HINT", "CANHint", Simulation::scenarioDiagnosticText(scenario), "", isoTp.negativeResponse ? "ERROR" : (isoTp.timeoutExpected ? "TIMEOUT" : "OK"), internalSimulationIndex + 5);
     upsertValue("CAN", "COUNT", "CANCount", "128", "frames", "OK", internalSimulationIndex + 3);
-    upsertValue("DTC", "ACTIVE", "DTC", "P0133 P0420", "", "WARN", internalSimulationIndex + 4);
+    upsertValue("DTC", "ACTIVE", "DTC",
+                scenario == Simulation::Scenario::NormalSingleFrame ? "Keine" : "P0133 P0420",
+                "",
+                scenario == Simulation::Scenario::NormalSingleFrame ? "OK" : "WARN",
+                internalSimulationIndex + 6);
   }
 }

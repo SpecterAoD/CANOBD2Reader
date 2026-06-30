@@ -3,6 +3,9 @@
 #include "SenderConfig.h"
 #include "DisplayConfig.h"
 
+void setUp() {}
+void tearDown() {}
+
 void test_project_protocol_constants() {
     TEST_ASSERT_EQUAL_HEX16(0xCA02, ProjectConfig::ProtocolMagic);
     TEST_ASSERT_TRUE(ProjectConfig::ProtocolVersion > 0);

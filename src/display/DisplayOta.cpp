@@ -1,6 +1,8 @@
 #include "DisplayOta.h"
 #include "DisplayData.h"
 #include "Config.h"
+#include "RuntimeSimulation.h"
+#include "SimulationTypes.h"
 #include <ArduinoOTA.h>
 #include <WiFi.h>
 #include <WebServer.h>
@@ -34,6 +36,16 @@ namespace {
     return escaped;
   }
 
+  String simulationJson() {
+    String json;
+    json.reserve(160);
+    json += "{";
+    json += "\"simulation\":" + String(Simulation::RuntimeSimulation::enabled() ? "true" : "false") + ",";
+    json += "\"scenario\":\"" + jsonEscape(Simulation::RuntimeSimulation::scenarioName()) + "\"";
+    json += "}";
+    return json;
+  }
+
   void handleRoot() {
     static const char html[] PROGMEM = R"rawliteral(
 <!doctype html>
@@ -63,15 +75,23 @@ button{border:0;border-radius:14px;padding:13px 10px;background:#075985;color:va
 </form>
 <div class="card"><div class="label">Firmware</div><div class="small">Version: <span id="fw">--</span><br>Target: <span id="target">--</span><br>Protocol: <span id="proto">--</span><br>Build: <span id="build">--</span></div></div>
 <div class="card"><div class="label">OTA Speicher</div><div id="ota" class="value">--</div><div class="small">Sketch: <span id="sketch">--</span> · Flash: <span id="flash">--</span></div></div>
+<div class="card"><div class="label">Simulation</div><div id="sim" class="value">--</div><div class="small">Szenario: <span id="scenario">--</span></div><select id="scenarioSelect" style="width:100%;padding:11px;border-radius:12px;background:#0f172a;color:#f8fafc;border:1px solid #263244;margin-top:10px"></select><button id="simToggle" type="button">Simulation umschalten</button><button id="simOn" type="button">Simulation einschalten</button><button id="simOff" type="button">Simulation ausschalten</button></div>
 <div class="card"><div class="label">Status</div><div id="status" class="value">--</div><div id="detail" class="small">--</div></div>
 <button class="danger" id="restart">Display neu starten</button>
 </div>
 <script>
 const $=id=>document.getElementById(id);
+const scenarios=['NormalSingleFrame','NormalMultiFrameVin','NormalMultiFrameDtc','FlowControlRequired','TimeoutAfterFirstFrame','SequenceError','BufferOverflow','MultipleEcusResponse','NegativeResponse'];
+scenarios.forEach(x=>{let o=document.createElement('option');o.value=x;o.textContent=x;$('scenarioSelect').appendChild(o)});
 function bytes(v){return Math.round((v||0)/1024)+' KB'}
 async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('ota').textContent=bytes(s.freeSketchSpace)+' frei';$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('status').textContent=s.update?'Update läuft':'Bereit';$('detail').textContent=s.otaStatus+' · '+(s.lastError||'Keine Fehler');$('state').textContent=s.update?'Update':'OK';$('state').className='pill '+(s.update?'err':'ok')}catch(e){$('state').textContent='offline';$('state').className='pill err'}}
-$('restart').onclick=async()=>{if(confirm('Display wirklich neu starten?'))await fetch('/restart',{method:'POST'})}
-setInterval(refresh,1000);refresh();
+async function refreshSimulation(){try{let s=await fetch('/api/simulation',{cache:'no-store'}).then(r=>r.json());$('sim').textContent=s.simulation?'aktiv':'inaktiv';$('scenario').textContent=s.scenario||'--';$('scenarioSelect').value=s.scenario||'NormalSingleFrame'}catch(e){}}
+$('restart').onclick=async()=>{if(confirm('Display wirklich neu starten?'))await fetch('/api/restart',{method:'POST'})}
+$('simToggle').onclick=async()=>{await fetch('/api/simulation/toggle',{method:'POST'});refreshSimulation()}
+$('simOn').onclick=async()=>{await fetch('/api/simulation/on',{method:'POST'});refreshSimulation()}
+$('simOff').onclick=async()=>{await fetch('/api/simulation/off',{method:'POST'});refreshSimulation()}
+$('scenarioSelect').onchange=async()=>{await fetch('/api/simulation/scenario?scenario='+encodeURIComponent($('scenarioSelect').value),{method:'POST'});refreshSimulation()}
+setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshSimulation();
 </script>
 </body></html>
 )rawliteral";
@@ -93,15 +113,55 @@ setInterval(refresh,1000);refresh();
     json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
     json += "\"uptime\":" + String(millis()) + ",";
     json += "\"update\":" + String(webUpdateInProgress ? "true" : "false") + ",";
+    json += "\"simulation\":" + String(Simulation::RuntimeSimulation::enabled() ? "true" : "false") + ",";
+    json += "\"simulationScenario\":\"" + jsonEscape(Simulation::RuntimeSimulation::scenarioName()) + "\",";
     json += "\"lastError\":\"" + jsonEscape(DisplayData::lastError) + "\"";
     json += "}";
     server.send(200, "application/json", json);
   }
 
   void handleRestart() {
-    server.send(200, "text/plain", "Neustart");
-    delay(250);
+    server.send(200, "application/json", "{\"restart\":true}");
+    delay(300);
     ESP.restart();
+  }
+
+  void handleSimulationStatus() {
+    server.send(200, "application/json", simulationJson());
+  }
+
+  void handleSimulationOn() {
+    Simulation::RuntimeSimulation::setEnabled(true);
+    DisplayData::lastError = "Simulation eingeschaltet";
+    server.send(200, "application/json", simulationJson());
+  }
+
+  void handleSimulationOff() {
+    Simulation::RuntimeSimulation::setEnabled(false);
+    DisplayData::lastError = "Simulation ausgeschaltet";
+    server.send(200, "application/json", simulationJson());
+  }
+
+  void handleSimulationToggle() {
+    Simulation::RuntimeSimulation::toggle();
+    DisplayData::lastError = Simulation::RuntimeSimulation::enabled() ? "Simulation eingeschaltet" : "Simulation ausgeschaltet";
+    server.send(200, "application/json", simulationJson());
+  }
+
+  void handleSimulationScenario() {
+    String raw = server.arg("scenario");
+    if (raw.length() == 0) raw = server.arg("plain");
+    raw.trim();
+
+    Simulation::Scenario scenario;
+    if (!Simulation::parseScenario(raw.c_str(), scenario)) {
+      server.send(400, "application/json", "{\"error\":\"invalid scenario\"}");
+      return;
+    }
+
+    Simulation::RuntimeSimulation::setScenario(scenario);
+    DisplayData::lastError = "Simulation: " + String(Simulation::RuntimeSimulation::scenarioName());
+    server.send(200, "application/json", simulationJson());
   }
 
   void handleUpdateFinished() {
@@ -183,6 +243,13 @@ namespace DisplayOta {
     server.on("/", HTTP_GET, handleRoot);
     server.on("/status", HTTP_GET, handleStatus);
     server.on("/restart", HTTP_POST, handleRestart);
+    server.on("/api/restart", HTTP_POST, handleRestart);
+    server.on("/api/simulation", HTTP_GET, handleSimulationStatus);
+    server.on("/api/simulation/on", HTTP_POST, handleSimulationOn);
+    server.on("/api/simulation/off", HTTP_POST, handleSimulationOff);
+    server.on("/api/simulation/toggle", HTTP_POST, handleSimulationToggle);
+    server.on("/api/simulation/scenario", HTTP_GET, handleSimulationStatus);
+    server.on("/api/simulation/scenario", HTTP_POST, handleSimulationScenario);
     server.on("/update", HTTP_POST, handleUpdateFinished, handleUpdateUpload);
     server.begin();
     DisplayData::lastError = "Display Web-OTA bereit";

@@ -12,6 +12,7 @@ struct WebConsoleRuntimeStatus {
     bool obdActive = false;
     bool pidSupportReady = false;
     bool simulationActive = false;
+    String simulationScenario = "NormalSingleFrame";
     float batteryVoltage = 0.0f;
     uint32_t uptimeMs = 0;
     uint32_t telemetrySequence = 0;
@@ -51,8 +52,15 @@ private:
     static void handleStatus();
     static void handleStart();
     static void handleRestart();
+    static void handleApiRestart();
+    static void handleSimulationStatus();
+    static void handleSimulationOn();
+    static void handleSimulationOff();
+    static void handleSimulationToggle();
+    static void handleSimulationScenario();
     static void handleUpdatePage();
     static void handleUpdateFinished();
     static void handleUpdateUpload();
+    static String simulationJson();
     static String jsonEscape(const String& value);
 };

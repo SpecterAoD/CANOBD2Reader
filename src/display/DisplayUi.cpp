@@ -5,6 +5,8 @@
 namespace {
   TFT_eSPI tft = TFT_eSPI();
   bool lastButtonPressed = false;
+  uint32_t buttonPressedAt = 0;
+  bool longPressHandled = false;
   uint32_t lastUiStatsLogMs = 0;
   bool fullPageRedraw = true;
 
@@ -441,10 +443,16 @@ namespace {
     tft.setTextDatum(ML_DATUM);
     tft.setTextSize(1);
     tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
-    tft.drawString("Letztes Paket:", 14, 132);
+    String firmwareLine = String("FW ") + DISPLAY_FIRMWARE_VERSION + "  Seq " + String(lastSequence);
+    tft.drawString(firmwareLine, 14, 132);
     tft.setTextColor(DisplayConfig::Text, DisplayConfig::Panel);
-    String raw = lastRawPayload.length() > 42 ? lastRawPayload.substring(0, 42) + "..." : lastRawPayload;
-    tft.drawString(raw.length() ? raw : lastError, 14, 144);
+    String sim = displayText("Simulation");
+    String scenario = displayText("SimScenario");
+    if (sim == "--") sim = "inaktiv";
+    if (scenario == "--") scenario = "NormalSingleFrame";
+    String line = "Sim " + sim + "  " + scenario;
+    if (line.length() > 42) line = line.substring(0, 42) + "...";
+    tft.drawString(line, 14, 144);
   }
 
   void drawCANPage() {
@@ -554,20 +562,36 @@ namespace DisplayUi {
 
   void handleButton() {
     using namespace DisplayData;
+    const uint32_t now = millis();
     const bool pressed = digitalRead(DisplayConfig::NextPageButtonPin) == LOW;
     if (pressed != lastButtonPressed) {
       Serial.print("[display-ui] button ");
       Serial.println(pressed ? "pressed" : "released");
       lastButtonPressed = pressed;
+
+      if (pressed) {
+        buttonPressedAt = now;
+        longPressHandled = false;
+      } else if (!longPressHandled && now - buttonPressedAt >= DisplayConfig::ButtonDebounceMs) {
+        currentPage = (currentPage + 1) % DisplayConfig::PageCount;
+        lastRenderedPage = 255;
+        lastButtonAt = now;
+        markDirty();
+        Serial.print("[display-ui] page -> ");
+        Serial.println(currentPage);
+      }
     }
 
     if (pressed &&
-        millis() - lastButtonAt > DisplayConfig::ButtonDebounceMs) {
-      currentPage = (currentPage + 1) % DisplayConfig::PageCount;
+        !longPressHandled &&
+        now - buttonPressedAt >= DisplayConfig::LongPressMs &&
+        now - lastButtonAt > DisplayConfig::ButtonDebounceMs) {
+      currentPage = DisplayConfig::MainPageIndex;
       lastRenderedPage = 255;
-      lastButtonAt = millis();
+      lastButtonAt = now;
+      longPressHandled = true;
       markDirty();
-      Serial.print("[display-ui] page -> ");
+      Serial.print("[display-ui] long press page -> ");
       Serial.println(currentPage);
     }
   }

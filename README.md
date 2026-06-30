@@ -359,21 +359,56 @@ Aktuell abgedeckt:
 6. Diagnose: ESP-NOW, CAN/OBD, Datenqualität, CRC-/Drop-Zähler
 7. Fehlercodes: DTC-Status und aktive Fehlercodes
 
-## Simulation
+## Runtime-Simulation und Web-Schalter
 
-Sender-Simulation:
-
-```cpp
-constexpr bool EnableSenderTelemetrySimulation = true;
-```
-
-Display-interne Simulation:
+Die neue Simulation ist standardmaessig aus und wird nicht in NVS, EEPROM oder
+Flash gespeichert. Nach jedem Neustart gilt wieder:
 
 ```cpp
-constexpr bool EnableDisplayInternalSimulation = true;
+SimulationConfig::EnableSimulationByDefault == false
 ```
 
-Der bevorzugte Test ist die Sender-Simulation, weil damit ESP-NOW, CRC, Paketformat und Anzeige gemeinsam geprüft werden.
+Sender und Display besitzen in der Weboberflaeche Buttons fuer Simulation und
+Neustart. Die Steuerung wirkt nur im RAM der aktuellen Laufzeit.
+
+Neue API-Endpunkte auf beiden Geraeten:
+
+| Methode | Pfad | Zweck |
+| --- | --- | --- |
+| `GET` | `/api/simulation` | Runtime-Status und Szenario lesen |
+| `POST` | `/api/simulation/on` | Simulation einschalten |
+| `POST` | `/api/simulation/off` | Simulation ausschalten |
+| `POST` | `/api/simulation/toggle` | Simulation umschalten |
+| `GET` | `/api/simulation/scenario` | aktuelles Szenario lesen |
+| `POST` | `/api/simulation/scenario?scenario=<Name>` | Szenario setzen |
+| `POST` | `/api/restart` | Antwort senden und ESP neu starten |
+
+Unterstuetzte ISO-TP-/OBD-Szenarien:
+
+- `NormalSingleFrame`
+- `NormalMultiFrameVin`
+- `NormalMultiFrameDtc`
+- `FlowControlRequired`
+- `TimeoutAfterFirstFrame`
+- `SequenceError`
+- `BufferOverflow`
+- `MultipleEcusResponse`
+- `NegativeResponse`
+
+Die Display-Diagnoseseite zeigt zusaetzlich Firmware-Version, Sequenznummer,
+Simulation aktiv/inaktiv und das aktive Simulationsszenario. Die Weboberflaechen
+zeigen dieselben Informationen ueber `/status` und `/api/simulation`.
+
+Display-Button:
+
+- kurzer Druck: naechste Seite
+- langer Druck: zur Main Page zurueck
+
+Sender-Button:
+
+- gedrueckt: beide LEDs als LED-Test einschalten
+- losgelassen: normaler LED-Modus
+- entprellt und ohne blockierende Delays
 
 ## End-to-End Test Sender zu Display
 

@@ -29,6 +29,13 @@ namespace DisplayConfig {
   constexpr uint32_t ButtonDebounceMs = Config::Display::ButtonDebounceMs;
   constexpr uint8_t BacklightOn = Config::Display::BacklightOn;
   constexpr uint8_t PageCount = Config::Display::PageCount;
+  constexpr uint8_t MainPageIndex = Config::Display::MainPageIndex;
+  constexpr uint32_t LongPressMs = Config::Display::LongPressMs;
+  constexpr bool EnableGraphPages = Config::Display::EnableGraphPages;
+  constexpr float CoolantWarnC = Config::Display::CoolantWarnC;
+  constexpr float CoolantCriticalC = Config::Display::CoolantCriticalC;
+  constexpr float VoltageWarnLow = Config::Display::VoltageWarnLow;
+  constexpr float VoltageCriticalLow = Config::Display::VoltageCriticalLow;
 
   constexpr uint16_t Background = TFT_BLACK;
   constexpr uint16_t Panel = 0x18E3;

@@ -1,6 +1,7 @@
 #pragma once
 
-#include <Arduino.h>
+#include <cstddef>
+#include <cstdint>
 #include <math.h>
 #include <string.h>
 
