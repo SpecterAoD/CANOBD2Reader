@@ -5,6 +5,7 @@
 #include "Config.h"
 #include "common_config.h"
 #include "TelemetryProtocol.h"
+#include "DisplaySeverity.h"
 
 #define DISPLAY_FIRMWARE_VERSION CANOBD2_FIRMWARE_VERSION
 #define TELEMETRY_PROTOCOL_VERSION CANOBD2_PROTOCOL_VERSION
@@ -34,8 +35,14 @@ namespace DisplayConfig {
   constexpr bool EnableGraphPages = Config::Display::EnableGraphPages;
   constexpr float CoolantWarnC = Config::Display::CoolantWarnC;
   constexpr float CoolantCriticalC = Config::Display::CoolantCriticalC;
+  constexpr float OilWarnC = Config::Display::OilWarnC;
+  constexpr float OilCriticalC = Config::Display::OilCriticalC;
   constexpr float VoltageWarnLow = Config::Display::VoltageWarnLow;
   constexpr float VoltageCriticalLow = Config::Display::VoltageCriticalLow;
+  constexpr float VoltageWarnHigh = Config::Display::VoltageWarnHigh;
+  constexpr float VoltageCriticalHigh = Config::Display::VoltageCriticalHigh;
+  constexpr uint16_t RpmWarn = Config::Display::RpmWarn;
+  constexpr uint16_t RpmCritical = Config::Display::RpmCritical;
 
   constexpr uint16_t Background = TFT_BLACK;
   constexpr uint16_t Panel = 0x18E3;

@@ -68,6 +68,15 @@ IsoTpSimulationSequence buildIsoTpSequence(Scenario scenario) {
             sequence.frameCount = 1;
             sequence.negativeResponse = true;
             break;
+        case Scenario::DisplayNormalValues:
+        case Scenario::DisplayWarningValues:
+        case Scenario::DisplayCriticalValues:
+        case Scenario::DisplayTimeoutValues:
+        case Scenario::DisplayMixedValues:
+            sequence.frames[0] = frame(0x7E8, 4, {0x03, 0x41, 0x0D, 0x64});
+            sequence.frameCount = 1;
+            sequence.timeoutExpected = scenario == Scenario::DisplayTimeoutValues;
+            break;
     }
     return sequence;
 }

@@ -13,7 +13,12 @@ enum class Scenario : uint8_t {
     SequenceError,
     BufferOverflow,
     MultipleEcusResponse,
-    NegativeResponse
+    NegativeResponse,
+    DisplayNormalValues,
+    DisplayWarningValues,
+    DisplayCriticalValues,
+    DisplayTimeoutValues,
+    DisplayMixedValues
 };
 
 constexpr const char* scenarioName(Scenario scenario) {
@@ -27,6 +32,11 @@ constexpr const char* scenarioName(Scenario scenario) {
         case Scenario::BufferOverflow: return "BufferOverflow";
         case Scenario::MultipleEcusResponse: return "MultipleEcusResponse";
         case Scenario::NegativeResponse: return "NegativeResponse";
+        case Scenario::DisplayNormalValues: return "DisplayNormalValues";
+        case Scenario::DisplayWarningValues: return "DisplayWarningValues";
+        case Scenario::DisplayCriticalValues: return "DisplayCriticalValues";
+        case Scenario::DisplayTimeoutValues: return "DisplayTimeoutValues";
+        case Scenario::DisplayMixedValues: return "DisplayMixedValues";
     }
     return "NormalSingleFrame";
 }

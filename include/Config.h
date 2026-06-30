@@ -113,8 +113,14 @@ namespace Config {
         constexpr uint32_t ButtonDebounceMs = DisplayConfigValues::ButtonDebounceMs;
         constexpr float CoolantWarnC = DisplayConfigValues::CoolantWarnC;
         constexpr float CoolantCriticalC = DisplayConfigValues::CoolantCriticalC;
+        constexpr float OilWarnC = DisplayConfigValues::OilWarnC;
+        constexpr float OilCriticalC = DisplayConfigValues::OilCriticalC;
         constexpr float VoltageWarnLow = DisplayConfigValues::VoltageWarnLow;
         constexpr float VoltageCriticalLow = DisplayConfigValues::VoltageCriticalLow;
+        constexpr float VoltageWarnHigh = DisplayConfigValues::VoltageWarnHigh;
+        constexpr float VoltageCriticalHigh = DisplayConfigValues::VoltageCriticalHigh;
+        constexpr uint16_t RpmWarn = DisplayConfigValues::RpmWarn;
+        constexpr uint16_t RpmCritical = DisplayConfigValues::RpmCritical;
     }
 
     // =========================================================================

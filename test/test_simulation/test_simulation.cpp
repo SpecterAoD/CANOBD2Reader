@@ -32,6 +32,9 @@ void test_simulation_scenario_parse() {
     TEST_ASSERT_TRUE(Simulation::parseScenario("NormalMultiFrameVin", scenario));
     TEST_ASSERT_EQUAL(static_cast<int>(Simulation::Scenario::NormalMultiFrameVin),
                       static_cast<int>(scenario));
+    TEST_ASSERT_TRUE(Simulation::parseScenario("DisplayMixedValues", scenario));
+    TEST_ASSERT_EQUAL(static_cast<int>(Simulation::Scenario::DisplayMixedValues),
+                      static_cast<int>(scenario));
     TEST_ASSERT_FALSE(Simulation::parseScenario("NotARealScenario", scenario));
 }
 

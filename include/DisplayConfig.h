@@ -30,6 +30,12 @@ constexpr std::size_t TelemetryQueueLength = 16;
 
 constexpr float CoolantWarnC = 95.0f;
 constexpr float CoolantCriticalC = 105.0f;
+constexpr float OilWarnC = 115.0f;
+constexpr float OilCriticalC = 125.0f;
 constexpr float VoltageWarnLow = 11.8f;
 constexpr float VoltageCriticalLow = 11.2f;
+constexpr float VoltageWarnHigh = 14.8f;
+constexpr float VoltageCriticalHigh = 15.2f;
+constexpr uint16_t RpmWarn = 4200;
+constexpr uint16_t RpmCritical = 5000;
 }

@@ -360,6 +360,9 @@ namespace {
       drawBitmapText(x + 8, y + 7, labelText, 1, DisplayConfig::Text, DisplayConfig::Panel);
     }
 
+    tft.drawRoundRect(x, y, w, h, 6, color);
+    tft.fillRoundRect(x + 2, y + h - 5, w - 4, 3, 2, color);
+
     // Subtle value background for readability without changing the overall card style.
     const int valueBgX = x + 6;
     const int valueBgY = y + 24;
@@ -376,7 +379,7 @@ namespace {
     }
 
     String textValue = (shownValue == "--") ? "N/A" : shownValue;
-    const uint16_t valueColor = overlay ? DisplayConfig::Accent : DisplayConfig::Text;
+    const uint16_t valueTextColor = overlay ? DisplayConfig::Accent : color;
     int valueScale = 2;
     int maxChars = (valueBgW - 8) / (6 * valueScale);
     if (maxChars <= 3 || textValue.length() > static_cast<size_t>(maxChars)) {
@@ -392,7 +395,7 @@ namespace {
     const int valueTextY = valueBgY + (valueBgH - textH) / 2;
     String normalized = textValue;
     normalized.toUpperCase();
-    drawBitmapText(valueTextX, valueTextY, normalized, valueScale, valueColor, DisplayConfig::Background);
+    drawBitmapText(valueTextX, valueTextY, normalized, valueScale, valueTextColor, DisplayConfig::Background);
   }
 
   void drawMainPage() {

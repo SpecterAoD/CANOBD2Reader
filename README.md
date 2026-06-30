@@ -348,6 +348,8 @@ Aktuell abgedeckt:
 - ISO-TP Single/First/Consecutive Frames und Fehlerfälle
 - TelemetryCodec
 - zentrale Konfiguration
+- Display-Severity und Warn-/Störfarben
+- Display-Simulationswerte fuer OK/Warn/Critical/Timeout
 
 ## Display-Seiten
 
@@ -394,6 +396,23 @@ Unterstuetzte ISO-TP-/OBD-Szenarien:
 - `BufferOverflow`
 - `MultipleEcusResponse`
 - `NegativeResponse`
+- `DisplayNormalValues`
+- `DisplayWarningValues`
+- `DisplayCriticalValues`
+- `DisplayTimeoutValues`
+- `DisplayMixedValues`
+
+Die Display-Farben werden zentral ueber eine Severity-Logik abgeleitet:
+
+- OK: gruen
+- Warnung: orange
+- Stoerung/Kritisch: rot
+- Timeout/unbekannt: grau
+
+Die Szenarien `DisplayNormalValues`, `DisplayWarningValues`,
+`DisplayCriticalValues`, `DisplayTimeoutValues` und `DisplayMixedValues`
+erzeugen gezielt Werte, mit denen alle Displayfarben ohne Fahrzeug getestet
+werden koennen.
 
 Die Display-Diagnoseseite zeigt zusaetzlich Firmware-Version, Sequenznummer,
 Simulation aktiv/inaktiv und das aktive Simulationsszenario. Die Weboberflaechen

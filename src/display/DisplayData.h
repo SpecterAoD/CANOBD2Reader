@@ -30,9 +30,10 @@ namespace DisplayData {
                                      uint32_t sequence);
   bool isConnected();
   bool isFresh(const DisplayTelemetryValue* value);
+  DisplayLogic::DisplaySeverity severityForValue(const char* name);
+  uint16_t colorForSeverity(DisplayLogic::DisplaySeverity severity);
   String displayValue(const char* name, uint8_t decimals = 0);
   String displayText(const char* name);
   uint16_t valueColor(const char* name);
   void markDirty();
 }
-

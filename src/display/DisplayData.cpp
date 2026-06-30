@@ -30,6 +30,9 @@ namespace {
     }
 
     if (isRpmMetric(key, name)) {
+      if (parsed >= DisplayConfig::RpmWarn) {
+        return inputValue;
+      }
       if (!g_rpmInitialized) {
         g_filteredRpm = parsed;
         g_rpmInitialized = true;
@@ -184,18 +187,28 @@ namespace DisplayData {
     return value->value;
   }
 
-  uint16_t valueColor(const char* name) {
+  DisplayLogic::DisplaySeverity severityForValue(const char* name) {
     DisplayTelemetryValue* value = resolveMetric(name);
-    if (!isFresh(value)) return DisplayConfig::Muted;
+    if (value == nullptr) {
+      return DisplayLogic::DisplaySeverity::Unknown;
+    }
 
-    float numericValue = value->value.toFloat();
-    String n = String(name);
-    if (n == "CoolantTemp" && numericValue >= DisplayConfig::CoolantCriticalC) return DisplayConfig::Error;
-    if (n == "CoolantTemp" && numericValue >= DisplayConfig::CoolantWarnC) return DisplayConfig::Warn;
-    if (n == "OilTemp" && numericValue >= 125.0f) return DisplayConfig::Error;
-    if (n == "BatteryVoltage" && numericValue <= DisplayConfig::VoltageCriticalLow) return DisplayConfig::Error;
-    if (n == "BatteryVoltage" && (numericValue <= DisplayConfig::VoltageWarnLow || numericValue > 14.8f)) return DisplayConfig::Warn;
-    if (n == "RPM" && numericValue >= 4200.0f) return DisplayConfig::Warn;
-    return DisplayConfig::Text;
+    const bool fresh = isFresh(value);
+    return DisplayLogic::severityForMetric(name, value->value.toFloat(), fresh, value->status.c_str());
+  }
+
+  uint16_t colorForSeverity(DisplayLogic::DisplaySeverity severity) {
+    switch (severity) {
+      case DisplayLogic::DisplaySeverity::Ok: return DisplayConfig::Ok;
+      case DisplayLogic::DisplaySeverity::Warning: return DisplayConfig::Warn;
+      case DisplayLogic::DisplaySeverity::Critical: return DisplayConfig::Error;
+      case DisplayLogic::DisplaySeverity::Timeout: return DisplayConfig::Muted;
+      case DisplayLogic::DisplaySeverity::Unknown: return DisplayConfig::Muted;
+    }
+    return DisplayConfig::Muted;
+  }
+
+  uint16_t valueColor(const char* name) {
+    return colorForSeverity(severityForValue(name));
   }
 }
