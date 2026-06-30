@@ -2,9 +2,26 @@
 #include "Utils.h"
 #include "PID_Converter.h"
 #include "IsoTpHandler.h"
+#include "BoostCalculator.h"
 
 namespace {
 IsoTp::IsoTpHandler isoTp;
+
+float lastMapKpa = 0.0f;
+float lastBarometricKpa = Obd::DefaultBarometricPressureKpa;
+bool hasMapKpa = false;
+bool hasBarometricKpa = false;
+
+void sendBoostPressureIfReady() {
+    if (!hasMapKpa) return;
+
+    const float boostBar = Obd::calculateBoostPressureBarWithFallback(lastMapKpa,
+                                                                      hasBarometricKpa,
+                                                                      lastBarometricKpa);
+    char valueText[16];
+    snprintf(valueText, sizeof(valueText), "%.2f", boostBar);
+    Utils::sendTelemetry("OBD", "BOOST", "BoostPressureBar", valueText, "bar", "OK");
+}
 }
 
 bool OBD2Handler::sendRequest(uint8_t mode, uint8_t pid) {
@@ -44,6 +61,21 @@ void OBD2Handler::calcConsumption(uint8_t pid, float value) {
     }
 }
 
+void OBD2Handler::updateBoostPressure(uint8_t pid, float value) {
+    if (pid == INTAKE_MANIFOLD_ABS_PRESSURE) {
+        lastMapKpa = value;
+        hasMapKpa = true;
+        sendBoostPressureIfReady();
+        return;
+    }
+
+    if (pid == ABS_BAROMETRIC_PRESSURE) {
+        lastBarometricKpa = value;
+        hasBarometricKpa = true;
+        sendBoostPressureIfReady();
+    }
+}
+
 void OBD2Handler::requestAndSendPID(uint8_t pid) {
     if (!sendRequest(read_LiveData, pid)) {
         Utils::sendOBDError(pid, getPIDName(pid));
@@ -61,6 +93,10 @@ void OBD2Handler::requestAndSendPID(uint8_t pid) {
 
             if (pid == VEHICLE_SPEED || pid == ENGINE_FUEL_RATE) {
                 calcConsumption(pid, result.value);
+            }
+
+            if (pid == INTAKE_MANIFOLD_ABS_PRESSURE || pid == ABS_BAROMETRIC_PRESSURE) {
+                updateBoostPressure(pid, result.value);
             }
 
             Utils::sendOBDValue(pid, getPIDName(pid), result.value, result.unit);

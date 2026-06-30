@@ -32,6 +32,22 @@ void test_pid_control_voltage() {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 12.345f, value.value);
 }
 
+void test_pid_map_pressure() {
+    const uint8_t data[] = {183};
+    const auto value = Obd::decodePid(0x0B, data, sizeof(data));
+    TEST_ASSERT_TRUE(value.valid);
+    TEST_ASSERT_EQUAL_FLOAT(183.0f, value.value);
+    TEST_ASSERT_EQUAL_STRING("kPa", value.unit);
+}
+
+void test_pid_barometric_pressure() {
+    const uint8_t data[] = {101};
+    const auto value = Obd::decodePid(0x33, data, sizeof(data));
+    TEST_ASSERT_TRUE(value.valid);
+    TEST_ASSERT_EQUAL_FLOAT(101.0f, value.value);
+    TEST_ASSERT_EQUAL_STRING("kPa", value.unit);
+}
+
 void test_pid_invalid_length() {
     const uint8_t data[] = {0x12};
     TEST_ASSERT_FALSE(Obd::decodePid(0x0C, data, sizeof(data)).valid);
@@ -43,6 +59,8 @@ int main(int, char**) {
     RUN_TEST(test_pid_speed);
     RUN_TEST(test_pid_coolant);
     RUN_TEST(test_pid_control_voltage);
+    RUN_TEST(test_pid_map_pressure);
+    RUN_TEST(test_pid_barometric_pressure);
     RUN_TEST(test_pid_invalid_length);
     return UNITY_END();
 }

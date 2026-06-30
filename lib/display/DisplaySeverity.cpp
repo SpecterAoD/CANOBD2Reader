@@ -70,6 +70,12 @@ DisplaySeverity severityForMetric(const char* metricName,
         return DisplaySeverity::Ok;
     }
 
+    if (equalsAny(metricName, "BoostPressureBar", "Boost", "BOOST")) {
+        if (value > DisplayConfigValues::BoostCriticalBar) return DisplaySeverity::Critical;
+        if (value >= DisplayConfigValues::BoostWarnBar) return DisplaySeverity::Warning;
+        return DisplaySeverity::Ok;
+    }
+
     if (equalsAny(metricName, "Speed", "VehicleSpeed", "0D") ||
         equalsAny(metricName, "EngineLoad", "Load", "04") ||
         equalsAny(metricName, "IntakeTemp", "IntakeAirTemp", "0F") ||
@@ -80,6 +86,8 @@ DisplaySeverity severityForMetric(const char* metricName,
         equalsAny(metricName, "FuelLevel", "2F") ||
         equalsAny(metricName, "RunTime", "Runtime", "1F") ||
         equalsAny(metricName, "AmbientTemp", "46") ||
+        equalsAny(metricName, "ManifoldAbsolutePressure", "MAP", "0B") ||
+        equalsAny(metricName, "BarometricPressure", "Baro", "33") ||
         equalsAny(metricName, "CANCount") ||
         equalsAny(metricName, "CAN", "OBD", "DTC")) {
         return DisplaySeverity::Ok;

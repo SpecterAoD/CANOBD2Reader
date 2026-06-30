@@ -35,6 +35,17 @@ float displayScenarioValue(const SimulationData::Sample& sample, Scenario scenar
         return 90.0f;
     }
     if (std::strcmp(sample.name, "EngineLoad") == 0) return warning ? 74.0f : 36.0f;
+    if (std::strcmp(sample.name, "ManifoldAbsolutePressure") == 0) {
+        if (critical) return 250.0f;
+        if (warning || mixed) return 190.0f;
+        return 120.0f;
+    }
+    if (std::strcmp(sample.name, "BarometricPressure") == 0) return 101.0f;
+    if (std::strcmp(sample.name, "BoostPressureBar") == 0) {
+        if (critical) return 1.49f;
+        if (warning || mixed) return 0.89f;
+        return 0.19f;
+    }
     if (std::strcmp(sample.name, "IntakeTemp") == 0) return 29.0f;
     if (std::strcmp(sample.name, "AverageConsumption") == 0) return 7.4f;
     if (std::strcmp(sample.name, "FuelRate") == 0) return 4.8f;

@@ -43,6 +43,10 @@ namespace DisplayConfig {
   constexpr float VoltageCriticalHigh = Config::Display::VoltageCriticalHigh;
   constexpr uint16_t RpmWarn = Config::Display::RpmWarn;
   constexpr uint16_t RpmCritical = Config::Display::RpmCritical;
+  constexpr uint16_t RpmMin = Config::Display::RpmMin;
+  constexpr uint16_t RpmMax = Config::Display::RpmMax;
+  constexpr float BoostWarnBar = Config::Display::BoostWarnBar;
+  constexpr float BoostCriticalBar = Config::Display::BoostCriticalBar;
 
   constexpr uint16_t Background = TFT_BLACK;
   constexpr uint16_t Panel = 0x18E3;

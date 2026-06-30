@@ -1,6 +1,7 @@
 #include "DisplayUi.h"
 #include "DisplayData.h"
 #include "driver/ledc.h"
+#include <cstring>
 
 namespace {
   TFT_eSPI tft = TFT_eSPI();
@@ -9,6 +10,7 @@ namespace {
   bool longPressHandled = false;
   uint32_t lastUiStatsLogMs = 0;
   bool fullPageRedraw = true;
+  float maxRpmSinceStart = 0.0f;
 
   struct DisplayInitCommand {
     uint8_t command;
@@ -398,6 +400,98 @@ namespace {
     drawBitmapText(valueTextX, valueTextY, normalized, valueScale, valueTextColor, DisplayConfig::Background);
   }
 
+  float numericMetricValue(const char* name, bool& fresh) {
+    using namespace DisplayData;
+    DisplayTelemetryValue* value = findValue(String(name));
+    if (value == nullptr && strcmp(name, "RPM") == 0) value = findValue("0C");
+    if (value == nullptr && strcmp(name, "BoostPressureBar") == 0) value = findValue("BOOST");
+    if (value == nullptr && strcmp(name, "ManifoldAbsolutePressure") == 0) value = findValue("0B");
+    if (value == nullptr && strcmp(name, "BarometricPressure") == 0) value = findValue("33");
+
+    fresh = isFresh(value);
+    if (!fresh || value == nullptr) return 0.0f;
+    String raw = value->value;
+    raw.replace(",", ".");
+    return raw.toFloat();
+  }
+
+  void drawRpmGraphPage() {
+    using namespace DisplayData;
+    bool rpmFresh = false;
+    const float rpm = numericMetricValue("RPM", rpmFresh);
+    if (rpmFresh && rpm > maxRpmSinceStart) maxRpmSinceStart = rpm;
+
+    const uint16_t color = valueColor("RPM");
+    const int barX = 16;
+    const int barY = 116;
+    const int barW = 288;
+    const int barH = 24;
+    const float normalized = rpmFresh
+      ? constrain((rpm - DisplayConfig::RpmMin) / static_cast<float>(DisplayConfig::RpmMax - DisplayConfig::RpmMin), 0.0f, 1.0f)
+      : 0.0f;
+    const int fillW = static_cast<int>(barW * normalized);
+
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextSize(1);
+    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
+    tft.drawString("DREHZAHL", tft.width() / 2, 34);
+
+    String rpmText = rpmFresh ? String(static_cast<int>(rpm)) : "--";
+    drawBitmapText(70, 52, rpmText, 4, color, DisplayConfig::Background);
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
+    tft.drawString("rpm", 230, 76);
+
+    tft.drawRoundRect(barX, barY, barW, barH, 6, DisplayConfig::Muted);
+    tft.fillRoundRect(barX + 2, barY + 2, barW - 4, barH - 4, 5, DisplayConfig::Panel);
+    if (fillW > 4) {
+      tft.fillRoundRect(barX + 2, barY + 2, fillW - 4, barH - 4, 5, color);
+    }
+
+    const int warnX = barX + static_cast<int>(barW * (DisplayConfig::RpmWarn / static_cast<float>(DisplayConfig::RpmMax)));
+    const int critX = barX + static_cast<int>(barW * (DisplayConfig::RpmCritical / static_cast<float>(DisplayConfig::RpmMax)));
+    tft.drawFastVLine(warnX, barY - 4, barH + 8, DisplayConfig::Warn);
+    tft.drawFastVLine(critX, barY - 4, barH + 8, DisplayConfig::Error);
+
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextSize(1);
+    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
+    tft.drawString("0", barX, barY + 34);
+    tft.setTextDatum(MR_DATUM);
+    tft.drawString(String(DisplayConfig::RpmMax), barX + barW, barY + 34);
+
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(DisplayConfig::Text, DisplayConfig::Background);
+    tft.drawString("Max seit Start: " + String(static_cast<int>(maxRpmSinceStart)) + " rpm", 16, 154);
+  }
+
+  void drawBoostPage() {
+    using namespace DisplayData;
+    const uint16_t boostColor = valueColor("BoostPressureBar");
+    const String boost = displayValue("BoostPressureBar", 2);
+    const String map = displayValue("ManifoldAbsolutePressure", 0);
+    const String baro = displayValue("BarometricPressure", 0);
+
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextSize(1);
+    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
+    tft.drawString("LADEDRUCK", tft.width() / 2, 34);
+
+    tft.fillRoundRect(20, 48, 280, 62, 10, DisplayConfig::Panel);
+    tft.drawRoundRect(20, 48, 280, 62, 10, boostColor);
+    String boostText = (boost == "--") ? "N/A" : boost;
+    boostText.toUpperCase();
+    drawBitmapText(54, 66, boostText, boostText.length() > 8 ? 2 : 3, boostColor, DisplayConfig::Panel);
+
+    drawMetricBox(20, 120, 132, 38, "MAP", map, valueColor("ManifoldAbsolutePressure"));
+    drawMetricBox(168, 120, 132, 38, "BARO", baro, valueColor("BarometricPressure"));
+
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextSize(1);
+    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
+    tft.drawString("Boost = MAP - BARO, vom Sender berechnet", 20, 164);
+  }
+
   void drawMainPage() {
     using namespace DisplayData;
     drawMetricBox(6, 28, 150, 58, "Geschwindigkeit", displayValue("Speed", 0), valueColor("Speed"));
@@ -526,6 +620,8 @@ namespace {
       case 4: drawCANPage(); break;
       case 5: drawDiagnosticsPage(); break;
       case 6: drawDTCPage(); break;
+      case 7: drawRpmGraphPage(); break;
+      case 8: drawBoostPage(); break;
     }
 
     drawFooter();

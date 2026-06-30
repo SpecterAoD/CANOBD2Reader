@@ -62,6 +62,8 @@ DTC,ACTIVE,DTC,P0133 P0420,,WARN,47
 ## Display fields
 
 - Main: `Speed`, `RPM`, `CoolantTemp`, `BatteryVoltage`
+- RPM graph: `RPM`
+- Boost: `BoostPressureBar`, `ManifoldAbsolutePressure`, `BarometricPressure`
 - Engine: `OilTemp`, `EngineLoad`, `Throttle`, `IntakeTemp`
 - Consumption: `InstantConsumption`, `AverageConsumption`, `FuelRate`
 - Additional values: `MAF`, `FuelLevel`, `RunTime`, `AmbientTemp`

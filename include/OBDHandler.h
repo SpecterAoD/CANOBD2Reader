@@ -20,4 +20,7 @@ public:
 
     /// @brief Berechnet und sendet Verbrauch aus Speed + FuelRate
     static void calcConsumption(uint8_t pid, float value);
+
+    /// @brief Aktualisiert MAP/BARO-Zustand und sendet den zentral berechneten Ladedruck.
+    static void updateBoostPressure(uint8_t pid, float value);
 };

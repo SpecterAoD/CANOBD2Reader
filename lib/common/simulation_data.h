@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <math.h>
 #include <string.h>
+#include "BoostCalculator.h"
 
 namespace SimulationData {
 
@@ -27,6 +28,9 @@ inline constexpr Sample Samples[] = {
     {"BATTERY", "VOLTAGE", "BatteryVoltage", "V", 12.2f, 14.4f, 1},
     {"OBD", "5C", "OilTemp", "°C", 70.0f, 118.0f, 0},
     {"OBD", "04", "EngineLoad", "%", 12.0f, 92.0f, 0},
+    {"OBD", "0B", "ManifoldAbsolutePressure", "kPa", 35.0f, 250.0f, 0},
+    {"OBD", "33", "BarometricPressure", "kPa", 90.0f, 105.0f, 0},
+    {"OBD", "BOOST", "BoostPressureBar", "bar", -0.6f, 1.6f, 2},
     {"OBD", "0F", "IntakeTemp", "°C", 18.0f, 55.0f, 0},
     {"FUEL", "AVG", "AverageConsumption", "L/100km", 5.5f, 12.8f, 1},
     {"OBD", "5E", "FuelRate", "L/h", 0.4f, 24.0f, 1},
@@ -119,6 +123,9 @@ inline float valueForKey(const char* key, uint32_t millisNow) {
     const float oilTemp = clampValue(coolantTemp - 3.0f + loadPct * 0.18f + sinf(tSec * 0.08f) * 2.8f, 70.0f, 122.0f);
     const float intakeTemp = clampValue(ambientTemp + 5.0f + loadPct * 0.11f - speedKmh * 0.04f, -5.0f, 58.0f);
     const float maf = clampValue((rpm / 60.0f) * (loadPct / 100.0f) * 1.6f + 1.5f, 2.0f, 99.0f);
+    const float barometricKpa = 101.0f + 1.5f * sinf(tSec * 0.002f);
+    const float manifoldKpa = clampValue(34.0f + loadPct * 1.72f + throttlePct * 0.42f, 35.0f, 250.0f);
+    const float boostBar = Obd::calculateBoostPressureBar(manifoldKpa, barometricKpa);
 
     float fuelRate = 0.75f + throttlePct * 0.05f;
     if (speedKmh > 2.0f) {
@@ -142,6 +149,9 @@ inline float valueForKey(const char* key, uint32_t millisNow) {
     if (strcmp(key, "VOLTAGE") == 0) return batteryV;
     if (strcmp(key, "5C") == 0) return oilTemp;
     if (strcmp(key, "04") == 0) return loadPct;
+    if (strcmp(key, "0B") == 0) return manifoldKpa;
+    if (strcmp(key, "33") == 0) return barometricKpa;
+    if (strcmp(key, "BOOST") == 0) return boostBar;
     if (strcmp(key, "0F") == 0) return intakeTemp;
     if (strcmp(key, "AVG") == 0) return avgConsumption;
     if (strcmp(key, "5E") == 0) return fuelRate;

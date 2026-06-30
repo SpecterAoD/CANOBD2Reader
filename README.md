@@ -345,11 +345,12 @@ Aktuell abgedeckt:
 
 - CRC16
 - PID-Dekoder
+- MAP/BARO-Dekoder und zentrale Ladedruckberechnung
 - ISO-TP Single/First/Consecutive Frames und Fehlerfälle
 - TelemetryCodec
 - zentrale Konfiguration
 - Display-Severity und Warn-/Störfarben
-- Display-Simulationswerte fuer OK/Warn/Critical/Timeout
+- Display-Simulationswerte fuer OK/Warn/Critical/Timeout inklusive RPM und Boost
 
 ## Display-Seiten
 
@@ -360,6 +361,33 @@ Aktuell abgedeckt:
 5. CAN-Rohdaten: letzter CAN-Frame, Frame-Zähler, einfache OBD/CAN-Hinweise
 6. Diagnose: ESP-NOW, CAN/OBD, Datenqualität, CRC-/Drop-Zähler
 7. Fehlercodes: DTC-Status und aktive Fehlercodes
+8. Drehzahl-Grafik: grosser RPM-Wert, Balken 0 bis `DisplayConfigValues::RpmMax`, Warn-/Kritisch-Marken und Max-RPM seit Start
+9. Ladedruck: fertiger `BoostPressureBar` in bar plus MAP und BARO als Zusatzwerte
+
+### Ladedruck-Berechnung
+
+MAP ist Absolutdruck und wird nicht direkt als Ladedruck angezeigt. Der Sender
+berechnet den relativen Ladedruck zentral und uebertraegt ihn als eigene
+Telemetrie `BoostPressureBar`:
+
+```cpp
+boostPressureKpa = manifoldAbsolutePressureKpa - barometricPressureKpa;
+boostPressureBar = boostPressureKpa / 100.0f;
+```
+
+Verwendete PIDs:
+
+- `0x0B` = Intake Manifold Absolute Pressure / MAP in kPa
+- `0x33` = Barometric Pressure / BARO in kPa
+
+Falls PID `0x33` vom Fahrzeug nicht unterstuetzt wird, nutzt der Sender
+`SenderConfig::DefaultBarometricPressureKpa` (`101.3 kPa`). Das Display rechnet
+den Boost nicht nach, sondern zeigt ausschliesslich den vom Sender gesendeten
+Wert an. Die Boost-Farben sind zentral konfiguriert:
+
+- `< 0.8 bar`: OK/gruen
+- `0.8 bis 1.2 bar`: Warnung/orange
+- `> 1.2 bar`: kritisch/rot
 
 ## Runtime-Simulation und Web-Schalter
 
@@ -413,6 +441,13 @@ Die Szenarien `DisplayNormalValues`, `DisplayWarningValues`,
 `DisplayCriticalValues`, `DisplayTimeoutValues` und `DisplayMixedValues`
 erzeugen gezielt Werte, mit denen alle Displayfarben ohne Fahrzeug getestet
 werden koennen.
+
+Sie enthalten auch RPM- und Ladedruckwerte:
+
+- Normal: MAP 120 kPa, BARO 101 kPa, Boost 0.19 bar
+- Warnung: MAP 190 kPa, BARO 101 kPa, Boost 0.89 bar
+- Kritisch: MAP 250 kPa, BARO 101 kPa, Boost 1.49 bar
+- Timeout: Werte werden bewusst als veraltet markiert und grau angezeigt
 
 Die Display-Diagnoseseite zeigt zusaetzlich Firmware-Version, Sequenznummer,
 Simulation aktiv/inaktiv und das aktive Simulationsszenario. Die Weboberflaechen

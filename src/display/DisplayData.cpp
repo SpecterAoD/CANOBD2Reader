@@ -73,6 +73,9 @@ namespace {
     if (n == "FuelLevel") return findAlias("FuelLevel", "2F");
     if (n == "RunTime") return findAlias("RunTime", "Runtime", "1F");
     if (n == "AmbientTemp") return findAlias("AmbientTemp", "46");
+    if (n == "ManifoldAbsolutePressure") return findAlias("ManifoldAbsolutePressure", "MAP", "0B");
+    if (n == "BarometricPressure") return findAlias("BarometricPressure", "Baro", "33");
+    if (n == "BoostPressureBar") return findAlias("BoostPressureBar", "Boost", "BOOST");
     return findAlias(name);
   }
 
@@ -86,7 +89,7 @@ namespace {
 }
 
 namespace DisplayData {
-  DisplayTelemetryValue values[28];
+  DisplayTelemetryValue values[34];
   uint8_t valueCount = 0;
   uint8_t currentPage = 0;
   uint8_t lastRenderedPage = 255;

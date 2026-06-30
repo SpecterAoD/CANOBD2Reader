@@ -121,6 +121,10 @@ namespace Config {
         constexpr float VoltageCriticalHigh = DisplayConfigValues::VoltageCriticalHigh;
         constexpr uint16_t RpmWarn = DisplayConfigValues::RpmWarn;
         constexpr uint16_t RpmCritical = DisplayConfigValues::RpmCritical;
+        constexpr uint16_t RpmMin = DisplayConfigValues::RpmMin;
+        constexpr uint16_t RpmMax = DisplayConfigValues::RpmMax;
+        constexpr float BoostWarnBar = DisplayConfigValues::BoostWarnBar;
+        constexpr float BoostCriticalBar = DisplayConfigValues::BoostCriticalBar;
     }
 
     // =========================================================================
@@ -155,6 +159,7 @@ namespace Config {
 
         constexpr float VoltageCalcFactor = SenderConfig::VoltageCalcFactor;
         constexpr float VoltageChangeThreshold = SenderConfig::VoltageChangeThreshold;
+        constexpr float DefaultBarometricPressureKpa = SenderConfig::DefaultBarometricPressureKpa;
 
         constexpr twai_mode_t TwaiOperationMode = TWAI_MODE_NORMAL;
     }
@@ -181,8 +186,10 @@ namespace Config {
         ENGINE_RPM,
         ENGINE_LOAD,
         ENGINE_COOLANT_TEMP,
+        INTAKE_MANIFOLD_ABS_PRESSURE,
         VEHICLE_SPEED,
         INTAKE_AIR_TEMP,
+        ABS_BAROMETRIC_PRESSURE,
         MAF_FLOW_RATE,
         THROTTLE_POSITION,
         FUEL_TANK_LEVEL_INPUT,

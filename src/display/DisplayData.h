@@ -3,7 +3,7 @@
 #include "DisplayTypes.h"
 
 namespace DisplayData {
-  extern DisplayTelemetryValue values[28];
+  extern DisplayTelemetryValue values[34];
   extern uint8_t valueCount;
   extern uint8_t currentPage;
   extern uint8_t lastRenderedPage;

@@ -29,6 +29,8 @@ void test_display_normal_values_are_ok() {
                       static_cast<int>(simulatedSeverityFor("BatteryVoltage", Simulation::Scenario::DisplayNormalValues)));
     TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Ok),
                       static_cast<int>(simulatedSeverityFor("RPM", Simulation::Scenario::DisplayNormalValues)));
+    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Ok),
+                      static_cast<int>(simulatedSeverityFor("BoostPressureBar", Simulation::Scenario::DisplayNormalValues)));
 }
 
 void test_display_warning_values_are_warning() {
@@ -40,6 +42,8 @@ void test_display_warning_values_are_warning() {
                       static_cast<int>(simulatedSeverityFor("BatteryVoltage", Simulation::Scenario::DisplayWarningValues)));
     TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Warning),
                       static_cast<int>(simulatedSeverityFor("RPM", Simulation::Scenario::DisplayWarningValues)));
+    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Warning),
+                      static_cast<int>(simulatedSeverityFor("BoostPressureBar", Simulation::Scenario::DisplayWarningValues)));
 }
 
 void test_display_critical_values_are_critical() {
@@ -51,6 +55,8 @@ void test_display_critical_values_are_critical() {
                       static_cast<int>(simulatedSeverityFor("BatteryVoltage", Simulation::Scenario::DisplayCriticalValues)));
     TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Critical),
                       static_cast<int>(simulatedSeverityFor("RPM", Simulation::Scenario::DisplayCriticalValues)));
+    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Critical),
+                      static_cast<int>(simulatedSeverityFor("BoostPressureBar", Simulation::Scenario::DisplayCriticalValues)));
 }
 
 void test_display_timeout_values_are_timeout() {
@@ -58,6 +64,8 @@ void test_display_timeout_values_are_timeout() {
                       static_cast<int>(simulatedSeverityFor("CoolantTemp", Simulation::Scenario::DisplayTimeoutValues)));
     TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Timeout),
                       static_cast<int>(simulatedSeverityFor("BatteryVoltage", Simulation::Scenario::DisplayTimeoutValues)));
+    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Timeout),
+                      static_cast<int>(simulatedSeverityFor("BoostPressureBar", Simulation::Scenario::DisplayTimeoutValues)));
 }
 
 void test_display_mixed_values_are_mixed() {
@@ -69,6 +77,8 @@ void test_display_mixed_values_are_mixed() {
                       static_cast<int>(simulatedSeverityFor("CoolantTemp", Simulation::Scenario::DisplayMixedValues)));
     TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Timeout),
                       static_cast<int>(simulatedSeverityFor("BatteryVoltage", Simulation::Scenario::DisplayMixedValues)));
+    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Warning),
+                      static_cast<int>(simulatedSeverityFor("BoostPressureBar", Simulation::Scenario::DisplayMixedValues)));
 }
 
 int main(int, char**) {

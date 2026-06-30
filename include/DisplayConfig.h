@@ -11,10 +11,10 @@ constexpr uint16_t PowerStabilizeMs = 60;
 constexpr uint8_t BacklightPin = 38;
 constexpr uint8_t BacklightOn = 255;
 constexpr uint8_t NextPageButtonPin = 0;
-constexpr uint8_t PageCount = 7;
+constexpr uint8_t PageCount = 9;
 constexpr uint8_t MainPageIndex = 0;
 constexpr uint32_t LongPressMs = 1200;
-constexpr bool EnableGraphPages = false;
+constexpr bool EnableGraphPages = true;
 
 constexpr uint32_t RefreshMs = 120;
 constexpr uint32_t ForceFullRenderMs = 1200;
@@ -38,4 +38,8 @@ constexpr float VoltageWarnHigh = 14.8f;
 constexpr float VoltageCriticalHigh = 15.2f;
 constexpr uint16_t RpmWarn = 4200;
 constexpr uint16_t RpmCritical = 5000;
+constexpr uint16_t RpmMin = 0;
+constexpr uint16_t RpmMax = 6000;
+constexpr float BoostWarnBar = 0.8f;
+constexpr float BoostCriticalBar = 1.2f;
 }

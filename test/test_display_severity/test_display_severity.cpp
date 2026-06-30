@@ -46,6 +46,15 @@ void test_rpm_severity() {
                       static_cast<int>(DisplayLogic::severityForMetric("RPM", 5100.0f, true)));
 }
 
+void test_boost_severity() {
+    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Ok),
+                      static_cast<int>(DisplayLogic::severityForMetric("BoostPressureBar", 0.19f, true)));
+    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Warning),
+                      static_cast<int>(DisplayLogic::severityForMetric("BoostPressureBar", 0.89f, true)));
+    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Critical),
+                      static_cast<int>(DisplayLogic::severityForMetric("BoostPressureBar", 1.49f, true)));
+}
+
 void test_timeout_and_unknown_severity() {
     TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Timeout),
                       static_cast<int>(DisplayLogic::severityForMetric("CoolantTemp", 85.0f, false)));
@@ -61,6 +70,7 @@ int main(int, char**) {
     RUN_TEST(test_oil_severity);
     RUN_TEST(test_voltage_severity);
     RUN_TEST(test_rpm_severity);
+    RUN_TEST(test_boost_severity);
     RUN_TEST(test_timeout_and_unknown_severity);
     return UNITY_END();
 }

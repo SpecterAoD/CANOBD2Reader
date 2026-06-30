@@ -33,6 +33,7 @@ constexpr int CpuFrequency = 80;
 
 constexpr float VoltageCalcFactor = 4.81f;
 constexpr float VoltageChangeThreshold = 0.2f;
+constexpr float DefaultBarometricPressureKpa = 101.3f;
 
 constexpr std::size_t CanRxQueueLength = 32;
 constexpr std::size_t CanTxQueueLength = 4;
