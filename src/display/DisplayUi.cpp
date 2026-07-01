@@ -54,7 +54,8 @@ namespace {
     logUi("applying panel revision init");
     for (const DisplayInitCommand& entry : kDisplayInitSequence) {
       tft.writecommand(entry.command);
-      for (uint8_t index = 0; index < (entry.length & 0x7F); ++index) {
+      const uint8_t dataLength = static_cast<uint8_t>(entry.length & 0x7F);
+      for (uint8_t index = 0; index < dataLength; ++index) {
         tft.writedata(entry.data[index]);
       }
       if (entry.length & 0x80) {
