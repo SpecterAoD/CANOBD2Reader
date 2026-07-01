@@ -4,6 +4,7 @@
 #include "IsoTpHandler.h"
 #include "BoostCalculator.h"
 #include "SenderRuntimeState.h"
+#include "Logger.h"
 
 namespace {
 IsoTp::IsoTpHandler isoTp;
@@ -72,7 +73,9 @@ void OBD2Handler::updateBoostPressure(uint8_t pid, float value) {
 
 bool OBD2Handler::requestAndSendPID(uint8_t pid) {
     if (!sendRequest(read_LiveData, pid)) {
-        Serial.printf("[OBD] Timeout waiting for ECU response pid=0x%02X send failed\n", pid);
+        const String message = String("[OBD] Timeout waiting for ECU response pid=0x") +
+                               String(pid, HEX) + " send failed";
+        Logger::warn(message.c_str());
         Utils::sendOBDError(pid, getPIDName(pid));
         return false;
     }
@@ -81,6 +84,7 @@ bool OBD2Handler::requestAndSendPID(uint8_t pid) {
     uint8_t responseLen = 0;
 
     if (receiveResponse(read_LiveData, pid, responseData, responseLen)) {
+        Logger::obdFrame(pid, responseData, responseLen);
         if constexpr (Config::Sender::SendRawDataOnly) {
             Utils::sendRawOBDData(pid, responseData, responseLen);
         } else {
@@ -94,11 +98,13 @@ bool OBD2Handler::requestAndSendPID(uint8_t pid) {
                 updateBoostPressure(pid, result.value);
             }
 
+            Logger::obdValue(getPIDName(pid), result.value, result.unit);
             Utils::sendOBDValue(pid, getPIDName(pid), result.value, result.unit);
         }
         return true;
     } else {
-        Serial.printf("[OBD] Timeout waiting for ECU response pid=0x%02X\n", pid);
+        const String message = String("[OBD] Timeout waiting for ECU response pid=0x") + String(pid, HEX);
+        Logger::warn(message.c_str());
         Utils::sendOBDError(pid, getPIDName(pid));
         return false;
     }

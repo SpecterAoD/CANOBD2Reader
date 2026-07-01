@@ -20,6 +20,9 @@ void test_buffer_limits() {
 void test_sender_timing() {
     TEST_ASSERT_TRUE(SenderConfig::ObdPollIntervalMs >= 50);
     TEST_ASSERT_TRUE(SenderConfig::ObdResponseTimeoutMs >= SenderConfig::ObdTxTimeoutMs);
+    TEST_ASSERT_TRUE(SenderConfig::PollingRateMs <= 50);
+    TEST_ASSERT_TRUE(SenderConfig::MaxCanFramesPerTick > 0);
+    TEST_ASSERT_TRUE(SenderConfig::MaxCanFramesPerTick <= SenderConfig::CanRxQueueLength);
 }
 
 void test_display_queue() {

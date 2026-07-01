@@ -27,7 +27,7 @@ namespace NetworkManager {
             unsigned long startAttempt = millis();
             while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
                 delay(500);
-                Serial.print(".");
+                Logger::debug("[WiFi] Warte auf Verbindung...");
             }
 
             if (WiFi.status() == WL_CONNECTED) {

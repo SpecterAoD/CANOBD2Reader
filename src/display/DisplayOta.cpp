@@ -4,6 +4,8 @@
 #include "RuntimeSimulation.h"
 #include "SimulationTypes.h"
 #include "AuthHelpers.h"
+#include "DiagnosticLog.h"
+#include "LoggingConfig.h"
 #include <ArduinoOTA.h>
 #include <WiFi.h>
 #include <WebServer.h>
@@ -77,6 +79,7 @@ button{border:0;border-radius:14px;padding:13px 10px;background:#075985;color:va
 </form>
 <div class="card"><div class="label">Firmware</div><div class="small">Version: <span id="fw">--</span><br>Target: <span id="target">--</span><br>Protocol: <span id="proto">--</span><br>Build: <span id="build">--</span></div></div>
 <div class="card"><div class="label">OTA Speicher</div><div id="ota" class="value">--</div><div class="small">Sketch: <span id="sketch">--</span> · Flash: <span id="flash">--</span></div></div>
+<div class="card"><div class="label">Diagnose-Log</div><div id="diaglog" class="value">--</div><button id="loadLog" type="button">Log anzeigen</button><a href="/log/download"><button type="button">Log herunterladen</button></a><button id="clearLog" class="danger" type="button">Log löschen</button><pre id="logs" style="white-space:pre-wrap;word-break:break-word;background:#020617;color:#86efac;border-radius:12px;padding:10px;max-height:260px;overflow:auto;font-size:12px;display:none"></pre></div>
 <div class="card"><div class="label">Simulation</div><div id="sim" class="value">--</div><div class="small">Szenario: <span id="scenario">--</span></div><select id="scenarioSelect" style="width:100%;padding:11px;border-radius:12px;background:#0f172a;color:#f8fafc;border:1px solid #263244;margin-top:10px"></select><button id="simToggle" type="button">Simulation umschalten</button><button id="simOn" type="button">Simulation einschalten</button><button id="simOff" type="button">Simulation ausschalten</button></div>
 <div class="card"><div class="label">Status</div><div id="status" class="value">--</div><div id="detail" class="small">--</div></div>
 <button class="danger" id="restart">Display neu starten</button>
@@ -86,9 +89,12 @@ const $=id=>document.getElementById(id);
 const scenarios=['NormalSingleFrame','NormalMultiFrameVin','NormalMultiFrameDtc','FlowControlRequired','TimeoutAfterFirstFrame','SequenceError','BufferOverflow','MultipleEcusResponse','NegativeResponse','DisplayNormalValues','DisplayWarningValues','DisplayCriticalValues','DisplayTimeoutValues','DisplayMixedValues'];
 scenarios.forEach(x=>{let o=document.createElement('option');o.value=x;o.textContent=x;$('scenarioSelect').appendChild(o)});
 function bytes(v){return Math.round((v||0)/1024)+' KB'}
-async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('ota').textContent=bytes(s.freeSketchSpace)+' frei';$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('status').textContent=s.update?'Update läuft':'Bereit';$('detail').textContent=s.otaStatus+' · '+(s.lastError||'Keine Fehler');$('state').textContent=s.update?'Update':'OK';$('state').className='pill '+(s.update?'err':'ok')}catch(e){$('state').textContent='offline';$('state').className='pill err'}}
+async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('ota').textContent=bytes(s.freeSketchSpace)+' frei';$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('diaglog').textContent=(s.diagnosticLogMounted?'bereit':'nicht gemountet')+' · '+bytes(s.diagnosticLogSize)+' / '+bytes(s.diagnosticLogMaxSize);$('status').textContent=s.update?'Update läuft':'Bereit';$('detail').textContent=s.otaStatus+' · '+(s.lastError||'Keine Fehler');$('state').textContent=s.update?'Update':'OK';$('state').className='pill '+(s.update?'err':'ok')}catch(e){$('state').textContent='offline';$('state').className='pill err'}}
 async function refreshSimulation(){try{let s=await fetch('/api/simulation',{cache:'no-store'}).then(r=>r.json());$('sim').textContent=s.simulation?'aktiv':'inaktiv';$('scenario').textContent=s.scenario||'--';$('scenarioSelect').value=s.scenario||'NormalSingleFrame'}catch(e){}}
+async function loadLog(){try{let p=$('logs');p.style.display='block';p.textContent=await fetch('/log/file',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
 $('restart').onclick=async()=>{if(confirm('Display wirklich neu starten?'))await fetch('/api/restart',{method:'POST'})}
+$('loadLog').onclick=loadLog
+$('clearLog').onclick=async()=>{if(confirm('Display Diagnose-Log wirklich löschen?')){await fetch('/api/log/clear',{method:'POST'});refresh();loadLog()}}
 $('simToggle').onclick=async()=>{await fetch('/api/simulation/toggle',{method:'POST'});refreshSimulation()}
 $('simOn').onclick=async()=>{await fetch('/api/simulation/on',{method:'POST'});refreshSimulation()}
 $('simOff').onclick=async()=>{await fetch('/api/simulation/off',{method:'POST'});refreshSimulation()}
@@ -113,6 +119,9 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     json += "\"freeSketchSpace\":" + String(ESP.getFreeSketchSpace()) + ",";
     json += "\"sketchSize\":" + String(ESP.getSketchSize()) + ",";
     json += "\"flashSize\":" + String(ESP.getFlashChipSize()) + ",";
+    json += "\"diagnosticLogMounted\":" + String(DiagnosticLog::mounted() ? "true" : "false") + ",";
+    json += "\"diagnosticLogSize\":" + String(DiagnosticLog::size()) + ",";
+    json += "\"diagnosticLogMaxSize\":" + String(LoggingConfig::DiagnosticLogMaxBytes) + ",";
     json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
     json += "\"uptime\":" + String(millis()) + ",";
     json += "\"update\":" + String(webUpdateInProgress ? "true" : "false") + ",";
@@ -133,8 +142,32 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     server.send(200, "application/json", json);
   }
 
+  void handlePersistentLog() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    server.send(200, "text/plain; charset=utf-8", DiagnosticLog::readAll());
+  }
+
+  void handleDownloadLog() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    String filename = "CANOBD2_display_";
+    filename += Config::Project::FirmwareVersion;
+    filename += "_diagnostic.log";
+    server.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+    server.send(200, "text/plain; charset=utf-8", DiagnosticLog::readAll());
+  }
+
+  void handleClearLog() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    const bool ok = DiagnosticLog::clear();
+    DiagnosticLog::appendf(ok ? "[DISPLAY] Diagnostic log cleared" : "[DISPLAY] Diagnostic log clear failed");
+    server.send(ok ? 200 : 500,
+                "application/json",
+                ok ? "{\"cleared\":true}" : "{\"cleared\":false}");
+  }
+
   void handleRestart() {
     if (!WebSecurity::requireAuthentication(server, Config::Security::RequireRestartAuthentication)) return;
+    DiagnosticLog::appendf("[DISPLAY] Restart requested from web");
     server.send(200, "application/json", "{\"restart\":true}");
     delay(Config::Security::RestartDelayMs);
     ESP.restart();
@@ -149,6 +182,7 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::setEnabled(true);
     DisplayData::lastError = "Simulation eingeschaltet";
+    DiagnosticLog::appendf("[DISPLAY] Simulation enabled");
     server.send(200, "application/json", simulationJson());
   }
 
@@ -156,6 +190,7 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::setEnabled(false);
     DisplayData::lastError = "Simulation ausgeschaltet";
+    DiagnosticLog::appendf("[DISPLAY] Simulation disabled");
     server.send(200, "application/json", simulationJson());
   }
 
@@ -163,6 +198,8 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::toggle();
     DisplayData::lastError = Simulation::RuntimeSimulation::enabled() ? "Simulation eingeschaltet" : "Simulation ausgeschaltet";
+    DiagnosticLog::appendf("[DISPLAY] Simulation toggled state=%s",
+                           Simulation::RuntimeSimulation::enabled() ? "on" : "off");
     server.send(200, "application/json", simulationJson());
   }
 
@@ -180,6 +217,7 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
 
     Simulation::RuntimeSimulation::setScenario(scenario);
     DisplayData::lastError = "Simulation: " + String(Simulation::RuntimeSimulation::scenarioName());
+    DiagnosticLog::appendf("[DISPLAY] Simulation scenario=%s", Simulation::RuntimeSimulation::scenarioName());
     server.send(200, "application/json", simulationJson());
   }
 
@@ -193,6 +231,7 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     DisplayData::lastError = ok ? "Web-OTA erfolgreich" : webOtaStatus;
     if (ok) {
       webOtaStatus = "Update erfolgreich, Neustart";
+      DiagnosticLog::appendf("[DISPLAY] Web-OTA success, restarting");
       delay(500);
       ESP.restart();
     }
@@ -205,27 +244,33 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
       webUpdateInProgress = true;
       webOtaStatus = "Upload gestartet: " + upload.filename;
       DisplayData::lastError = webOtaStatus;
+      DiagnosticLog::appendf("[DISPLAY] Web-OTA upload started file=%s", upload.filename.c_str());
       if (Config::Security::RejectOtaWhenSketchSpaceUnknown && ESP.getFreeSketchSpace() == 0) {
         webOtaStatus = "OTA abgelehnt: freier Sketch-Speicher unbekannt";
         DisplayData::lastError = webOtaStatus;
+        DiagnosticLog::appendf("[DISPLAY] Web-OTA rejected: free sketch space unknown");
         return;
       }
       if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
         webOtaStatus = updateErrorText("Update.begin fehlgeschlagen");
         DisplayData::lastError = webOtaStatus;
+        DiagnosticLog::appendf("[DISPLAY] %s", webOtaStatus.c_str());
       }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
       if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
         webOtaStatus = updateErrorText("Web-OTA Schreibfehler");
         DisplayData::lastError = webOtaStatus;
+        DiagnosticLog::appendf("[DISPLAY] %s", webOtaStatus.c_str());
       }
     } else if (upload.status == UPLOAD_FILE_END) {
       if (Update.end(true)) {
         webOtaStatus = "Web-OTA abgeschlossen: " + String(upload.totalSize) + " Bytes";
         DisplayData::lastError = webOtaStatus;
+        DiagnosticLog::appendf("[DISPLAY] %s", webOtaStatus.c_str());
       } else {
         webOtaStatus = updateErrorText("Update.end fehlgeschlagen");
         DisplayData::lastError = webOtaStatus;
+        DiagnosticLog::appendf("[DISPLAY] %s", webOtaStatus.c_str());
       }
       webUpdateInProgress = false;
     } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -233,6 +278,7 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
       webUpdateInProgress = false;
       webOtaStatus = "Web-OTA abgebrochen";
       DisplayData::lastError = webOtaStatus;
+      DiagnosticLog::appendf("[DISPLAY] Web-OTA aborted");
     }
   }
 }
@@ -242,6 +288,11 @@ namespace DisplayOta {
 #if !CANOBD2_ENABLE_DISPLAY_OTA
     return;
 #endif
+    DiagnosticLog::begin();
+    DiagnosticLog::appendf("[BOOT] Display firmware=%s protocol=%u target=%s",
+                           Config::Project::FirmwareVersion,
+                           Config::Project::ProtocolVersion,
+                           Config::Project::TargetName);
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(Config::Network::DisplayWebSsid,
                 Config::Network::DisplayWebPassword,
@@ -271,6 +322,9 @@ namespace DisplayOta {
 
     server.on("/", HTTP_GET, handleRoot);
     server.on("/status", HTTP_GET, handleStatus);
+    server.on("/log/file", HTTP_GET, handlePersistentLog);
+    server.on("/log/download", HTTP_GET, handleDownloadLog);
+    server.on("/api/log/clear", HTTP_POST, handleClearLog);
     server.on("/restart", HTTP_POST, handleRestart);
     server.on("/api/restart", HTTP_POST, handleRestart);
     server.on("/api/simulation", HTTP_GET, handleSimulationStatus);

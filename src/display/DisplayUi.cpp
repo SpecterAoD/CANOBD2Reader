@@ -1,5 +1,6 @@
 #include "DisplayUi.h"
 #include "DisplayData.h"
+#include "DiagnosticLog.h"
 #include "driver/ledc.h"
 #include <cstring>
 
@@ -37,17 +38,14 @@ namespace {
   };
 
   void logUi(const char* message) {
-    Serial.print("[display-ui] ");
-    Serial.println(message);
+    DiagnosticLog::appendf("[display-ui] %s", message == nullptr ? "" : message);
   }
 
   void logPinState(const char* label, int pin) {
-    Serial.print("[display-ui] ");
-    Serial.print(label);
-    Serial.print(" pin ");
-    Serial.print(pin);
-    Serial.print(" state=");
-    Serial.println(digitalRead(pin));
+    DiagnosticLog::appendf("[display-ui] %s pin %d state=%d",
+                           label == nullptr ? "" : label,
+                           pin,
+                           digitalRead(pin));
   }
 
   void applyPanelRevisionInit() {
@@ -110,7 +108,7 @@ namespace {
     using namespace DisplayData;
     const bool connected = isEspNowConnected();
     if (lastEspNowConnected && !connected) {
-      Serial.println("[DISPLAY] ESP-NOW timeout");
+      DiagnosticLog::appendf("[DISPLAY] ESP-NOW timeout");
     }
     lastEspNowConnected = connected;
 
@@ -669,7 +667,7 @@ namespace DisplayUi {
     applyPanelRevisionInit();
     tft.setRotation(DisplayConfig::Rotation);
     logUi("rotation set");
-    Serial.printf("[display-ui] size %dx%d\n", tft.width(), tft.height());
+    DiagnosticLog::appendf("[display-ui] size %dx%d", tft.width(), tft.height());
     setupBacklight();
     showBootScreen();
     logUi("begin complete");
@@ -680,8 +678,7 @@ namespace DisplayUi {
     const uint32_t now = millis();
     const bool pressed = digitalRead(DisplayConfig::NextPageButtonPin) == LOW;
     if (pressed != lastButtonPressed) {
-      Serial.print("[display-ui] button ");
-      Serial.println(pressed ? "pressed" : "released");
+      DiagnosticLog::appendf("[display-ui] button %s", pressed ? "pressed" : "released");
       lastButtonPressed = pressed;
 
       if (pressed) {
@@ -692,8 +689,7 @@ namespace DisplayUi {
         lastRenderedPage = 255;
         lastButtonAt = now;
         markDirty();
-        Serial.print("[display-ui] page -> ");
-        Serial.println(currentPage);
+        DiagnosticLog::appendf("[display-ui] page -> %u", static_cast<unsigned int>(currentPage));
       }
     }
 
@@ -706,8 +702,7 @@ namespace DisplayUi {
       lastButtonAt = now;
       longPressHandled = true;
       markDirty();
-      Serial.print("[display-ui] long press page -> ");
-      Serial.println(currentPage);
+      DiagnosticLog::appendf("[display-ui] long press page -> %u", static_cast<unsigned int>(currentPage));
     }
   }
 
@@ -724,10 +719,10 @@ namespace DisplayUi {
       renderDirty = false;
 
       if (Config::Debug::Serial && now - lastUiStatsLogMs >= 5000) {
-        Serial.printf("[display-ui] page=%u values=%u connected=%s\n",
-                      static_cast<unsigned int>(currentPage),
-                      static_cast<unsigned int>(valueCount),
-                      isConnected() ? "yes" : "no");
+        DiagnosticLog::appendf("[display-ui] page=%u values=%u connected=%s",
+                               static_cast<unsigned int>(currentPage),
+                               static_cast<unsigned int>(valueCount),
+                               isConnected() ? "yes" : "no");
         lastUiStatsLogMs = now;
       }
     }

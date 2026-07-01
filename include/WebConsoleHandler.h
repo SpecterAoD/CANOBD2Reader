@@ -56,6 +56,9 @@ private:
 
     static void handleRoot();
     static void handleLog();
+    static void handlePersistentLog();
+    static void handleDownloadLog();
+    static void handleClearLog();
     static void handleStatus();
     static void handleStart();
     static void handleRestart();

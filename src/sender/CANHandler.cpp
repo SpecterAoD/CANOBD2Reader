@@ -2,6 +2,7 @@
 #include "Config.h"
 #include "Utils.h"
 #include "CANDecoder.h"
+#include "SenderConfig.h"
 
 bool CANHandler::driverInstalled = false;
 bool CANHandler::driverStarted = false;
@@ -77,38 +78,45 @@ void CANHandler::shutdown() {
 
 void CANHandler::processIncoming() {
     twai_message_t message;
-    while (twai_receive(&message, 0) == ESP_OK) {
+    std::size_t processed = 0;
+    while (processed < SenderConfig::MaxCanFramesPerTick &&
+           twai_receive(&message, 0) == ESP_OK) {
         handleMessage(message);
+        ++processed;
     }
 }
 
 void CANHandler::handleMessage(twai_message_t& message) {
-    // Send one canonical CAN telemetry payload. The old raw duplicate was
-    // removed because the display now consumes the shared TelemetryPacket format.
-    CANDecoder::DecodedFrame decoded = CANDecoder::decode(message);
-    Utils::sendTelemetry("CAN", "RAW", "LastCAN", decoded.raw, "", "OK");
-    Utils::sendTelemetry("CAN", "HINT", "CANHint", decoded.hint, "", "OK");
-
-    // Debug-Ausgabe
-    Logger::canFrame(message);
+    // Raw CAN traffic can be extremely busy on a real vehicle. Keep it behind
+    // the explicit sender flag so OBD polling and heartbeat telemetry do not
+    // get starved by unrelated bus frames.
+    if (Config::Sender::SendRawData) {
+        CANDecoder::DecodedFrame decoded = CANDecoder::decode(message);
+        Utils::sendTelemetry("CAN", "RAW", "LastCAN", decoded.raw, "", "OK");
+        Utils::sendTelemetry("CAN", "HINT", "CANHint", decoded.hint, "", "OK");
+        Logger::canFrame(message);
+    }
 }
 
 void CANHandler::printStatus() {
     twai_status_info_t status;
     if (twai_get_status_info(&status) == ESP_OK) {
-        Serial.println("------- TWAI Status -------");
-        Serial.print("Controller State: ");
+        const char* stateText = "UNKNOWN";
         switch (status.state) {
-            case TWAI_STATE_STOPPED:    Serial.println("STOPPED"); break;
-            case TWAI_STATE_RUNNING:    Serial.println("RUNNING"); break;
-            case TWAI_STATE_BUS_OFF:    Serial.println("BUS OFF"); break;
-            case TWAI_STATE_RECOVERING: Serial.println("RECOVERING"); break;
-            default:                    Serial.println("UNKNOWN"); break;
+            case TWAI_STATE_STOPPED:    stateText = "STOPPED"; break;
+            case TWAI_STATE_RUNNING:    stateText = "RUNNING"; break;
+            case TWAI_STATE_BUS_OFF:    stateText = "BUS_OFF"; break;
+            case TWAI_STATE_RECOVERING: stateText = "RECOVERING"; break;
+            default:                    stateText = "UNKNOWN"; break;
         }
-        Serial.print("TX Failed: "); Serial.println(status.tx_failed_count);
-        Serial.print("RX Missed: "); Serial.println(status.rx_missed_count);
-        Serial.print("Bus Errors: "); Serial.println(status.bus_error_count);
-        Serial.print("Arbitration Lost: "); Serial.println(status.arb_lost_count);
-        Serial.println("---------------------------");
+        char line[160];
+        snprintf(line, sizeof(line),
+                 "[TWAI] state=%s tx_failed=%lu rx_missed=%lu bus_errors=%lu arbitration_lost=%lu",
+                 stateText,
+                 static_cast<unsigned long>(status.tx_failed_count),
+                 static_cast<unsigned long>(status.rx_missed_count),
+                 static_cast<unsigned long>(status.bus_error_count),
+                 static_cast<unsigned long>(status.arb_lost_count));
+        Logger::twai(line);
     }
 }

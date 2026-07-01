@@ -13,9 +13,12 @@ bool IsoTpHandler::sendRequest(uint8_t mode, uint8_t pid) {
     return sendRequest(mode, payload, sizeof(payload));
 }
 
-bool IsoTpHandler::sendRequest(uint8_t, const uint8_t* payload, std::size_t payloadLength) {
+bool IsoTpHandler::sendRequest(uint8_t mode, const uint8_t* payload, std::size_t payloadLength) {
 #if defined(ARDUINO)
-    if (payload == nullptr || payloadLength == 0 || payloadLength > 7) return false;
+    if (payload == nullptr || payloadLength == 0 || payloadLength > 7) {
+        Logger::warn("[ISOTP] Invalid request payload");
+        return false;
+    }
 
     twai_message_t request = {};
     request.identifier = FunctionalRequestId;
@@ -29,8 +32,27 @@ bool IsoTpHandler::sendRequest(uint8_t, const uint8_t* payload, std::size_t payl
     for (std::size_t index = payloadLength + 1; index < 8; ++index) {
         request.data[index] = 0x55;
     }
-    return twai_transmit(&request, pdMS_TO_TICKS(SenderConfig::ObdTxTimeoutMs)) == ESP_OK;
+    const esp_err_t result = twai_transmit(&request, pdMS_TO_TICKS(SenderConfig::ObdTxTimeoutMs));
+    if (result == ESP_OK) {
+        char line[96];
+        snprintf(line, sizeof(line), "[ISOTP] Request sent id=0x%03lX mode=0x%02X pid=0x%02X len=%u",
+                 static_cast<unsigned long>(request.identifier),
+                 mode,
+                 payloadLength > 1 ? payload[1] : 0xFF,
+                 static_cast<unsigned>(payloadLength));
+        Logger::obd(line);
+        return true;
+    }
+
+    char line[96];
+    snprintf(line, sizeof(line), "[ISOTP] Request transmit failed err=%d mode=0x%02X pid=0x%02X",
+             static_cast<int>(result),
+             mode,
+             payloadLength > 1 ? payload[1] : 0xFF);
+    Logger::warn(line);
+    return false;
 #else
+    (void)mode;
     (void)payload;
     (void)payloadLength;
     return false;
@@ -71,8 +93,20 @@ bool IsoTpHandler::receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Pa
         }
 
         out = reassembler_.payload();
+        char responseLine[112];
+        snprintf(responseLine, sizeof(responseLine),
+                 "[ISOTP] Response id=0x%03lX len=%u first=0x%02X",
+                 static_cast<unsigned long>(out.responseId),
+                 static_cast<unsigned>(out.length),
+                 out.length > 0 ? out.bytes[0] : 0);
+        Logger::obd(responseLine);
         if (out.length >= 2 && out.bytes[0] == 0x7F) {
-            Logger::warn("[ISOTP] Negative response received");
+            char negativeLine[96];
+            snprintf(negativeLine, sizeof(negativeLine),
+                     "[ISOTP] Negative response service=0x%02X nrc=0x%02X",
+                     out.length > 1 ? out.bytes[1] : 0,
+                     out.length > 2 ? out.bytes[2] : 0);
+            Logger::warn(negativeLine);
             return false;
         }
         if (out.length >= 1 && out.bytes[0] != static_cast<uint8_t>(expectedMode | 0x40U)) {

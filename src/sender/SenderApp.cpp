@@ -51,6 +51,8 @@
 #include "SenderPower.h"
 #include "WebConsoleHandler.h"
 #include "StatusLogic.h"
+#include "DiagnosticLog.h"
+#include "EspNowTelemetryTransport.h"
 // End region ================================== Includes ==================================
 
 // region ================================== #define ==================================
@@ -101,6 +103,7 @@ unsigned long last_supported_pid_refresh_time = 0;
 unsigned long last_dtc_query_time = 0;
 unsigned long last_simulation_send_time = 0;
 unsigned long last_led_test_change_time = 0;
+unsigned long last_twai_status_log_time = 0;
 uint32_t telemetry_sequence = 0;
 uint32_t telemetry_send_ok = 0;
 uint32_t telemetry_send_fail = 0;
@@ -193,6 +196,11 @@ void SenderApp::begin() {
   Simulation::RuntimeSimulation::resetForBoot();
   Serial.begin(Config::Project::Baudrate);
   debugln(Config::Project::Baudrate);
+  DiagnosticLog::begin();
+  DiagnosticLog::appendf("[BOOT] Sender firmware=%s protocol=%u target=%s",
+                         Config::Project::FirmwareVersion,
+                         Config::Project::ProtocolVersion,
+                         Config::Project::TargetName);
 
   pinMode(kLedPin1, OUTPUT);
   pinMode(kLedPin2, OUTPUT);
@@ -332,6 +340,16 @@ void refreshSupportedPIDs() {
   }
 
   supported_pids_initialized = ok;
+  if (ok) {
+    char masks[112];
+    snprintf(masks, sizeof(masks), "[OBD] Supported PIDs 01-20=0x%08lX 21-40=0x%08lX 41-60=0x%08lX",
+             static_cast<unsigned long>(supported_pids_01_20),
+             static_cast<unsigned long>(supported_pids_21_40),
+             static_cast<unsigned long>(supported_pids_41_60));
+    WebConsoleHandler::log(masks);
+  } else {
+    WebConsoleHandler::log("[OBD] Supported PID query failed");
+  }
   sendStatusFrame("PID_SUPPORT", ok ? "READY" : "UNKNOWN", ok ? "OK" : "WARN");
 }
 // End region ================= Supported PIDs =================
@@ -367,12 +385,14 @@ void queryAndSendDTCs() {
 
   if (!sendDTCRequest()) {
     last_dtc_text = "SEND_FAIL";
+    WebConsoleHandler::log("[DTC] Request send failed");
     sendTelemetry("DTC", "ACTIVE", "DTC", "N/A", "", "SEND_FAIL");
     return;
   }
 
   if (!receiveDTCResponse(responseData, responseLen)) {
     last_dtc_text = "TIMEOUT";
+    WebConsoleHandler::log("[DTC] Timeout waiting for response");
     sendTelemetry("DTC", "ACTIVE", "DTC", "N/A", "", "TIMEOUT");
     return;
   }
@@ -384,9 +404,11 @@ void queryAndSendDTCs() {
 
   if (dtcList[0] == '\0') {
     last_dtc_text = "Keine";
+    WebConsoleHandler::log("[DTC] No active DTCs");
     sendTelemetry("DTC", "ACTIVE", "DTC", "Keine", "", "OK");
   } else {
     last_dtc_text = dtcList;
+    WebConsoleHandler::log("[DTC] Active codes: " + String(dtcList));
     sendTelemetry("DTC", "ACTIVE", "DTC", dtcList, "", "WARN");
   }
 }
@@ -415,24 +437,23 @@ void sendTelemetry(const char* type,
                                         telemetry_sequence,
                                         millis(),
                                         last_telemetry_payload);
-  const esp_err_t sendResult = esp_now_send(peerAddress, (uint8_t*)&text_frame, sizeof(text_frame));
+  const esp_err_t sendResult = Transport::sendTelemetryPacket(text_frame);
   if (sendResult == ESP_OK) {
     ++telemetry_send_ok;
     last_send_error_text = "";
     if (strcmp(type, "STATUS") == 0 && strcmp(key, "HEARTBEAT") == 0) {
-      Serial.printf("[ESP-NOW] Heartbeat sent seq=%lu\n", static_cast<unsigned long>(telemetry_sequence));
+      WebConsoleHandler::log("[ESP-NOW] Heartbeat sent seq=" + String(static_cast<unsigned long>(telemetry_sequence)));
     }
   } else {
     ++telemetry_send_fail;
     last_send_error_text = "ESP-NOW send error " + String(static_cast<int>(sendResult));
     last_error_text = last_send_error_text;
-    Serial.printf("[ESP-NOW] Send failed error=%d seq=%lu\n",
-                  static_cast<int>(sendResult),
-                  static_cast<unsigned long>(telemetry_sequence));
+    WebConsoleHandler::log("[ESP-NOW] Send failed error=" + String(static_cast<int>(sendResult)) +
+                           " seq=" + String(static_cast<unsigned long>(telemetry_sequence)));
     if (Config::Debug::TraceSenderTelemetry && Config::Debug::Serial) {
-      Serial.printf("[sender-tx] send failed seq=%lu err=%d\n",
-                    static_cast<unsigned long>(telemetry_sequence),
-                    static_cast<int>(sendResult));
+      WebConsoleHandler::log("[sender-tx] send failed seq=" +
+                             String(static_cast<unsigned long>(telemetry_sequence)) +
+                             " err=" + String(static_cast<int>(sendResult)));
     }
   }
 
@@ -457,11 +478,10 @@ void maybeLogTelemetrySendSummary() {
 
   if (now - telemetry_last_summary_ms < Config::Debug::TraceSummaryIntervalMs) return;
 
-  Serial.printf("[sender-tx] seq=%lu ok=%lu fail=%lu sim=%s\n",
-                static_cast<unsigned long>(telemetry_sequence),
-                static_cast<unsigned long>(telemetry_send_ok),
-                static_cast<unsigned long>(telemetry_send_fail),
-                Simulation::RuntimeSimulation::enabled() ? "on" : "off");
+  WebConsoleHandler::log("[sender-tx] seq=" + String(static_cast<unsigned long>(telemetry_sequence)) +
+                         " ok=" + String(static_cast<unsigned long>(telemetry_send_ok)) +
+                         " fail=" + String(static_cast<unsigned long>(telemetry_send_fail)) +
+                         " sim=" + String(Simulation::RuntimeSimulation::enabled() ? "on" : "off"));
   telemetry_last_summary_ms = now;
 }
 
@@ -608,7 +628,6 @@ void SenderApp::tick() {
   if (alerts_triggered & TWAI_ALERT_RX_DATA) {
     CANHandler::processIncoming();
     last_can_msg_timestamp = millis();
-    return;
   }
   //---------------------------------------
 
@@ -628,7 +647,6 @@ void SenderApp::tick() {
   if (alerts_triggered & TWAI_ALERT_BUS_ERROR) {
       debugln("Alert: A (Bit, Stuff, CRC, Form, ACK) error has occurred on the bus.");
       last_error_text = "CAN bus error";
-      //Serial.printf("Bus error count: %d\n", twaistatus.bus_error_count);
       ledShouldBeOn = true;
       debugln(" CAN MSG......BUS ERROR");
       sendStatusFrame("CAN", "BUS_ERROR", "ERROR");
@@ -636,9 +654,6 @@ void SenderApp::tick() {
   if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL) {
       debugln("Alert: The RX queue is full causing a received frame to be lost.");
       last_error_text = "CAN RX queue full";
-      //Serial.printf("RX buffered: %d\t", twaistatus.msgs_to_rx);
-      //Serial.printf("RX missed: %d\t", twaistatus.rx_missed_count);
-      //Serial.printf("RX overrun %d\n", twaistatus.rx_overrun_count);
       ledShouldBeOn = true;
       debugln(" CAN MSG.........Q FULL");
       sendStatusFrame("CAN", "RX_QUEUE_FULL", "ERROR");
@@ -696,8 +711,10 @@ void SenderApp::tick() {
 
   //--------------TWAI Status-----------
   // Optional zur Fehlersuche
-  if (Config::Debug::Twai) {
+  if (Config::Debug::Twai &&
+      currentMillis - last_twai_status_log_time >= SenderConfig::TwaiStatusLogIntervalMs) {
     CANHandler::printStatus(); // Aktivieren / Deaktivieren: #define TWAI_DEBUG_FLAG 0
+    last_twai_status_log_time = currentMillis;
   }
   //-------------------------------------------------------
 

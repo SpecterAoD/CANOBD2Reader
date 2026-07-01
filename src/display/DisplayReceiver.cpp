@@ -10,6 +10,7 @@
 #include "DisplayData.h"
 #include "TelemetryCodec.h"
 #include "StatusLogic.h"
+#include "DiagnosticLog.h"
 
 namespace {
 
@@ -39,14 +40,14 @@ void maybeLogRxSummary() {
   }
   if (now - rx_last_summary_ms < Config::Debug::TraceSummaryIntervalMs) return;
 
-  Serial.printf("[display-rx] packets=%lu crc=%lu badlen=%lu macdrop=%lu queuedrop=%lu parse=%lu lastSeq=%lu\n",
-                static_cast<unsigned long>(rx_packets),
-                static_cast<unsigned long>(rx_crc_errors),
-                static_cast<unsigned long>(rx_invalid_length),
-                static_cast<unsigned long>(rx_mac_filtered),
-                static_cast<unsigned long>(rx_queue_drops),
-                static_cast<unsigned long>(rx_parse_errors),
-                static_cast<unsigned long>(DisplayData::lastSequence));
+  DiagnosticLog::appendf("[display-rx] packets=%lu crc=%lu badlen=%lu macdrop=%lu queuedrop=%lu parse=%lu lastSeq=%lu",
+                         static_cast<unsigned long>(rx_packets),
+                         static_cast<unsigned long>(rx_crc_errors),
+                         static_cast<unsigned long>(rx_invalid_length),
+                         static_cast<unsigned long>(rx_mac_filtered),
+                         static_cast<unsigned long>(rx_queue_drops),
+                         static_cast<unsigned long>(rx_parse_errors),
+                         static_cast<unsigned long>(DisplayData::lastSequence));
   rx_last_summary_ms = now;
 }
 
@@ -119,7 +120,8 @@ void parseTelemetryPayload(const char* payload, uint32_t sequence) {
     if (key == "HEARTBEAT") {
       lastHeartbeatAt = millis();
       lastHeartbeatSequence = payloadSequence;
-      Serial.printf("[DISPLAY] Heartbeat received seq=%lu\n", static_cast<unsigned long>(payloadSequence));
+      DiagnosticLog::appendf("[DISPLAY] Heartbeat received seq=%lu",
+                             static_cast<unsigned long>(payloadSequence));
     } else if (key == "CAN") {
       lastCanStatusAt = millis();
     } else if (key == "OBD") {

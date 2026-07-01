@@ -177,6 +177,13 @@ Fehlersuche im Auto:
 2. Wenn ESP-NOW grün, aber OBD rot/orange ist: CAN-Verkabelung, OBD-Pins, Zündung und Fahrzeugunterstützung prüfen.
 3. Wenn CAN rot ist: TWAI-Initialisierung, Transceiver, CAN-H/L und Baudrate prüfen.
 4. Wenn Werte grau sind: Pakete kommen, aber einzelne Messwerte sind älter als `DisplayConfigValues::ValueTimeoutMs`.
+5. Im Sender-Diagnose-Log prüfen:
+   - `[ISOTP] Request sent ... pid=0x..`: OBD-Anfrage wurde wirklich auf CAN gesendet.
+   - `[ISOTP] Response id=0x7E8...`: ECU hat geantwortet.
+   - `[ISOTP] Timeout waiting for response`: Anfrage ging raus, aber keine ECU-Antwort kam zurück.
+   - `[ISOTP] Negative response service=... nrc=...`: ECU hat die Anfrage aktiv abgelehnt.
+   - `[OBD] Supported PIDs ...`: Supported-PID-Erkennung funktioniert.
+   - Fehlen alle `[ISOTP] Request sent`-Zeilen, läuft der OBD-Polling-Pfad nicht.
 
 ### OTA-Version und Status pruefen
 
@@ -269,13 +276,67 @@ Die Oberfläche hat vier Seiten, die über Buttons umgeschaltet werden:
 
 - Status: CAN, OBD2, Batteriespannung, Telemetrie-Zähler, letztes Paket
 - Diag: PID-Support, letzter CAN-Zeitstempel, DTCs, Fehlerstatus
-- Log: Logger-/Systemmeldungen
+- Log: Live-Log und persistenter Sender-Diagnose-Log
 - OTA: Firmwaredatei `firmware.bin` direkt über die Webseite hochladen
 
 Standardmäßig wartet der Sender nicht mehr auf die WebConsole. Nur wenn
 `SenderConfig::RequireWebStart = true` gesetzt wird, dient der Button
 `Sender starten` als manuelle Freigabe. OTA, WebConsole und Heartbeat bleiben
 auch in diesem manuellen Modus aktiv.
+
+### Sender-Diagnose-Log am OBD2-Anschluss
+
+Der Sender schreibt zusätzlich zum seriellen Monitor einen persistenten
+Diagnose-Log in SPIFFS. Damit lassen sich Probleme nach einer Fahrt auswerten,
+auch wenn kein Laptop am seriellen Monitor hing.
+
+Der Log enthält unter anderem:
+
+- Boot-Informationen mit Firmware-, Target- und Protokollversion
+- ESP-NOW Heartbeats, Sendefehler und gesendete Telemetrie-Payloads
+- CAN-/TWAI-Status und CAN-Rohframes
+- OBD-Rohantworten, dekodierte OBD-Werte und OBD-Timeouts
+- Supported-PID-Erkennung
+- DTC-Abfragen und erkannte Fehlercodes
+- OTA-, Simulation- und Neustart-Ereignisse aus der WebConsole
+
+Abruf über die Sender-WebConsole:
+
+| Methode | Pfad | Zweck |
+| --- | --- | --- |
+| `GET` | `/log` | aktueller RAM-Live-Log |
+| `GET` | `/log/file` | vollständiger persistenter Diagnose-Log inklusive Archiv |
+| `POST` | `/api/log/clear` | RAM- und persistenten Log löschen |
+| `GET` | `/status` | enthält `diagnosticLogMounted`, `diagnosticLogSize`, `diagnosticLogMaxSize` |
+
+Die Loggröße ist über `SenderConfig::DiagnosticLogMaxBytes` begrenzt. Bei
+Überschreitung wird die aktuelle Datei nach
+`SenderConfig::DiagnosticLogArchivePath` rotiert und eine neue Logdatei
+begonnen. Telemetrie-Payloads werden über
+`SenderConfig::PersistTelemetryPayloadsToDiagnosticLog` mitgeschrieben. Für
+lange Dauerfahrten kann dieses Flag auf `false` gesetzt werden, um Flash-Writes
+zu reduzieren.
+
+### Display-Diagnose-Log
+
+Das Display nutzt dieselbe persistente Diagnose-Log-Schicht wie der Sender,
+schreibt aber in eigene Dateien:
+
+- `/display_diagnostic.log`
+- `/display_diagnostic.old`
+
+Die Display-Weboberfläche zeigt Logstatus und Größe an und bietet:
+
+| Methode | Pfad | Zweck |
+| --- | --- | --- |
+| `GET` | `/log/file` | vollständiger persistenter Display-Log |
+| `GET` | `/log/download` | Display-Log als Datei herunterladen |
+| `POST` | `/api/log/clear` | Display-Log löschen |
+
+Im Display-Log landen unter anderem Bootdaten, Web-OTA-Ereignisse,
+Simulation-Schalter, ESP-NOW-Heartbeat-Empfang, RX-Statistiken, UI-Seitenwechsel
+und ESP-NOW-Timeouts. Die Pfade und Größen liegen zentral in
+`include/LoggingConfig.h`.
 
 ### Web-OTA vom iPhone
 
@@ -328,6 +389,7 @@ Sender und Display verwenden ein gemeinsames CRC-geschütztes ESP-NOW-Binärpake
 - `lib/telemetry/TelemetryPacket.h`
 - `lib/telemetry/TelemetryCodec.h`
 - `lib/telemetry/TelemetrySequence.h`
+- `lib/transport/EspNowTelemetryTransport.h`
 
 Der Payload bleibt als lesbare CSV-Zeile aufgebaut:
 
@@ -347,6 +409,9 @@ STATUS,CAN,CAN,ACTIVE,,OK,45
 Die Display-Seite validiert Paketgröße, Magic Number, Protokollversion und CRC,
 bevor Werte in die UI übernommen werden. Die Sequenznummer im Paketheader ist
 maßgeblich für Paketverlust-Erkennung; die CSV-Sequenz dient nur der Diagnose.
+Der Sender verschickt kodierte Pakete über den gemeinsamen
+`Transport::sendTelemetryPacket()`-Pfad, damit es keine versteckten separaten
+`esp_now_send()`-Implementierungen für Telemetrie gibt.
 
 Details: `docs/telemetry.md`
 

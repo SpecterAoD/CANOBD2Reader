@@ -7,6 +7,7 @@
 #include "TelemetryCodec.h"
 #include "TelemetryProtocol.h"
 #include "TelemetrySequence.h"
+#include "EspNowTelemetryTransport.h"
 
 namespace Utils {
 
@@ -23,7 +24,8 @@ inline void sendTelemetryPacket(const char* payload, Telemetry::PacketType type 
     const uint32_t sequence = Telemetry::nextSequence();
     Telemetry::TelemetryPacket packet{};
     Telemetry::TelemetryCodec::encodeText(packet, type, sequence, millis(), payload);
-    esp_now_send(Config::Network::DisplayPeerMac, reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
+    const esp_err_t result = Transport::sendTelemetryPacket(packet);
+    Transport::logTelemetrySendResult(result, sequence, payload);
 }
 
 inline void sendTelemetry(const char* type,
@@ -38,7 +40,8 @@ inline void sendTelemetry(const char* type,
                                     type, key, name, value, unit, status, sequence);
     Telemetry::TelemetryPacket packet{};
     Telemetry::TelemetryCodec::encodeText(packet, packetTypeFor(type), sequence, millis(), payload);
-    esp_now_send(Config::Network::DisplayPeerMac, reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
+    const esp_err_t result = Transport::sendTelemetryPacket(packet);
+    Transport::logTelemetrySendResult(result, sequence, payload);
 }
 
 inline void sendCanFrame(uint32_t canId, const uint8_t* data, uint8_t len) {

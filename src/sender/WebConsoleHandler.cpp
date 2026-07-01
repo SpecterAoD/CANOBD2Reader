@@ -4,6 +4,8 @@
 #include "RuntimeSimulation.h"
 #include "SimulationTypes.h"
 #include "AuthHelpers.h"
+#include "DiagnosticLog.h"
+#include "SenderConfig.h"
 
 namespace {
     constexpr size_t MaxLogLineLength = 180;
@@ -42,6 +44,9 @@ void WebConsoleHandler::begin() {
 
     server.on("/", HTTP_GET, handleRoot);
     server.on("/log", HTTP_GET, handleLog);
+    server.on("/log/file", HTTP_GET, handlePersistentLog);
+    server.on("/log/download", HTTP_GET, handleDownloadLog);
+    server.on("/api/log/clear", HTTP_POST, handleClearLog);
     server.on("/status", HTTP_GET, handleStatus);
     server.on("/start", HTTP_POST, handleStart);
     server.on("/restart", HTTP_POST, handleRestart);
@@ -80,10 +85,15 @@ void WebConsoleHandler::log(const String& msg) {
     if (Config::Debug::Serial) {
         Serial.println(msg);
     }
+
+    DiagnosticLog::append(line.c_str());
 }
 
 void WebConsoleHandler::recordTelemetry(const char* payload) {
     runtimeStatus.lastTelemetry = clipped(String(payload), 120);
+    if (SenderConfig::PersistTelemetryPayloadsToDiagnosticLog) {
+        DiagnosticLog::appendf("[TX] %s", payload);
+    }
 }
 
 void WebConsoleHandler::updateRuntimeStatus(const WebConsoleRuntimeStatus& status) {
@@ -158,7 +168,10 @@ input[type=file]{width:100%;padding:12px;border-radius:14px;background:#0f172a;c
 <div class="card wide"><div class="label">DTC / Fehlercodes</div><div id="dtc" class="value">--</div></div>
 <div class="card wide"><div class="label">Fehlerstatus</div><div id="err" class="small">--</div></div>
 </div></section>
-<section id="log" class="page"><pre id="logs">Lade Log...</pre></section>
+<section id="log" class="page"><div class="grid">
+<div class="card wide"><div class="label">Diagnose-Log</div><div class="small">Persistent: <span id="diaglog">--</span></div><div class="actions"><button id="loadFileLog" class="primary">Persistenten Log laden</button><a class="btn primary" href="/log/download">Log herunterladen</a><button id="clearLog" class="danger">Log löschen</button></div></div>
+<div class="card wide"><div class="label">Live-Log</div><pre id="logs">Lade Log...</pre></div>
+</div></section>
 <section id="ota" class="page"><div class="card wide"><div class="label">Firmware über Web hochladen</div><div class="small">Nur passende <code>firmware.bin</code> für <b>env:sender</b> verwenden. Gerät startet nach erfolgreichem Update neu.</div></div>
 <div class="card wide"><div class="label">OTA Status</div><div id="otastatus" class="value">--</div><div class="small">Frei: <span id="freeota">--</span> · Sketch: <span id="sketch">--</span> · Flash: <span id="flash">--</span></div></div>
 <form class="actions" method="POST" action="/update" enctype="multipart/form-data"><input type="file" name="firmware" accept=".bin"><button class="primary" type="submit">OTA Update starten</button></form>
@@ -170,8 +183,9 @@ const scenarios=['NormalSingleFrame','NormalMultiFrameVin','NormalMultiFrameDtc'
 scenarios.forEach(x=>{let o=document.createElement('option');o.value=x;o.textContent=x;$('scenarioSelect').appendChild(o)});
 document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active')});
 function yn(v){return v?'aktiv':'aus'}function cls(el,state){el.className='value '+(state?'okText':'warnText')}function bytes(v){return Math.round((v||0)/1024)+' KB'}
-async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('otastatus').textContent=s.otaStatus;$('freeota').textContent=bytes(s.freeSketchSpace);$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('run').textContent=s.started?'läuft':'gestoppt';$('run').className='pill '+(s.started?'ok':'warn');$('can').textContent=s.canState;cls($('can'),s.canActive);$('obd').textContent=s.obdState||yn(s.obdActive);cls($('obd'),s.obdActive);$('espnow').textContent=s.espNowState;cls($('espnow'),s.espNowState==='READY');$('heartbeat').textContent=s.heartbeats;$('bat').textContent=s.battery.toFixed(2)+' V';$('seq').textContent=s.seq;$('tel').textContent=s.lastTelemetry;$('pid').textContent=s.pidSupport?'bereit':'unbekannt';cls($('pid'),s.pidSupport);$('canage').textContent=(s.lastCanAge/1000).toFixed(1)+'s';$('dtc').textContent=s.lastDtc||'--';$('err').textContent=s.lastSendError||s.lastError||'OK';}catch(e){$('run').textContent='offline';$('run').className='pill err'}}
+async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('otastatus').textContent=s.otaStatus;$('freeota').textContent=bytes(s.freeSketchSpace);$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('diaglog').textContent=(s.diagnosticLogMounted?'bereit':'nicht gemountet')+' · '+bytes(s.diagnosticLogSize)+' / '+bytes(s.diagnosticLogMaxSize);$('run').textContent=s.started?'läuft':'gestoppt';$('run').className='pill '+(s.started?'ok':'warn');$('can').textContent=s.canState;cls($('can'),s.canActive);$('obd').textContent=s.obdState||yn(s.obdActive);cls($('obd'),s.obdActive);$('espnow').textContent=s.espNowState;cls($('espnow'),s.espNowState==='READY');$('heartbeat').textContent=s.heartbeats;$('bat').textContent=s.battery.toFixed(2)+' V';$('seq').textContent=s.seq;$('tel').textContent=s.lastTelemetry;$('pid').textContent=s.pidSupport?'bereit':'unbekannt';cls($('pid'),s.pidSupport);$('canage').textContent=(s.lastCanAge/1000).toFixed(1)+'s';$('dtc').textContent=s.lastDtc||'--';$('err').textContent=s.lastSendError||s.lastError||'OK';}catch(e){$('run').textContent='offline';$('run').className='pill err'}}
 async function refreshLog(){try{$('logs').textContent=await fetch('/log',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
+async function loadPersistentLog(){try{$('logs').textContent=await fetch('/log/file',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
 async function refreshSimulation(){try{let s=await fetch('/api/simulation',{cache:'no-store'}).then(r=>r.json());$('sim').textContent=s.simulation?'aktiv':'inaktiv';$('sim').className='value '+(s.simulation?'okText':'warnText');$('scenario').textContent=s.scenario||'--';$('scenarioSelect').value=s.scenario||'NormalSingleFrame'}catch(e){}}
 $('start').onclick=async()=>{await fetch('/start',{method:'POST'});refresh()}
 $('restart').onclick=async()=>{if(confirm('Sender wirklich neu starten?'))await fetch('/api/restart',{method:'POST'})}
@@ -179,6 +193,8 @@ $('simToggle').onclick=async()=>{await fetch('/api/simulation/toggle',{method:'P
 $('simOn').onclick=async()=>{await fetch('/api/simulation/on',{method:'POST'});refreshSimulation()}
 $('simOff').onclick=async()=>{await fetch('/api/simulation/off',{method:'POST'});refreshSimulation()}
 $('scenarioSelect').onchange=async()=>{await fetch('/api/simulation/scenario?scenario='+encodeURIComponent($('scenarioSelect').value),{method:'POST'});refreshSimulation()}
+$('loadFileLog').onclick=loadPersistentLog
+$('clearLog').onclick=async()=>{if(confirm('Diagnose-Log wirklich löschen?')){await fetch('/api/log/clear',{method:'POST'});refreshLog();refresh()}}
 setInterval(refresh,1000);setInterval(refreshLog,1500);setInterval(refreshSimulation,1000);refresh();refreshLog();refreshSimulation();
 </script>
 </body></html>
@@ -195,6 +211,30 @@ void WebConsoleHandler::handleLog() {
     server.send(200, "text/plain; charset=utf-8", page);
 }
 
+void WebConsoleHandler::handlePersistentLog() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    server.send(200, "text/plain; charset=utf-8", DiagnosticLog::readAll());
+}
+
+void WebConsoleHandler::handleDownloadLog() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    String filename = "CANOBD2_sender_";
+    filename += Config::Project::FirmwareVersion;
+    filename += "_diagnostic.log";
+    server.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+    server.send(200, "text/plain; charset=utf-8", DiagnosticLog::readAll());
+}
+
+void WebConsoleHandler::handleClearLog() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    logBuffer.clear();
+    const bool ok = DiagnosticLog::clear();
+    log(String("[WebConsole] Diagnose-Log ") + (ok ? "geloescht" : "konnte nicht geloescht werden"));
+    server.send(ok ? 200 : 500,
+                "application/json",
+                ok ? "{\"cleared\":true}" : "{\"cleared\":false}");
+}
+
 void WebConsoleHandler::handleStatus() {
     if (!WebSecurity::requireAuthentication(server)) return;
     WebConsoleRuntimeStatus s = runtimeStatus;
@@ -209,6 +249,9 @@ void WebConsoleHandler::handleStatus() {
     json += "\"freeSketchSpace\":" + String(ESP.getFreeSketchSpace()) + ",";
     json += "\"sketchSize\":" + String(ESP.getSketchSize()) + ",";
     json += "\"flashSize\":" + String(ESP.getFlashChipSize()) + ",";
+    json += "\"diagnosticLogMounted\":" + String(DiagnosticLog::mounted() ? "true" : "false") + ",";
+    json += "\"diagnosticLogSize\":" + String(DiagnosticLog::size()) + ",";
+    json += "\"diagnosticLogMaxSize\":" + String(SenderConfig::DiagnosticLogMaxBytes) + ",";
     json += "\"started\":" + String(isStarted() ? "true" : "false") + ",";
     json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
     json += "\"uptime\":" + String(s.uptimeMs) + ",";

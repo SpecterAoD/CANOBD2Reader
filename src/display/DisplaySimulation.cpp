@@ -4,6 +4,7 @@
 #include "ObdSimulation.h"
 #include "IsoTpSimulation.h"
 #include "SimulationData.h"
+#include "DiagnosticLog.h"
 #include <cstring>
 
 namespace DisplaySimulation {
@@ -13,7 +14,7 @@ namespace DisplaySimulation {
     if (millis() - lastInternalSimulationUpdate < DisplayConfig::ScreenRefreshMs) return;
 
     if (internalSimulationIndex == 0) {
-      Serial.println("[display-sim] internal simulation active");
+      DiagnosticLog::appendf("[display-sim] internal simulation active");
     }
 
     lastInternalSimulationUpdate = millis();

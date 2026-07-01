@@ -117,6 +117,15 @@ namespace Logger {
     }
 
     inline void canFrame(const twai_message_t& message) {
+        char buf[160];
+        int used = snprintf(buf, sizeof(buf), "[CAN] ID=0x%lX DLC=%u Data=",
+                            static_cast<unsigned long>(message.identifier),
+                            static_cast<unsigned>(message.data_length_code));
+        for (int i = 0; i < message.data_length_code && used > 0 && used < static_cast<int>(sizeof(buf)); i++) {
+            used += snprintf(buf + used, sizeof(buf) - used, " %02X", message.data[i]);
+        }
+        emit(buf);
+
         if (Config::Debug::Can && Config::Debug::Serial) {
             Serial.print("[CAN] ID=0x");
             Serial.print(message.identifier, HEX);
@@ -142,6 +151,13 @@ namespace Logger {
     }
 
     inline void obdFrame(uint8_t pid, const uint8_t* data, uint8_t len) {
+        char buf[128];
+        int used = snprintf(buf, sizeof(buf), "[OBD2] PID 0x%02X Data=", pid);
+        for (uint8_t i = 0; i < len && used > 0 && used < static_cast<int>(sizeof(buf)); i++) {
+            used += snprintf(buf + used, sizeof(buf) - used, " %02X", data[i]);
+        }
+        emit(buf);
+
         if (Config::Debug::Obd2 && Config::Debug::Serial) {
             Serial.print("[OBD2] PID 0x");
             Serial.print(pid, HEX);
@@ -157,6 +173,14 @@ namespace Logger {
 
     template<typename T>
     inline void obdValue(const char* label, T value, const char* unit = "") {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "[OBD2] %s: %s%s%s",
+                 label,
+                 String(value).c_str(),
+                 unit && unit[0] ? " " : "",
+                 unit && unit[0] ? unit : "");
+        emit(buf);
+
         if (Config::Debug::Obd2 && Config::Debug::Serial) {
             Serial.print("[OBD2] ");
             Serial.print(label);
