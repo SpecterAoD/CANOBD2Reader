@@ -20,9 +20,19 @@ void test_authentication_config_is_present() {
     TEST_ASSERT_TRUE(WebSecurity::password()[0] != '\0');
 }
 
+void test_api_token_config_is_present_and_checked() {
+    TEST_ASSERT_NOT_NULL(WebSecurity::apiToken());
+    TEST_ASSERT_TRUE(WebSecurity::apiToken()[0] != '\0');
+    TEST_ASSERT_TRUE(WebSecurity::isConfiguredToken(WebSecurity::apiToken()));
+    TEST_ASSERT_FALSE(WebSecurity::isConfiguredToken("wrong-token"));
+    TEST_ASSERT_FALSE(WebSecurity::isConfiguredToken(""));
+    TEST_ASSERT_FALSE(WebSecurity::isConfiguredToken(nullptr));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_constant_time_equals);
     RUN_TEST(test_authentication_config_is_present);
+    RUN_TEST(test_api_token_config_is_present_and_checked);
     return UNITY_END();
 }

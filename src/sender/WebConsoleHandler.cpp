@@ -37,6 +37,9 @@ void WebConsoleHandler::begin() {
 
     log("[WebConsole] AP gestartet: " + WiFi.softAPIP().toString());
 
+    static const char* authHeaders[] = {"X-API-Token", "Authorization"};
+    server.collectHeaders(authHeaders, 2);
+
     server.on("/", HTTP_GET, handleRoot);
     server.on("/log", HTTP_GET, handleLog);
     server.on("/status", HTTP_GET, handleStatus);

@@ -3,6 +3,7 @@
 #include "PID_Converter.h"
 #include "IsoTpHandler.h"
 #include "BoostCalculator.h"
+#include "SenderRuntimeState.h"
 
 namespace {
 IsoTp::IsoTpHandler isoTp;
@@ -41,23 +42,16 @@ bool OBD2Handler::receiveResponse(uint8_t mode, uint8_t pid, uint8_t* outData, u
 }
 
 void OBD2Handler::calcConsumption(uint8_t pid, float value) {
-    if (pid == VEHICLE_SPEED) Config::lastSpeed = value;
-    if (pid == ENGINE_FUEL_RATE) Config::lastFuelRate = value;
+    if (pid == VEHICLE_SPEED) Runtime::SenderRuntimeState::updateSpeed(value);
+    if (pid == ENGINE_FUEL_RATE) Runtime::SenderRuntimeState::updateFuelRate(value);
 
-    if (Config::lastSpeed < 1.0f || Config::lastFuelRate < 0.1f) return;
+    if (!Runtime::SenderRuntimeState::hasConsumptionInput()) return;
 
-    Config::consumption = (Config::lastFuelRate / Config::lastSpeed) * 100.0f;
-    Config::consumptionSum += Config::consumption;
-    Config::consumptionCount++;
-
-    if (Config::consumptionCount >= 10) {
-        float avg = Config::consumptionSum / Config::consumptionCount;
+    float avg = 0.0f;
+    if (Runtime::SenderRuntimeState::addConsumptionSample(avg)) {
         char avgText[16];
         snprintf(avgText, sizeof(avgText), "%.2f", static_cast<double>(avg));
         Utils::sendTelemetry("FUEL", "AVG", "AverageConsumption", avgText, "L/100km", "OK");
-
-        Config::consumptionSum = 0.0f;
-        Config::consumptionCount = 0;
     }
 }
 

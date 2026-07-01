@@ -104,15 +104,25 @@ jobs:
 
           cp .pio/build/sender/firmware.bin "output/CAN_OBD2_sender_${VERSION_TAG}.bin"
           cp .pio/build/display/firmware.bin "output/CAN_OBD2_display_${VERSION_TAG}.bin"
+          cp .pio/build/sender/firmware.bin "output/sender.bin"
+          cp .pio/build/display/firmware.bin "output/display.bin"
           cp .pio/build/sender/firmware.elf "output/CAN_OBD2_sender_${VERSION_TAG}.elf"
           cp .pio/build/display/firmware.elf "output/CAN_OBD2_display_${VERSION_TAG}.elf"
+
+          sender_sha256="$(sha256sum output/sender.bin | awk '{print $1}')"
+          display_sha256="$(sha256sum output/display.bin | awk '{print $1}')"
 
           {
             echo "{"
             echo "  \"version\": \"${VERSION_TAG}\","
             echo "  \"commit\": \"${GITHUB_SHA}\","
+            echo "  \"protocol\": 2,"
             echo "  \"sender_bin\": \"CAN_OBD2_sender_${VERSION_TAG}.bin\","
-            echo "  \"display_bin\": \"CAN_OBD2_display_${VERSION_TAG}.bin\""
+            echo "  \"display_bin\": \"CAN_OBD2_display_${VERSION_TAG}.bin\","
+            echo "  \"sender_bin_stable\": \"sender.bin\","
+            echo "  \"display_bin_stable\": \"display.bin\","
+            echo "  \"sender_sha256\": \"${sender_sha256}\","
+            echo "  \"display_sha256\": \"${display_sha256}\""
             echo "}"
           } > output/firmware_manifest.json
 

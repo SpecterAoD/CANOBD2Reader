@@ -36,7 +36,7 @@ CANOBD2Reader/
 │   └── display/
 │       └── main.cpp
 └── docs/
-    ├── TELEMETRY_PROTOCOL.md
+    ├── telemetry.md
     └── archive/
 ```
 
@@ -348,15 +348,15 @@ Die Display-Seite validiert Paketgröße, Magic Number, Protokollversion und CRC
 bevor Werte in die UI übernommen werden. Die Sequenznummer im Paketheader ist
 maßgeblich für Paketverlust-Erkennung; die CSV-Sequenz dient nur der Diagnose.
 
-Details: `docs/TELEMETRY_PROTOCOL.md`
+Details: `docs/telemetry.md`
 
 ## Architektur und Tests
 
 Zusätzliche Dokumentation:
 
-- `docs/ARCHITECTURE.md`: Modulaufteilung, Datenfluss, OTA und Legacy-Ablage
-- `docs/ISOTP.md`: ISO-TP-Reassembly, Flow-Control und OBD-II-Integration
-- `docs/TELEMETRY_PROTOCOL.md`: Paketformat und Display-Felder
+- `docs/architecture.md`: Modulaufteilung, Datenfluss, OTA und Legacy-Ablage
+- `docs/isotp.md`: ISO-TP-Reassembly, Flow-Control und OBD-II-Integration
+- `docs/telemetry.md`: Paketformat und Display-Felder
 
 Native Unit Tests:
 
@@ -510,6 +510,13 @@ Geschützt sind insbesondere:
 - Neustart-Endpunkte
 - Simulation-Endpunkte
 - Status-/Log-Webseiten
+
+Skripte können alternativ zu Basic Auth den konfigurierten `Secrets::ApiToken`
+nutzen:
+
+- Header `X-API-Token`
+- Header `Authorization: Bearer <token>`
+- Query-Parameter `token`
 
 Weitere Details stehen in `docs/security.md`.
 

@@ -247,6 +247,9 @@ namespace DisplayOta {
                 Config::Network::DisplayWebPassword,
                 Config::Network::EspNowChannel);
 
+    static const char* authHeaders[] = {"X-API-Token", "Authorization"};
+    server.collectHeaders(authHeaders, 2);
+
     ArduinoOTA.setHostname(Config::Network::DisplayOtaHostname);
     ArduinoOTA.setPassword(Config::Network::DisplayWebPassword);
     ArduinoOTA

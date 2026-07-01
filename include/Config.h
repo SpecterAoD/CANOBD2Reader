@@ -296,20 +296,4 @@ namespace Config {
         float voltage = 0.0f;
     };
 
-    inline uint32_t currentMillis = 0;
-    inline uint32_t lastCanMsgTimestamp = 0;
-    inline uint32_t lastObdRequestTime = 0;
-    inline uint32_t lastCarRunningTime = 0;
-    inline uint32_t lastBatterySendTime = 0;
-    inline uint32_t ledTestStartTime = 0;
-    inline float lastSpeed = 0.0f;
-    inline float lastFuelRate = 0.0f;
-    inline float consumption = 0.0f;
-    inline float consumptionSum = 0.0f;
-    inline int consumptionCount = 0;
-
-    inline bool carIsRunning = false;
-    inline bool ledTestActive = false;
-    inline uint8_t ledTestStep = 0;
-
 }

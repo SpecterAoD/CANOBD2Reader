@@ -20,6 +20,11 @@ Values moved out of the public configuration:
 
 `SecurityConfig::EnableAuthentication` is enabled by default. Sender and display
 use the shared `lib/web/AuthHelpers` module and HTTP Basic Authentication.
+API clients may alternatively use the configured `Secrets::ApiToken` via one of:
+
+- `X-API-Token: <token>`
+- `Authorization: Bearer <token>`
+- `?token=<token>`
 
 Protected endpoints include:
 
@@ -35,9 +40,11 @@ Protected endpoints include:
 ## OTA safety
 
 Web OTA now requires authentication and checks whether OTA sketch space is
-available before starting `Update.begin()`. The current firmware still relies on
-the ESP32 bootloader and partition table for binary integrity; target-specific
-firmware metadata validation remains an open hardening step.
+available before starting `Update.begin()`. CI publishes stable firmware names
+(`sender.bin`, `display.bin`) and SHA-256 values in `firmware_manifest.json`.
+The current firmware still relies on the ESP32 bootloader and partition table
+for binary integrity; cryptographic target-specific metadata validation inside
+the uploaded `.bin` remains an open hardening step.
 
 The active partition table is `partitions/ota_4mb.csv`, which keeps two OTA app
 slots.

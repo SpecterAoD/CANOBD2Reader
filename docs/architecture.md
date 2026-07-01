@@ -28,6 +28,7 @@ flowchart LR
 - `lib/can_router`: fixed-size CAN frame fan-out for future TWAI routing.
 - `lib/obd`: PID decoding and derived OBD calculations such as boost pressure.
 - `lib/simulation`: runtime-only OBD/ISO-TP/display simulation scenarios.
+- `lib/runtime`: mutable runtime state such as sender consumption averaging.
 - `lib/display`: display severity calculation.
 - `lib/web`: shared web authentication helpers.
 
@@ -38,9 +39,8 @@ compatibility facade. New static values should be added to focused config files
 such as `ProjectConfig.h`, `SenderConfig.h`, `DisplayConfig.h`,
 `SimulationConfig.h` or `SecurityConfig.h`.
 
-Runtime values should not be added to config headers. Existing legacy runtime
-fields in `Config.h` are kept for compatibility and should be migrated gradually
-into dedicated runtime state classes.
+Runtime values must not be added to config headers. Mutable state belongs in
+`lib/runtime` or in the relevant firmware module.
 
 ## CAN routing status
 

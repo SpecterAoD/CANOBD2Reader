@@ -32,11 +32,35 @@ const char* password() {
     return SecurityConfig::WebPassword;
 }
 
+const char* apiToken() {
+    return SecurityConfig::ApiToken;
+}
+
+bool isConfiguredToken(const char* token) {
+    if (token == nullptr || token[0] == '\0') return false;
+    if (SecurityConfig::ApiToken == nullptr || SecurityConfig::ApiToken[0] == '\0') return false;
+    return constantTimeEquals(token, SecurityConfig::ApiToken);
+}
+
 #if defined(ARDUINO)
+namespace {
+bool bearerTokenMatches(const String& authorizationHeader) {
+    constexpr const char* prefix = "Bearer ";
+    if (!authorizationHeader.startsWith(prefix)) return false;
+    return WebSecurity::isConfiguredToken(authorizationHeader.substring(strlen(prefix)).c_str());
+}
+}
+
 bool requireAuthentication(WebServer& server, bool protectEndpoint) {
     if (!protectEndpoint || !SecurityConfig::EnableAuthentication) return true;
 
     if (server.authenticate(SecurityConfig::WebUsername, SecurityConfig::WebPassword)) {
+        return true;
+    }
+
+    if (isConfiguredToken(server.header("X-API-Token").c_str()) ||
+        bearerTokenMatches(server.header("Authorization")) ||
+        isConfiguredToken(server.arg("token").c_str())) {
         return true;
     }
 
