@@ -3,6 +3,7 @@
 #include "Logger.h"
 #include "RuntimeSimulation.h"
 #include "SimulationTypes.h"
+#include "AuthHelpers.h"
 
 namespace {
     constexpr size_t MaxLogLineLength = 180;
@@ -106,6 +107,7 @@ String WebConsoleHandler::jsonEscape(const String& value) {
 }
 
 void WebConsoleHandler::handleRoot() {
+    if (!WebSecurity::requireAuthentication(server)) return;
     static const char html[] PROGMEM = R"rawliteral(
 <!doctype html>
 <html lang="de">
@@ -139,6 +141,8 @@ input[type=file]{width:100%;padding:12px;border-radius:14px;background:#0f172a;c
 <div class="card wide"><div class="label">Firmware</div><div class="small">Version: <span id="fw">--</span><br>Target: <span id="target">--</span><br>Protocol: <span id="proto">--</span><br>Build: <span id="build">--</span></div></div>
 <div class="card"><div class="label">CAN</div><div id="can" class="value">--</div></div>
 <div class="card"><div class="label">OBD2</div><div id="obd" class="value">--</div></div>
+<div class="card"><div class="label">ESP-NOW</div><div id="espnow" class="value">--</div></div>
+<div class="card"><div class="label">Heartbeat</div><div id="heartbeat" class="value">--</div></div>
 <div class="card"><div class="label">Batterie</div><div id="bat" class="value">--</div></div>
 <div class="card"><div class="label">Telemetrie</div><div id="seq" class="value">--</div></div>
 <div class="card wide"><div class="label">Letztes Paket</div><div id="tel" class="small">--</div></div>
@@ -163,7 +167,7 @@ const scenarios=['NormalSingleFrame','NormalMultiFrameVin','NormalMultiFrameDtc'
 scenarios.forEach(x=>{let o=document.createElement('option');o.value=x;o.textContent=x;$('scenarioSelect').appendChild(o)});
 document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active')});
 function yn(v){return v?'aktiv':'aus'}function cls(el,state){el.className='value '+(state?'okText':'warnText')}function bytes(v){return Math.round((v||0)/1024)+' KB'}
-async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('otastatus').textContent=s.otaStatus;$('freeota').textContent=bytes(s.freeSketchSpace);$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('run').textContent=s.started?'läuft':'gestoppt';$('run').className='pill '+(s.started?'ok':'warn');$('can').textContent=s.canState;cls($('can'),s.canActive);$('obd').textContent=yn(s.obdActive);cls($('obd'),s.obdActive);$('bat').textContent=s.battery.toFixed(2)+' V';$('seq').textContent=s.seq;$('tel').textContent=s.lastTelemetry;$('pid').textContent=s.pidSupport?'bereit':'unbekannt';cls($('pid'),s.pidSupport);$('canage').textContent=(s.lastCanAge/1000).toFixed(1)+'s';$('dtc').textContent=s.lastDtc||'--';$('err').textContent=s.lastError||'OK';}catch(e){$('run').textContent='offline';$('run').className='pill err'}}
+async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('otastatus').textContent=s.otaStatus;$('freeota').textContent=bytes(s.freeSketchSpace);$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('run').textContent=s.started?'läuft':'gestoppt';$('run').className='pill '+(s.started?'ok':'warn');$('can').textContent=s.canState;cls($('can'),s.canActive);$('obd').textContent=s.obdState||yn(s.obdActive);cls($('obd'),s.obdActive);$('espnow').textContent=s.espNowState;cls($('espnow'),s.espNowState==='READY');$('heartbeat').textContent=s.heartbeats;$('bat').textContent=s.battery.toFixed(2)+' V';$('seq').textContent=s.seq;$('tel').textContent=s.lastTelemetry;$('pid').textContent=s.pidSupport?'bereit':'unbekannt';cls($('pid'),s.pidSupport);$('canage').textContent=(s.lastCanAge/1000).toFixed(1)+'s';$('dtc').textContent=s.lastDtc||'--';$('err').textContent=s.lastSendError||s.lastError||'OK';}catch(e){$('run').textContent='offline';$('run').className='pill err'}}
 async function refreshLog(){try{$('logs').textContent=await fetch('/log',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
 async function refreshSimulation(){try{let s=await fetch('/api/simulation',{cache:'no-store'}).then(r=>r.json());$('sim').textContent=s.simulation?'aktiv':'inaktiv';$('sim').className='value '+(s.simulation?'okText':'warnText');$('scenario').textContent=s.scenario||'--';$('scenarioSelect').value=s.scenario||'NormalSingleFrame'}catch(e){}}
 $('start').onclick=async()=>{await fetch('/start',{method:'POST'});refresh()}
@@ -180,6 +184,7 @@ setInterval(refresh,1000);setInterval(refreshLog,1500);setInterval(refreshSimula
 }
 
 void WebConsoleHandler::handleLog() {
+    if (!WebSecurity::requireAuthentication(server)) return;
     String page;
     for (auto &line : logBuffer) {
         page += line + "\n";
@@ -188,6 +193,7 @@ void WebConsoleHandler::handleLog() {
 }
 
 void WebConsoleHandler::handleStatus() {
+    if (!WebSecurity::requireAuthentication(server)) return;
     WebConsoleRuntimeStatus s = runtimeStatus;
     String json;
     json.reserve(512);
@@ -205,13 +211,20 @@ void WebConsoleHandler::handleStatus() {
     json += "\"uptime\":" + String(s.uptimeMs) + ",";
     json += "\"canActive\":" + String(s.canActive ? "true" : "false") + ",";
     json += "\"obdActive\":" + String(s.obdActive ? "true" : "false") + ",";
+    json += "\"espNowState\":\"" + jsonEscape(s.espNowState) + "\",";
+    json += "\"obdState\":\"" + jsonEscape(s.obdState) + "\",";
+    json += "\"txOk\":" + String(s.telemetrySendOk) + ",";
+    json += "\"txFail\":" + String(s.telemetrySendFail) + ",";
+    json += "\"heartbeats\":" + String(s.heartbeatCount) + ",";
     json += "\"pidSupport\":" + String(s.pidSupportReady ? "true" : "false") + ",";
     json += "\"simulation\":" + String(s.simulationActive ? "true" : "false") + ",";
     json += "\"simulationScenario\":\"" + jsonEscape(s.simulationScenario) + "\",";
     json += "\"battery\":" + String(s.batteryVoltage, 2) + ",";
     json += "\"seq\":" + String(s.telemetrySequence) + ",";
     json += "\"lastCanAge\":" + String(s.lastCanAgeMs) + ",";
+    json += "\"lastObdAge\":" + String(s.lastObdAgeMs) + ",";
     json += "\"canState\":\"" + jsonEscape(s.canState) + "\",";
+    json += "\"lastSendError\":\"" + jsonEscape(s.lastSendError) + "\",";
     json += "\"lastDtc\":\"" + jsonEscape(s.lastDtc) + "\",";
     json += "\"lastTelemetry\":\"" + jsonEscape(s.lastTelemetry) + "\",";
     json += "\"lastError\":\"" + jsonEscape(s.lastError) + "\"";
@@ -220,6 +233,7 @@ void WebConsoleHandler::handleStatus() {
 }
 
 void WebConsoleHandler::handleStart() {
+    if (!WebSecurity::requireAuthentication(server)) return;
     startRequested = true;
     log("[WebConsole] Start freigegeben");
     server.send(200, "text/plain", "System gestartet");
@@ -230,9 +244,10 @@ void WebConsoleHandler::handleRestart() {
 }
 
 void WebConsoleHandler::handleApiRestart() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireRestartAuthentication)) return;
     log("[WebConsole] Neustart angefordert");
     server.send(200, "application/json", "{\"restart\":true}");
-    delay(300);
+    delay(Config::Security::RestartDelayMs);
     ESP.restart();
 }
 
@@ -247,28 +262,33 @@ String WebConsoleHandler::simulationJson() {
 }
 
 void WebConsoleHandler::handleSimulationStatus() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     server.send(200, "application/json", simulationJson());
 }
 
 void WebConsoleHandler::handleSimulationOn() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::setEnabled(true);
     log("[Simulation] eingeschaltet");
     server.send(200, "application/json", simulationJson());
 }
 
 void WebConsoleHandler::handleSimulationOff() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::setEnabled(false);
     log("[Simulation] ausgeschaltet");
     server.send(200, "application/json", simulationJson());
 }
 
 void WebConsoleHandler::handleSimulationToggle() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::toggle();
     log(String("[Simulation] ") + (Simulation::RuntimeSimulation::enabled() ? "eingeschaltet" : "ausgeschaltet"));
     server.send(200, "application/json", simulationJson());
 }
 
 void WebConsoleHandler::handleSimulationScenario() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     String raw = server.arg("scenario");
     if (raw.length() == 0) raw = server.arg("plain");
     raw.trim();
@@ -285,11 +305,13 @@ void WebConsoleHandler::handleSimulationScenario() {
 }
 
 void WebConsoleHandler::handleUpdatePage() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireOtaAuthentication)) return;
     server.sendHeader("Location", "/#ota");
     server.send(302, "text/plain", "");
 }
 
 void WebConsoleHandler::handleUpdateFinished() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireOtaAuthentication)) return;
     const bool ok = !Update.hasError();
     if (!ok && webOtaStatus == "Bereit") {
         webOtaStatus = updateErrorText("Update fehlgeschlagen");
@@ -304,11 +326,17 @@ void WebConsoleHandler::handleUpdateFinished() {
 }
 
 void WebConsoleHandler::handleUpdateUpload() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireOtaAuthentication)) return;
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
         updateInProgress = true;
         webOtaStatus = "Upload gestartet: " + upload.filename;
         log("[WebOTA] Upload gestartet: " + upload.filename);
+        if (Config::Security::RejectOtaWhenSketchSpaceUnknown && ESP.getFreeSketchSpace() == 0) {
+            webOtaStatus = "OTA abgelehnt: freier Sketch-Speicher unbekannt";
+            log("[WebOTA] " + webOtaStatus);
+            return;
+        }
         if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
             webOtaStatus = updateErrorText("Update.begin fehlgeschlagen");
             log("[WebOTA] " + webOtaStatus);

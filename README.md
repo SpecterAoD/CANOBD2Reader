@@ -152,6 +152,31 @@ Runtime-Verhalten:
 - Sender startet OTA über `OTAHandler`. Wenn keine WLAN-Verbindung vorhanden ist, wird der zentrale Sender-SoftAP `Config::Network::SenderWebSsid` gestartet.
 - Display besitzt ein eigenes `DisplayOta`-Modul und startet bei aktiviertem Flag den zentralen Display-SoftAP `Config::Network::DisplayWebSsid`.
 - Beide Geräte verwenden `WIFI_AP_STA`, damit OTA/WebConsole und ESP-NOW parallel grundsätzlich möglich bleiben.
+- Der Sender startet im Auto-Betrieb standardmäßig automatisch. `SenderConfig::RequireWebStart` ist `false`; das Webinterface ist damit nicht mehr erforderlich, um CAN/OBD und ESP-NOW zu starten.
+- Der Sender sendet mindestens alle `SenderConfig::HeartbeatIntervalMs` ein Heartbeat-/Statuspaket per ESP-NOW, auch wenn noch keine OBD-Antwort oder kein CAN-Frame vorliegt.
+
+### Sender-Start und Statuslogik
+
+Beim Einschalten erwartet der serielle Monitor u. a.:
+
+```text
+[SENDER] Auto start enabled
+[ESP-NOW] Heartbeat sent seq=...
+```
+
+Die Statusanzeigen sind bewusst getrennt:
+
+- ESP-NOW: grün, sobald gültige Telemetrie- oder Heartbeat-Pakete empfangen werden.
+- CAN: zeigt den CAN-/TWAI-Zustand des Senders; kann warnen oder rot sein, obwohl ESP-NOW grün ist.
+- OBD: zeigt, ob echte ECU-Antworten eintreffen; fehlende OBD-Antworten machen nicht automatisch ESP-NOW rot.
+- Simulation: zeigt nur, ob Simulationsdaten aktiv sind.
+
+Fehlersuche im Auto:
+
+1. Wenn ESP-NOW rot bleibt: MAC-Adressen, ESP-NOW-Kanal und AES-Key in `include/secrets.h` prüfen.
+2. Wenn ESP-NOW grün, aber OBD rot/orange ist: CAN-Verkabelung, OBD-Pins, Zündung und Fahrzeugunterstützung prüfen.
+3. Wenn CAN rot ist: TWAI-Initialisierung, Transceiver, CAN-H/L und Baudrate prüfen.
+4. Wenn Werte grau sind: Pakete kommen, aber einzelne Messwerte sind älter als `DisplayConfigValues::ValueTimeoutMs`.
 
 ### OTA-Version und Status pruefen
 
@@ -163,8 +188,8 @@ verfuegbar.
 
 Nach einem Web-OTA kann die installierte Version direkt geprueft werden:
 
-- Sender: `http://192.168.4.1/status` im WLAN `ESP_OBD_Debug`
-- Display: `http://192.168.4.1/status` im WLAN `CANOBD2_Display_OTA`
+- Sender: `http://192.168.4.1/status` im Sender-WLAN aus `include/secrets.h`
+- Display: `http://192.168.4.1/status` im Display-WLAN aus `include/secrets.h`
 
 Wichtige JSON-Felder:
 
@@ -195,7 +220,7 @@ Die zentralen Build-Flags liegen in `platformio.ini` und `include/common_config.
 
 Bluetooth ist standardmäßig deaktiviert und wird bei `0` nicht mitkompiliert.
 
-Die Sender-WebConsole ist über den SoftAP `ESP_OBD_Debug` erreichbar, wenn `CANOBD2_ENABLE_SENDER_WEBCONSOLE=1` und `Config::EnableWebConsole` aktiv sind.
+Die Sender-WebConsole ist über den in `include/secrets.h` konfigurierten SoftAP erreichbar, wenn `CANOBD2_ENABLE_SENDER_WEBCONSOLE=1` und `Config::EnableWebConsole` aktiv sind.
 
 ## Zentrale Konfiguration
 
@@ -206,12 +231,12 @@ Alle gemeinsamen Laufzeitwerte liegen in `include/Config.h`. Die wichtigsten Ber
 - `Config::Sender`: CAN-/OBD2-Pins, Polling-/Timeout-Werte und Power-Messung.
 - `Config::Feature`: Bluetooth, WebConsole, Display-Web-OTA und Simulation.
 
-Aktuelle WLAN-/OTA-Werte:
+Aktuelle WLAN-/OTA-Werte werden nicht mehr fest im Repository gepflegt. Für echte Geräte `include/secrets.example.h` nach `include/secrets.h` kopieren und dort setzen:
 
 | Ziel | SSID | Passwort | Zweck |
 | --- | --- | --- | --- |
-| Sender | `ESP_OBD_Debug` | `12345678` | WebConsole + Web-OTA |
-| Display | `CANOBD2_Display_OTA` | `Update123` | Display-Web-OTA |
+| Sender | `Secrets::SenderWebSsid` | `Secrets::SenderWebPassword` | WebConsole + Web-OTA |
+| Display | `Secrets::DisplayWebSsid` | `Secrets::DisplayWebPassword` | Display-Web-OTA |
 
 ESP-NOW nutzt zentral `Config::Network::EspNowChannel`. Wenn Web-OTA/AP und ESP-NOW parallel laufen, müssen beide Geräte auf demselben Kanal bleiben.
 
@@ -236,8 +261,8 @@ Falls eine andere Board-Revision verwendet wird und das Display trotzdem dunkel 
 Die WebConsole ist für iPhone-Breite optimiert und wird ohne horizontales
 Verschieben bedient. Nach dem Flashen:
 
-1. Mit WLAN `ESP_OBD_Debug` verbinden.
-2. Passwort `12345678` verwenden.
+1. Mit dem in `include/secrets.h` gesetzten Sender-WLAN verbinden (`Secrets::SenderWebSsid`).
+2. Das dort gesetzte Passwort verwenden (`Secrets::SenderWebPassword`).
 3. Im Browser `http://192.168.4.1/` öffnen.
 
 Die Oberfläche hat vier Seiten, die über Buttons umgeschaltet werden:
@@ -247,8 +272,10 @@ Die Oberfläche hat vier Seiten, die über Buttons umgeschaltet werden:
 - Log: Logger-/Systemmeldungen
 - OTA: Firmwaredatei `firmware.bin` direkt über die Webseite hochladen
 
-Wenn `Config::RequireWebStart = true` gesetzt ist, wartet der Sender nach dem
-Start auf den Button `Sender starten`. OTA und WebConsole bleiben dabei aktiv.
+Standardmäßig wartet der Sender nicht mehr auf die WebConsole. Nur wenn
+`SenderConfig::RequireWebStart = true` gesetzt wird, dient der Button
+`Sender starten` als manuelle Freigabe. OTA, WebConsole und Heartbeat bleiben
+auch in diesem manuellen Modus aktiv.
 
 ### Web-OTA vom iPhone
 
@@ -257,8 +284,8 @@ hochladen. Wichtig: Immer die zum Gerät passende Datei verwenden.
 
 Sender:
 
-1. iPhone mit WLAN `ESP_OBD_Debug` verbinden.
-2. Passwort `12345678` eingeben.
+1. iPhone mit dem Sender-WLAN aus `include/secrets.h` verbinden.
+2. Das dort gesetzte Sender-Web-Passwort eingeben.
 3. `http://192.168.4.1/` öffnen.
 4. Seite `OTA` wählen.
 5. Sender-Firmware aus `.pio/build/sender/firmware.bin` hochladen.
@@ -359,7 +386,7 @@ Aktuell abgedeckt:
 3. Verbrauch: Durchschnittsverbrauch, Kraftstoffrate, Geschwindigkeit, Drosselklappe
 4. Zusatzwerte: MAF, Tankfüllstand, Motorlaufzeit, Umgebungstemperatur
 5. CAN-Rohdaten: letzter CAN-Frame, Frame-Zähler, einfache OBD/CAN-Hinweise
-6. Diagnose: ESP-NOW, CAN/OBD, Datenqualität, CRC-/Drop-Zähler
+6. Diagnose: ESP-NOW, CAN, OBD, Heartbeat, Datenqualität und Paketverlust
 7. Fehlercodes: DTC-Status und aktive Fehlercodes
 8. Drehzahl-Grafik: grosser RPM-Wert, Balken 0 bis `DisplayConfigValues::RpmMax`, Warn-/Kritisch-Marken und Max-RPM seit Start
 9. Ladedruck: fertiger `BoostPressureBar` in bar plus MAP und BARO als Zusatzwerte
@@ -463,6 +490,28 @@ Sender-Button:
 - gedrueckt: beide LEDs als LED-Test einschalten
 - losgelassen: normaler LED-Modus
 - entprellt und ohne blockierende Delays
+
+## Sicherheit und lokale Secrets
+
+Sensible Werte liegen nicht mehr direkt in `Config.h`. Das Repository enthält
+nur `include/secrets.example.h` mit Platzhaltern. Für echte Geräte:
+
+1. `include/secrets.example.h` nach `include/secrets.h` kopieren.
+2. WLAN-Passwörter, Web-Login, OTA-Passwort, ESP-NOW-Key und MAC-Adressen
+   dort setzen.
+3. `include/secrets.h` nicht committen; die Datei ist in `.gitignore`
+   eingetragen.
+
+Die Sender- und Display-Weboberflächen sind standardmäßig per Basic
+Authentication geschützt (`SecurityConfig::EnableAuthentication = true`).
+Geschützt sind insbesondere:
+
+- Web-OTA
+- Neustart-Endpunkte
+- Simulation-Endpunkte
+- Status-/Log-Webseiten
+
+Weitere Details stehen in `docs/security.md`.
 
 ## End-to-End Test Sender zu Display
 

@@ -23,7 +23,7 @@ namespace DisplaySimulation {
       const auto sample = Simulation::simulatedPidValue(sampleIndex, millis(), scenario);
 
       char value[16];
-      snprintf(value, sizeof(value), sample.decimals == 0 ? "%.0f" : "%.1f", sample.value);
+      snprintf(value, sizeof(value), sample.decimals == 0 ? "%.0f" : "%.1f", static_cast<double>(sample.value));
       upsertValue(sample.type,
                   sample.key,
                   sample.name,
@@ -35,9 +35,14 @@ namespace DisplaySimulation {
 
     internalSimulationIndex += Simulation::simulatedPidCount();
     lastReceivedAt = millis();
+    lastHeartbeatAt = millis();
+    lastHeartbeatSequence = static_cast<uint32_t>(internalSimulationIndex);
     const auto isoTp = Simulation::buildIsoTpSequence(scenario);
     upsertValue("STATUS", "CAN", "CAN", "SIMULATED", "", "OK", internalSimulationIndex);
     upsertValue("STATUS", "OBD", "OBD", isoTp.timeoutExpected ? "TIMEOUT" : "SIMULATED", "", isoTp.timeoutExpected ? "TIMEOUT" : "OK", internalSimulationIndex + 1);
+    lastCanStatusAt = millis();
+    lastObdStatusAt = millis();
+    upsertValue("STATUS", "HEARTBEAT", "Heartbeat", String(static_cast<unsigned long>(internalSimulationIndex)), "", "OK", internalSimulationIndex);
     upsertValue("STATUS", "SIM", "Simulation", Simulation::RuntimeSimulation::enabled() ? "aktiv" : "inaktiv", "", "OK", internalSimulationIndex + 2);
     upsertValue("STATUS", "SIM_SCENARIO", "SimScenario", Simulation::RuntimeSimulation::scenarioName(), "", "OK", internalSimulationIndex + 3);
     upsertValue("CAN", "RAW", "LastCAN", "0x7E8 DLC8 04 41 0C 1A F8 55 55 55", "", "OK", internalSimulationIndex + 4);

@@ -71,7 +71,7 @@ namespace SenderPower {
   void sendBatteryVoltage() {
     Config::VoltageMeasurement measurement = readVinVoltage();
     char value[16];
-    snprintf(value, sizeof(value), "%.2f", measurement.voltage);
+    snprintf(value, sizeof(value), "%.2f", static_cast<double>(measurement.voltage));
     Utils::sendTelemetry("BATTERY", "VOLTAGE", "BatteryVoltage", value, "V", "OK");
   }
 

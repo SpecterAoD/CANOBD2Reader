@@ -3,6 +3,7 @@
 #include "Config.h"
 #include "RuntimeSimulation.h"
 #include "SimulationTypes.h"
+#include "AuthHelpers.h"
 #include <ArduinoOTA.h>
 #include <WiFi.h>
 #include <WebServer.h>
@@ -47,6 +48,7 @@ namespace {
   }
 
   void handleRoot() {
+    if (!WebSecurity::requireAuthentication(server)) return;
     static const char html[] PROGMEM = R"rawliteral(
 <!doctype html>
 <html lang="de">
@@ -99,8 +101,9 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
   }
 
   void handleStatus() {
+    if (!WebSecurity::requireAuthentication(server)) return;
     String json;
-    json.reserve(520);
+    json.reserve(760);
     json += "{";
     json += "\"firmware\":\"" + jsonEscape(Config::Project::FirmwareVersion) + "\",";
     json += "\"target\":\"" + jsonEscape(Config::Project::TargetName) + "\",";
@@ -115,40 +118,56 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     json += "\"update\":" + String(webUpdateInProgress ? "true" : "false") + ",";
     json += "\"simulation\":" + String(Simulation::RuntimeSimulation::enabled() ? "true" : "false") + ",";
     json += "\"simulationScenario\":\"" + jsonEscape(Simulation::RuntimeSimulation::scenarioName()) + "\",";
+    json += "\"espNowConnected\":" + String(DisplayData::isEspNowConnected() ? "true" : "false") + ",";
+    json += "\"canStatusRecent\":" + String(DisplayData::isCanStatusRecent() ? "true" : "false") + ",";
+    json += "\"obdStatusRecent\":" + String(DisplayData::isObdStatusRecent() ? "true" : "false") + ",";
+    json += "\"lastPacketAge\":" + String(DisplayData::lastReceivedAt == 0 ? 0 : millis() - DisplayData::lastReceivedAt) + ",";
+    json += "\"lastHeartbeatAge\":" + String(DisplayData::lastHeartbeatAt == 0 ? 0 : millis() - DisplayData::lastHeartbeatAt) + ",";
+    json += "\"lastHeartbeatSequence\":" + String(DisplayData::lastHeartbeatSequence) + ",";
+    json += "\"lastSequence\":" + String(DisplayData::lastSequence) + ",";
+    json += "\"receivedPackets\":" + String(DisplayData::receivedPackets) + ",";
+    json += "\"droppedPackets\":" + String(DisplayData::droppedPackets) + ",";
+    json += "\"crcErrors\":" + String(DisplayData::crcErrors) + ",";
     json += "\"lastError\":\"" + jsonEscape(DisplayData::lastError) + "\"";
     json += "}";
     server.send(200, "application/json", json);
   }
 
   void handleRestart() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireRestartAuthentication)) return;
     server.send(200, "application/json", "{\"restart\":true}");
-    delay(300);
+    delay(Config::Security::RestartDelayMs);
     ESP.restart();
   }
 
   void handleSimulationStatus() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     server.send(200, "application/json", simulationJson());
   }
 
   void handleSimulationOn() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::setEnabled(true);
     DisplayData::lastError = "Simulation eingeschaltet";
     server.send(200, "application/json", simulationJson());
   }
 
   void handleSimulationOff() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::setEnabled(false);
     DisplayData::lastError = "Simulation ausgeschaltet";
     server.send(200, "application/json", simulationJson());
   }
 
   void handleSimulationToggle() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::toggle();
     DisplayData::lastError = Simulation::RuntimeSimulation::enabled() ? "Simulation eingeschaltet" : "Simulation ausgeschaltet";
     server.send(200, "application/json", simulationJson());
   }
 
   void handleSimulationScenario() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
     String raw = server.arg("scenario");
     if (raw.length() == 0) raw = server.arg("plain");
     raw.trim();
@@ -165,6 +184,7 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
   }
 
   void handleUpdateFinished() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireOtaAuthentication)) return;
     const bool ok = !Update.hasError();
     if (!ok && webOtaStatus == "Bereit") {
       webOtaStatus = updateErrorText("Update fehlgeschlagen");
@@ -179,11 +199,17 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
   }
 
   void handleUpdateUpload() {
+    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireOtaAuthentication)) return;
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
       webUpdateInProgress = true;
       webOtaStatus = "Upload gestartet: " + upload.filename;
       DisplayData::lastError = webOtaStatus;
+      if (Config::Security::RejectOtaWhenSketchSpaceUnknown && ESP.getFreeSketchSpace() == 0) {
+        webOtaStatus = "OTA abgelehnt: freier Sketch-Speicher unbekannt";
+        DisplayData::lastError = webOtaStatus;
+        return;
+      }
       if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
         webOtaStatus = updateErrorText("Update.begin fehlgeschlagen");
         DisplayData::lastError = webOtaStatus;

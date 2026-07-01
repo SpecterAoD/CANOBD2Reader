@@ -11,6 +11,7 @@ namespace {
   uint32_t lastUiStatsLogMs = 0;
   bool fullPageRedraw = true;
   float maxRpmSinceStart = 0.0f;
+  bool lastEspNowConnected = false;
 
   struct DisplayInitCommand {
     uint8_t command;
@@ -107,12 +108,18 @@ namespace {
 
   void drawStatusBar() {
     using namespace DisplayData;
-    const uint16_t barColor = isConnected() ? DisplayConfig::Panel : DisplayConfig::Error;
+    const bool connected = isEspNowConnected();
+    if (lastEspNowConnected && !connected) {
+      Serial.println("[DISPLAY] ESP-NOW timeout");
+    }
+    lastEspNowConnected = connected;
+
+    const uint16_t barColor = connected ? DisplayConfig::Panel : DisplayConfig::Error;
     tft.fillRect(0, 0, tft.width(), 20, barColor);
     tft.setTextSize(1);
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(DisplayConfig::Text, barColor);
-    tft.drawString(isConnected() ? "ESP-NOW OK" : "VERBINDUNG VERLOREN", 4, 10);
+    tft.drawString(connected ? "ESP-NOW OK" : "VERBINDUNG VERLOREN", 4, 10);
 
     tft.setTextDatum(MR_DATUM);
     String right = "S" + String(currentPage + 1) + "/" + String(DisplayConfig::PageCount);
@@ -529,18 +536,25 @@ namespace {
     uint32_t totalPackets = receivedPackets + droppedPackets;
     uint8_t quality = totalPackets == 0 ? 0 : (receivedPackets * 100UL) / totalPackets;
     DisplayTelemetryValue* canStatus = findValue("CAN");
+    DisplayTelemetryValue* obdStatus = findValue("OBD");
+    DisplayTelemetryValue* heartbeat = findValue("HEARTBEAT");
+    const bool espNowOk = isEspNowConnected();
+    const bool canRecent = isCanStatusRecent();
+    const bool obdRecent = isObdStatusRecent();
 
-    drawMetricBox(6, 28, 150, 42, "ESP-NOW", isConnected() ? "aktiv" : "verloren", isConnected() ? DisplayConfig::Ok : DisplayConfig::Error);
-    bool canStatusRecent = canStatus != nullptr && millis() - canStatus->updatedAt <= DisplayConfig::ValueTimeoutMs;
-    drawMetricBox(164, 28, 150, 42, "CAN/OBD", canStatusRecent ? canStatus->value : "--", isFresh(canStatus) ? DisplayConfig::Ok : DisplayConfig::Warn);
-    drawMetricBox(6, 76, 150, 42, "Datenqualität", String(quality) + " %", quality > 90 ? DisplayConfig::Ok : DisplayConfig::Warn);
-    drawMetricBox(164, 76, 150, 42, "CRC/Drop", String(crcErrors) + "/" + String(droppedPackets), (crcErrors == 0 && droppedPackets == 0) ? DisplayConfig::Ok : DisplayConfig::Warn);
+    drawMetricBox(6, 28, 150, 42, "ESP-NOW", espNowOk ? "aktiv" : "verloren", espNowOk ? DisplayConfig::Ok : DisplayConfig::Error);
+    drawMetricBox(164, 28, 150, 42, "CAN", canRecent && canStatus != nullptr ? canStatus->value : "--",
+                  canRecent && isFresh(canStatus) ? DisplayConfig::Ok : (canRecent ? DisplayConfig::Warn : DisplayConfig::Error));
+    drawMetricBox(6, 76, 150, 42, "OBD", obdRecent && obdStatus != nullptr ? obdStatus->value : "--",
+                  obdRecent && isFresh(obdStatus) ? DisplayConfig::Ok : (obdRecent ? DisplayConfig::Warn : DisplayConfig::Error));
+    drawMetricBox(164, 76, 150, 42, "Heartbeat", heartbeat != nullptr ? heartbeat->value : "--",
+                  espNowOk ? DisplayConfig::Ok : DisplayConfig::Error);
 
     tft.fillRoundRect(6, 124, 308, 28, 6, DisplayConfig::Panel);
     tft.setTextDatum(ML_DATUM);
     tft.setTextSize(1);
     tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
-    String firmwareLine = String("FW ") + DISPLAY_FIRMWARE_VERSION + "  Seq " + String(lastSequence);
+    String firmwareLine = String("FW ") + DISPLAY_FIRMWARE_VERSION + "  Seq " + String(lastSequence) + " Q " + String(quality) + "%";
     tft.drawString(firmwareLine, 14, 132);
     tft.setTextColor(DisplayConfig::Text, DisplayConfig::Panel);
     String sim = displayText("Simulation");
@@ -555,7 +569,9 @@ namespace {
   void drawCANPage() {
     using namespace DisplayData;
     drawMetricBox(6, 28, 150, 42, "CAN Frames", displayValue("CANCount", 0), valueColor("CANCount"));
-    drawMetricBox(164, 28, 150, 42, "CAN Status", displayText("CAN"), isConnected() ? DisplayConfig::Ok : DisplayConfig::Warn);
+    DisplayTelemetryValue* canStatus = findValue("CAN");
+    drawMetricBox(164, 28, 150, 42, "CAN Status", displayText("CAN"),
+                  isCanStatusRecent() && isFresh(canStatus) ? DisplayConfig::Ok : (isCanStatusRecent() ? DisplayConfig::Warn : DisplayConfig::Error));
 
     tft.fillRoundRect(6, 78, 308, 74, 6, DisplayConfig::Panel);
     tft.setTextDatum(TL_DATUM);

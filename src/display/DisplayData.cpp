@@ -1,4 +1,5 @@
 #include "DisplayData.h"
+#include "StatusLogic.h"
 
 namespace {
   float g_filteredSpeed = 0.0f;
@@ -100,6 +101,10 @@ namespace DisplayData {
   uint32_t droppedPackets = 0;
   uint32_t crcErrors = 0;
   uint32_t lastSequence = 0;
+  uint32_t lastHeartbeatAt = 0;
+  uint32_t lastHeartbeatSequence = 0;
+  uint32_t lastCanStatusAt = 0;
+  uint32_t lastObdStatusAt = 0;
   String lastRawPayload = "";
   String lastError = "Keine Daten";
   uint32_t lastInternalSimulationUpdate = 0;
@@ -151,7 +156,19 @@ namespace DisplayData {
   }
 
   bool isConnected() {
-    return lastReceivedAt > 0 && millis() - lastReceivedAt <= DisplayConfig::ConnectionTimeoutMs;
+    return isEspNowConnected();
+  }
+
+  bool isEspNowConnected() {
+    return StatusLogic::packetLinkHealth(millis(), lastReceivedAt, DisplayConfig::EspNowTimeoutMs) == StatusLogic::Health::Ok;
+  }
+
+  bool isCanStatusRecent() {
+    return lastCanStatusAt > 0 && millis() - lastCanStatusAt <= DisplayConfig::CanTimeoutMs;
+  }
+
+  bool isObdStatusRecent() {
+    return lastObdStatusAt > 0 && millis() - lastObdStatusAt <= DisplayConfig::ObdTimeoutMs;
   }
 
   bool isFresh(const DisplayTelemetryValue* value) {

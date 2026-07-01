@@ -8,6 +8,7 @@ constexpr bool EnableCAN = true;
 constexpr bool EnableOBD2 = true;
 constexpr bool SendRawData = false;
 constexpr bool SendRawDataOnly = false;
+constexpr bool RequireWebStart = false;
 
 constexpr int LedPin1 = 26;
 constexpr int LedPin2 = 27;
@@ -24,6 +25,7 @@ constexpr uint32_t ObdPollIntervalMs = 200;
 constexpr uint32_t ObdResponseTimeoutMs = 250;
 constexpr uint32_t ObdTxTimeoutMs = 50;
 constexpr uint32_t BatterySendIntervalMs = 3000;
+constexpr uint32_t HeartbeatIntervalMs = 1000;
 constexpr uint32_t SimulationIntervalMs = 250;
 constexpr uint32_t LedTestDebounceMs = 50;
 constexpr uint32_t SupportedPidRefreshMs = 60000;

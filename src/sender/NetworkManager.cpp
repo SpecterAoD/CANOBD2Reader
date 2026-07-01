@@ -68,7 +68,7 @@ namespace NetworkManager {
         peerInfo.encrypt = Config::Network::UseEspNowEncryption;
 
         if (Config::Network::UseEspNowEncryption) {
-            memcpy(peerInfo.lmk, Config::Network::EspNowAesKey, sizeof(Config::Network::EspNowAesKey));
+            memcpy(peerInfo.lmk, Config::Network::EspNowAesKey, 16);
         }
 
         if (esp_now_add_peer(&peerInfo) != ESP_OK) {

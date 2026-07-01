@@ -66,7 +66,7 @@ inline void sendOBDValue(byte pid, const char* name, float value, const char* un
     char pidHex[4];
     char valueText[16];
     snprintf(pidHex, sizeof(pidHex), "%02X", pid);
-    snprintf(valueText, sizeof(valueText), "%.2f", value);
+    snprintf(valueText, sizeof(valueText), "%.2f", static_cast<double>(value));
     sendTelemetry("OBD", pidHex, name, valueText, unit, "OK");
 }
 

@@ -50,6 +50,7 @@
 #include "OTAHandler.h"
 #include "SenderPower.h"
 #include "WebConsoleHandler.h"
+#include "StatusLogic.h"
 // End region ================================== Includes ==================================
 
 // region ================================== #define ==================================
@@ -77,6 +78,7 @@ constexpr uint32_t kCanIdleTimeoutMs = Config::Sender::CanIdleTimeoutMs;
 constexpr uint32_t kObdResponseTimeoutMs = Config::Sender::ObdResponseTimeoutMs;
 constexpr uint32_t kObdTxTimeoutMs = Config::Sender::ObdTxTimeoutMs;
 constexpr uint32_t kBatterySendIntervalMs = Config::Sender::BatterySendIntervalMs;
+constexpr uint32_t kHeartbeatIntervalMs = Config::Sender::HeartbeatIntervalMs;
 constexpr uint32_t kSupportedPidRefreshIntervalMs = Config::Sender::SupportedPidRefreshIntervalMs;
 constexpr uint32_t kDtcQueryIntervalMs = Config::Sender::DtcQueryIntervalMs;
 constexpr uint32_t kSimulationSendIntervalMs = Config::Sender::SimulationIntervalMs;
@@ -93,6 +95,8 @@ uint32_t currentMillis;
 unsigned long last_can_msg_timestamp = 0;
 unsigned long last_obd_request_time = 0;
 unsigned long last_battery_send_time = 0;
+unsigned long last_heartbeat_send_time = 0;
+unsigned long last_obd_response_time = 0;
 unsigned long last_supported_pid_refresh_time = 0;
 unsigned long last_dtc_query_time = 0;
 unsigned long last_simulation_send_time = 0;
@@ -101,9 +105,11 @@ uint32_t telemetry_sequence = 0;
 uint32_t telemetry_send_ok = 0;
 uint32_t telemetry_send_fail = 0;
 uint32_t telemetry_last_summary_ms = 0;
+uint32_t heartbeat_count = 0;
 size_t simulation_sample_index = 0;
 bool can_bus_active = false;
 bool can_driver_ready = false;
+bool esp_now_ready = false;
 bool led_test_active = false;
 bool supported_pids_initialized = false;
 uint32_t supported_pids_01_20 = 0;
@@ -111,6 +117,7 @@ uint32_t supported_pids_21_40 = 0;
 uint32_t supported_pids_41_60 = 0;
 String last_dtc_text = "--";
 String last_error_text = "";
+String last_send_error_text = "";
 
 // End region ========================== Laufzeitvariablen ==========================
 
@@ -118,6 +125,7 @@ String last_error_text = "";
 int getMeshID();
 void sendTelemetry(const char* type, const char* key, const char* name, const char* value, const char* unit, const char* status);
 void sendStatusFrame(const char* key, const char* value, const char* status);
+void sendHeartbeat();
 void updateWebConsoleStatus();
 void maybeLogTelemetrySendSummary();
 void refreshSupportedPIDs();
@@ -152,7 +160,7 @@ bool initESPNow() {
   peerInfo.encrypt = Config::Network::UseEspNowEncryption;
 
   if (Config::Network::UseEspNowEncryption) {
-    memcpy(peerInfo.lmk, Config::Network::EspNowAesKey, sizeof(Config::Network::EspNowAesKey));
+    memcpy(peerInfo.lmk, Config::Network::EspNowAesKey, 16);
   }
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
@@ -201,6 +209,7 @@ void SenderApp::begin() {
   last_can_msg_timestamp = millis() - kCanIdleTimeoutMs + 5;
 
   const bool espNowReady = initESPNow();
+  esp_now_ready = espNowReady;
   can_driver_ready = Simulation::RuntimeSimulation::enabled() || CANHandler::init();
 
   WebConsoleHandler::begin();
@@ -216,12 +225,17 @@ void SenderApp::begin() {
     WebConsoleHandler::log("[Sender] CAN Init fehlgeschlagen, WebConsole/OTA bleiben aktiv");
   }
 
+  WebConsoleHandler::log(Config::Network::RequireWebStart
+                           ? "[SENDER] Manual web start required"
+                           : "[SENDER] Auto start enabled");
+
   if (espNowReady) {
     sendTelemetry("STATUS", "FW", "Firmware", Config::Project::FirmwareVersion, "", "OK");
     char protocolVersion[4];
     snprintf(protocolVersion, sizeof(protocolVersion), "%u", Config::Project::ProtocolVersion);
     sendTelemetry("STATUS", "PROTO", "Protocol", protocolVersion, "", "OK");
     sendStatusFrame("CAN", can_driver_ready ? "READY" : "INIT_FAIL", can_driver_ready ? "OK" : "ERROR");
+    sendHeartbeat();
   }
 
   WebConsoleHandler::log(can_driver_ready ? "Sender bereit" : "Sender im Fehler-/OTA-Modus");
@@ -404,9 +418,17 @@ void sendTelemetry(const char* type,
   const esp_err_t sendResult = esp_now_send(peerAddress, (uint8_t*)&text_frame, sizeof(text_frame));
   if (sendResult == ESP_OK) {
     ++telemetry_send_ok;
+    last_send_error_text = "";
+    if (strcmp(type, "STATUS") == 0 && strcmp(key, "HEARTBEAT") == 0) {
+      Serial.printf("[ESP-NOW] Heartbeat sent seq=%lu\n", static_cast<unsigned long>(telemetry_sequence));
+    }
   } else {
     ++telemetry_send_fail;
-    last_error_text = "ESP-NOW send error " + String(static_cast<int>(sendResult));
+    last_send_error_text = "ESP-NOW send error " + String(static_cast<int>(sendResult));
+    last_error_text = last_send_error_text;
+    Serial.printf("[ESP-NOW] Send failed error=%d seq=%lu\n",
+                  static_cast<int>(sendResult),
+                  static_cast<unsigned long>(telemetry_sequence));
     if (Config::Debug::TraceSenderTelemetry && Config::Debug::Serial) {
       Serial.printf("[sender-tx] send failed seq=%lu err=%d\n",
                     static_cast<unsigned long>(telemetry_sequence),
@@ -418,6 +440,9 @@ void sendTelemetry(const char* type,
   WebConsoleHandler::recordTelemetry(last_telemetry_payload);
   if (strcmp(status, "OK") != 0) {
     last_error_text = String(type) + "/" + key + ": " + status;
+  }
+  if (strcmp(type, "OBD") == 0 && strcmp(status, "OK") == 0) {
+    last_obd_response_time = millis();
   }
 }
 
@@ -444,6 +469,36 @@ void sendStatusFrame(const char* key, const char* value, const char* status) {
   sendTelemetry("STATUS", key, key, value, "", status);
 }
 
+void sendHeartbeat() {
+  if (!esp_now_ready) return;
+  const uint32_t now = millis();
+  if (!StatusLogic::isHeartbeatDue(now, last_heartbeat_send_time, kHeartbeatIntervalMs)) return;
+  last_heartbeat_send_time = now;
+  ++heartbeat_count;
+
+  char uptimeText[16];
+  char heartbeatText[16];
+  snprintf(uptimeText, sizeof(uptimeText), "%lu", static_cast<unsigned long>(now));
+  snprintf(heartbeatText, sizeof(heartbeatText), "%lu", static_cast<unsigned long>(heartbeat_count));
+
+  const bool senderRunning = WebConsoleHandler::isStarted();
+  const bool obdRecent = last_obd_response_time > 0 &&
+                         now - last_obd_response_time <= Config::Display::ObdTimeoutMs;
+  const bool canRecent = last_can_msg_timestamp > 0 &&
+                         now - last_can_msg_timestamp <= Config::Display::CanTimeoutMs;
+
+  sendStatusFrame("HEARTBEAT", heartbeatText, "OK");
+  sendStatusFrame("SENDER", senderRunning ? "RUNNING" : "WAIT_WEB_START", senderRunning ? "OK" : "WARN");
+  sendStatusFrame("FW", Config::Project::FirmwareVersion, "OK");
+  sendStatusFrame("UPTIME", uptimeText, "OK");
+  sendStatusFrame("CAN", can_driver_ready ? (canRecent ? "ACTIVE" : "IDLE") : "INIT_FAIL",
+                  can_driver_ready ? (canRecent ? "OK" : "WARN") : "ERROR");
+  sendStatusFrame("OBD", Config::Sender::EnableOBD2 ? (obdRecent ? "ACTIVE" : "NO_RESPONSE") : "DISABLED",
+                  Config::Sender::EnableOBD2 ? (obdRecent ? "OK" : "WARN") : "WARN");
+  sendStatusFrame("SIM", Simulation::RuntimeSimulation::enabled() ? "ACTIVE" : "INACTIVE",
+                  Simulation::RuntimeSimulation::enabled() ? "OK" : "WARN");
+}
+
 void sendSimulationTelemetry() {
   if (millis() - last_simulation_send_time < kSimulationSendIntervalMs) return;
   last_simulation_send_time = millis();
@@ -451,7 +506,7 @@ void sendSimulationTelemetry() {
   const auto scenario = Simulation::RuntimeSimulation::scenario();
   const auto simulated = Simulation::simulatedPidValue(simulation_sample_index, millis(), scenario);
   char value[16];
-  snprintf(value, sizeof(value), simulated.decimals == 0 ? "%.0f" : "%.1f", simulated.value);
+  snprintf(value, sizeof(value), simulated.decimals == 0 ? "%.0f" : "%.1f", static_cast<double>(simulated.value));
   sendTelemetry(simulated.type,
                 simulated.key,
                 simulated.name,
@@ -484,15 +539,23 @@ void sendSimulationTelemetry() {
 void updateWebConsoleStatus() {
   WebConsoleRuntimeStatus status;
   status.canActive = can_bus_active;
-  status.obdActive = Config::Sender::EnableOBD2;
+  status.obdActive = Config::Sender::EnableOBD2 && last_obd_response_time > 0 &&
+                     millis() - last_obd_response_time <= Config::Display::ObdTimeoutMs;
   status.pidSupportReady = supported_pids_initialized;
   status.simulationActive = Simulation::RuntimeSimulation::enabled();
   status.simulationScenario = Simulation::RuntimeSimulation::scenarioName();
   status.batteryVoltage = SenderPower::getLastVoltage();
   status.uptimeMs = millis();
   status.telemetrySequence = telemetry_sequence;
+  status.telemetrySendOk = telemetry_send_ok;
+  status.telemetrySendFail = telemetry_send_fail;
+  status.heartbeatCount = heartbeat_count;
   status.lastCanAgeMs = last_can_msg_timestamp == 0 ? 0 : millis() - last_can_msg_timestamp;
+  status.lastObdAgeMs = last_obd_response_time == 0 ? 0 : millis() - last_obd_response_time;
   status.canState = can_driver_ready ? (can_bus_active ? "ACTIVE" : "IDLE") : "INIT_FAIL";
+  status.obdState = Config::Sender::EnableOBD2 ? (status.obdActive ? "ACTIVE" : "NO_RESPONSE") : "DISABLED";
+  status.espNowState = esp_now_ready ? "READY" : "INIT_FAIL";
+  status.lastSendError = last_send_error_text;
   status.lastDtc = last_dtc_text;
   status.lastTelemetry = String(last_telemetry_payload);
   status.lastError = last_error_text;
@@ -523,6 +586,7 @@ void SenderApp::tick() {
   WebConsoleHandler::handle();
   updateWebConsoleStatus();
   handleLedTestButton();
+  sendHeartbeat();
 
   if (Simulation::RuntimeSimulation::enabled()) {
     sendSimulationTelemetry();
@@ -616,7 +680,9 @@ void SenderApp::tick() {
         }
         continue;
       }
-      OBD2Handler::requestAndSendPID(Config::ObdRequestedPids[i]);
+      if (OBD2Handler::requestAndSendPID(Config::ObdRequestedPids[i])) {
+        last_obd_response_time = currentMillis;
+      }
     }
 
     if (currentMillis - last_dtc_query_time >= kDtcQueryIntervalMs) {

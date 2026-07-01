@@ -9,6 +9,7 @@
 #include "DisplayConfig.h"
 #include "DisplayData.h"
 #include "TelemetryCodec.h"
+#include "StatusLogic.h"
 
 namespace {
 
@@ -108,12 +109,23 @@ void parseTelemetryPayload(const char* payload, uint32_t sequence) {
     status = value == "N/A" ? "TIMEOUT" : "OK";
   }
 
-  if (payloadSequence > 0 && lastSequence > 0 && payloadSequence > lastSequence + 1) {
-    droppedPackets += payloadSequence - lastSequence - 1;
+  if (payloadSequence > 0) {
+    droppedPackets += StatusLogic::packetLossFromSequence(lastSequence, payloadSequence);
   }
   if (payloadSequence > 0) lastSequence = payloadSequence;
 
   upsertValue(type, key, name, value, unit, status, payloadSequence);
+  if (type == "STATUS") {
+    if (key == "HEARTBEAT") {
+      lastHeartbeatAt = millis();
+      lastHeartbeatSequence = payloadSequence;
+      Serial.printf("[DISPLAY] Heartbeat received seq=%lu\n", static_cast<unsigned long>(payloadSequence));
+    } else if (key == "CAN") {
+      lastCanStatusAt = millis();
+    } else if (key == "OBD") {
+      lastObdStatusAt = millis();
+    }
+  }
   lastRawPayload = raw;
   lastError = status == "OK" ? "" : status;
   maybeLogRxSummary();
@@ -195,7 +207,7 @@ void begin() {
   peer.channel = Config::Network::EspNowChannel;
   peer.encrypt = Config::Network::UseEspNowEncryption;
   if (Config::Network::UseEspNowEncryption) {
-    memcpy(peer.lmk, Config::Network::EspNowAesKey, sizeof(Config::Network::EspNowAesKey));
+    memcpy(peer.lmk, Config::Network::EspNowAesKey, 16);
   }
 
   esp_err_t peerResult = esp_now_add_peer(&peer);

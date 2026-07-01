@@ -7,6 +7,7 @@
 #include "DisplayConfig.h"
 #include "PIDs.h"
 #include "ProjectConfig.h"
+#include "SecurityConfig.h"
 #include "SenderConfig.h"
 #include "SimulationConfig.h"
 
@@ -50,35 +51,45 @@ namespace Config {
         constexpr const char* BluetoothName = "ESP-BT";
 
         // WebConsole / OTA Access Point des Senders.
-        constexpr const char* SenderWebSsid = "ESP_OBD_Debug";
-        constexpr const char* SenderWebPassword = "12345678";
+        constexpr const char* SenderWebSsid = Secrets::SenderWebSsid;
+        constexpr const char* SenderWebPassword = Secrets::SenderWebPassword;
         constexpr const char* SenderOtaHostname = "CAN_OBD2_Gateway";
-        constexpr const char* SenderOtaPassword = "Update123";
+        constexpr const char* SenderOtaPassword = Secrets::SenderOtaPassword;
 
         // Web-OTA Access Point des Displays.
-        constexpr const char* DisplayWebSsid = "CANOBD2_Display_OTA";
-        constexpr const char* DisplayWebPassword = "Update123";
+        constexpr const char* DisplayWebSsid = Secrets::DisplayWebSsid;
+        constexpr const char* DisplayWebPassword = Secrets::DisplayWebPassword;
         constexpr const char* DisplayOtaHostname = "CANOBD2_Display";
 
         constexpr uint16_t WebServerPort = 80;
         constexpr size_t WebConsoleMaxLines = 50;
-        constexpr bool RequireWebStart = true;
+        constexpr bool RequireWebStart = SenderConfig::RequireWebStart;
 
         // Optionales stationaeres WLAN fuer spaetere Erweiterungen.
-        constexpr const char* WifiSsid = "MeinOBDNetz";
-        constexpr const char* WifiPassword = "GeheimesPasswort123";
-        constexpr bool WifiEnable = true;
+        constexpr const char* WifiSsid = Secrets::WifiSsid;
+        constexpr const char* WifiPassword = Secrets::WifiPassword;
+        constexpr bool WifiEnable = WifiSsid[0] != '\0';
 
         // ESP-NOW: Sender sendet an die Display-MAC; Display akzeptiert nur die
         // Sender-MAC. Beide Werte muessen zu den realen Geraeten passen.
         constexpr uint8_t EspNowChannel = ProjectConfig::EspNowChannel;
         constexpr bool UseEspNowEncryption = true;
-        constexpr uint8_t EspNowAesKey[16] = {
-            0x3A, 0x7F, 0xC2, 0x91, 0x18, 0x5D, 0xE0, 0xB3,
-            0x4C, 0x22, 0xA1, 0x6E, 0xD4, 0x0F, 0x97, 0x8B
-        };
-        constexpr uint8_t DisplayPeerMac[6] = { 0xF0, 0xF5, 0xBD, 0x43, 0x29, 0x20 };
-        constexpr uint8_t SenderAllowedMac[6] = { 0x8C, 0x4B, 0x14, 0x27, 0xEB, 0x48 };
+        constexpr const uint8_t* EspNowAesKey = Secrets::EspNowAesKey;
+        constexpr const uint8_t* DisplayPeerMac = Secrets::DisplayPeerMac;
+        constexpr const uint8_t* SenderAllowedMac = Secrets::SenderAllowedMac;
+    }
+
+    namespace Security {
+        constexpr bool EnableAuthentication = SecurityConfig::EnableAuthentication;
+        constexpr const char* AuthenticationRealm = SecurityConfig::AuthenticationRealm;
+        constexpr const char* WebUsername = SecurityConfig::WebUsername;
+        constexpr const char* WebPassword = SecurityConfig::WebPassword;
+        constexpr const char* ApiToken = SecurityConfig::ApiToken;
+        constexpr bool RequireOtaAuthentication = SecurityConfig::RequireOtaAuthentication;
+        constexpr bool RequireSimulationAuthentication = SecurityConfig::RequireSimulationAuthentication;
+        constexpr bool RequireRestartAuthentication = SecurityConfig::RequireRestartAuthentication;
+        constexpr bool RejectOtaWhenSketchSpaceUnknown = SecurityConfig::RejectOtaWhenSketchSpaceUnknown;
+        constexpr uint32_t RestartDelayMs = SecurityConfig::RestartDelayMs;
     }
 
     // =========================================================================
@@ -109,6 +120,9 @@ namespace Config {
         constexpr float SpeedSmoothingAlpha = DisplayConfigValues::SpeedSmoothingAlpha;
         constexpr float RpmSmoothingAlpha = DisplayConfigValues::RpmSmoothingAlpha;
         constexpr uint32_t ConnectionTimeoutMs = DisplayConfigValues::ConnectionTimeoutMs;
+        constexpr uint32_t EspNowTimeoutMs = DisplayConfigValues::EspNowTimeoutMs;
+        constexpr uint32_t ObdTimeoutMs = DisplayConfigValues::ObdTimeoutMs;
+        constexpr uint32_t CanTimeoutMs = DisplayConfigValues::CanTimeoutMs;
         constexpr uint32_t ValueTimeoutMs = DisplayConfigValues::ValueTimeoutMs;
         constexpr uint32_t ButtonDebounceMs = DisplayConfigValues::ButtonDebounceMs;
         constexpr float CoolantWarnC = DisplayConfigValues::CoolantWarnC;
@@ -150,6 +164,7 @@ namespace Config {
         constexpr uint32_t ObdResponseTimeoutMs = SenderConfig::ObdResponseTimeoutMs;
         constexpr uint32_t ObdTxTimeoutMs = SenderConfig::ObdTxTimeoutMs;
         constexpr uint32_t BatterySendIntervalMs = SenderConfig::BatterySendIntervalMs;
+        constexpr uint32_t HeartbeatIntervalMs = SenderConfig::HeartbeatIntervalMs;
         constexpr uint32_t SimulationIntervalMs = SenderConfig::SimulationIntervalMs;
         constexpr uint32_t LedTestDebounceMs = SenderConfig::LedTestDebounceMs;
         constexpr uint32_t SupportedPidRefreshIntervalMs = SenderConfig::SupportedPidRefreshMs;
@@ -270,11 +285,8 @@ namespace Config {
         "https://raw.githubusercontent.com/user/repo/main/firmware.bin";
 
     constexpr bool UseEspNowEncryption = Network::UseEspNowEncryption;
-    constexpr uint8_t EspNowAesKey[16] = {
-        0x3A, 0x7F, 0xC2, 0x91, 0x18, 0x5D, 0xE0, 0xB3,
-        0x4C, 0x22, 0xA1, 0x6E, 0xD4, 0x0F, 0x97, 0x8B
-    };
-    constexpr uint8_t EspNowPeerMac[6] = { 0xF0, 0xF5, 0xBD, 0x43, 0x29, 0x20 };
+    constexpr const uint8_t* EspNowAesKey = Network::EspNowAesKey;
+    constexpr const uint8_t* EspNowPeerMac = Network::DisplayPeerMac;
 
     // =========================================================================
     // Gemeinsame Datenstrukturen / Laufzeitwerte

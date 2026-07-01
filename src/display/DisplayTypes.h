@@ -26,6 +26,9 @@ namespace DisplayConfig {
   constexpr float SpeedSmoothingAlpha = Config::Display::SpeedSmoothingAlpha;
   constexpr float RpmSmoothingAlpha = Config::Display::RpmSmoothingAlpha;
   constexpr uint32_t ConnectionTimeoutMs = Config::Display::ConnectionTimeoutMs;
+  constexpr uint32_t EspNowTimeoutMs = Config::Display::EspNowTimeoutMs;
+  constexpr uint32_t ObdTimeoutMs = Config::Display::ObdTimeoutMs;
+  constexpr uint32_t CanTimeoutMs = Config::Display::CanTimeoutMs;
   constexpr uint32_t ValueTimeoutMs = Config::Display::ValueTimeoutMs;
   constexpr uint32_t ButtonDebounceMs = Config::Display::ButtonDebounceMs;
   constexpr uint8_t BacklightOn = Config::Display::BacklightOn;

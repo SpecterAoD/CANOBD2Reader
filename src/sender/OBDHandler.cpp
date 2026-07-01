@@ -19,7 +19,7 @@ void sendBoostPressureIfReady() {
                                                                       hasBarometricKpa,
                                                                       lastBarometricKpa);
     char valueText[16];
-    snprintf(valueText, sizeof(valueText), "%.2f", boostBar);
+    snprintf(valueText, sizeof(valueText), "%.2f", static_cast<double>(boostBar));
     Utils::sendTelemetry("OBD", "BOOST", "BoostPressureBar", valueText, "bar", "OK");
 }
 }
@@ -53,7 +53,7 @@ void OBD2Handler::calcConsumption(uint8_t pid, float value) {
     if (Config::consumptionCount >= 10) {
         float avg = Config::consumptionSum / Config::consumptionCount;
         char avgText[16];
-        snprintf(avgText, sizeof(avgText), "%.2f", avg);
+        snprintf(avgText, sizeof(avgText), "%.2f", static_cast<double>(avg));
         Utils::sendTelemetry("FUEL", "AVG", "AverageConsumption", avgText, "L/100km", "OK");
 
         Config::consumptionSum = 0.0f;
@@ -76,10 +76,11 @@ void OBD2Handler::updateBoostPressure(uint8_t pid, float value) {
     }
 }
 
-void OBD2Handler::requestAndSendPID(uint8_t pid) {
+bool OBD2Handler::requestAndSendPID(uint8_t pid) {
     if (!sendRequest(read_LiveData, pid)) {
+        Serial.printf("[OBD] Timeout waiting for ECU response pid=0x%02X send failed\n", pid);
         Utils::sendOBDError(pid, getPIDName(pid));
-        return;
+        return false;
     }
 
     uint8_t responseData[8];
@@ -101,7 +102,10 @@ void OBD2Handler::requestAndSendPID(uint8_t pid) {
 
             Utils::sendOBDValue(pid, getPIDName(pid), result.value, result.unit);
         }
+        return true;
     } else {
+        Serial.printf("[OBD] Timeout waiting for ECU response pid=0x%02X\n", pid);
         Utils::sendOBDError(pid, getPIDName(pid));
+        return false;
     }
 }

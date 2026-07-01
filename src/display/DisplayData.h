@@ -14,6 +14,10 @@ namespace DisplayData {
   extern uint32_t droppedPackets;
   extern uint32_t crcErrors;
   extern uint32_t lastSequence;
+  extern uint32_t lastHeartbeatAt;
+  extern uint32_t lastHeartbeatSequence;
+  extern uint32_t lastCanStatusAt;
+  extern uint32_t lastObdStatusAt;
   extern String lastRawPayload;
   extern String lastError;
   extern uint32_t lastInternalSimulationUpdate;
@@ -29,6 +33,9 @@ namespace DisplayData {
                                      const String& status,
                                      uint32_t sequence);
   bool isConnected();
+  bool isEspNowConnected();
+  bool isCanStatusRecent();
+  bool isObdStatusRecent();
   bool isFresh(const DisplayTelemetryValue* value);
   DisplayLogic::DisplaySeverity severityForValue(const char* name);
   uint16_t colorForSeverity(DisplayLogic::DisplaySeverity severity);

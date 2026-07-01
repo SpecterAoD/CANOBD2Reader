@@ -16,8 +16,15 @@ struct WebConsoleRuntimeStatus {
     float batteryVoltage = 0.0f;
     uint32_t uptimeMs = 0;
     uint32_t telemetrySequence = 0;
+    uint32_t telemetrySendOk = 0;
+    uint32_t telemetrySendFail = 0;
+    uint32_t heartbeatCount = 0;
     uint32_t lastCanAgeMs = 0;
+    uint32_t lastObdAgeMs = 0;
     String canState = "UNKNOWN";
+    String obdState = "UNKNOWN";
+    String espNowState = "UNKNOWN";
+    String lastSendError = "";
     String lastDtc = "--";
     String lastTelemetry = "--";
     String lastError = "";

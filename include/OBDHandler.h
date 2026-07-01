@@ -16,7 +16,7 @@ public:
     /// Alle erfolgreichen Werte werden im gemeinsamen Telemetrieformat gesendet.
     /// Werte, die fuer abgeleitete Berechnungen gebraucht werden, werden nicht
     /// mehr unterdrueckt, damit das Display vollstaendig synchron bleibt.
-    static void requestAndSendPID(uint8_t pid);
+    static bool requestAndSendPID(uint8_t pid);
 
     /// @brief Berechnet und sendet Verbrauch aus Speed + FuelRate
     static void calcConsumption(uint8_t pid, float value);

@@ -46,6 +46,7 @@ desktop.ini
 .env
 .env.local
 .env.*
+include/secrets.h
 
 # Auto-generated version files
 version.txt

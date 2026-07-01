@@ -1,53 +1,51 @@
 # Architecture
 
-The repository is one PlatformIO project with two firmware environments:
-
-- `sender`: ESP32 DevKit V1, TWAI/CAN, OBD-II polling, ESP-NOW telemetry, OTA and web console
-- `display`: LilyGO T-Display S3, ESP-NOW receive queue, dashboard UI and OTA upload page
-
-```text
-sender
-  CANHandler -> OBDHandler -> IsoTpHandler -> PidDecoder
-       |             |              |
-       +-------------+--------------+
-                     |
-              TelemetryCodec
-                     |
-                  ESP-NOW
-                     |
-display onReceive -> FreeRTOS queue -> TelemetryCodec -> DisplayData -> DisplayUi
+```mermaid
+flowchart LR
+    Vehicle["Vehicle CAN bus"] --> TWAI["ESP32 TWAI driver"]
+    TWAI --> ISO["ISO-TP handler"]
+    ISO --> OBD["OBD service / PID decoder"]
+    OBD --> Derived["Derived values\nBoost, consumption"]
+    Derived --> Telemetry["Telemetry packet\nMagic, version, sequence, CRC"]
+    Telemetry --> EspNow["ESP-NOW transport"]
+    EspNow --> Queue["Display receive queue"]
+    Queue --> Decode["Telemetry decode + validation"]
+    Decode --> State["Display runtime data"]
+    State --> UI["Dashboard pages"]
 ```
+
+## Firmware split
+
+- `env:sender`: ESP32 DevKit V1, CAN/OBD reader and telemetry sender.
+- `env:display`: LilyGO T-Display S3, ESP-NOW receiver, dashboard and web OTA.
+- `env:native`: host-side unit tests for protocol, CRC, ISO-TP, OBD, simulation
+  and security helpers.
 
 ## Shared modules
 
-- `lib/utils`: CRC16 and small common utilities
-- `lib/obd`: PID decoding, independent from Arduino where possible
-- `lib/isotp`: ISO 15765-2 reassembly and Arduino/TWAI transport wrapper
-- `lib/telemetry`: one packet format, CRC validation and shared sequence source
-- `lib/common`: compatibility layer and display/sender shared payload helpers
+- `lib/telemetry`: binary packet envelope and CRC validation.
+- `lib/isotp`: ISO-TP request/response and reassembly.
+- `lib/can_router`: fixed-size CAN frame fan-out for future TWAI routing.
+- `lib/obd`: PID decoding and derived OBD calculations such as boost pressure.
+- `lib/simulation`: runtime-only OBD/ISO-TP/display simulation scenarios.
+- `lib/display`: display severity calculation.
+- `lib/web`: shared web authentication helpers.
 
-## Configuration
+## Configuration model
 
-Configuration is split by scope:
+Compile-time configuration is exposed through `include/Config.h` as a
+compatibility facade. New static values should be added to focused config files
+such as `ProjectConfig.h`, `SenderConfig.h`, `DisplayConfig.h`,
+`SimulationConfig.h` or `SecurityConfig.h`.
 
-- `include/ProjectConfig.h`: firmware/protocol identity and shared limits
-- `include/BuildConfig.h`: compile-time feature switches
-- `include/SenderConfig.h`: sender-side CAN/OBD timing defaults
-- `include/DisplayConfig.h`: display refresh and queue defaults
-- `include/Config.h`: active application configuration used by the current firmware
+Runtime values should not be added to config headers. Existing legacy runtime
+fields in `Config.h` are kept for compatibility and should be migrated gradually
+into dedicated runtime state classes.
 
-`Config.h` still contains some legacy namespaces for compatibility. New code
-should prefer the narrower config headers when no existing module dependency is
-involved.
+## CAN routing status
 
-## OTA
-
-Both firmware environments use `board_build.partitions = min_spiffs.csv`, which
-keeps two OTA application slots on the supported ESP32 boards. Web OTA upload is
-available from the sender web console and the display OTA page.
-
-## Legacy code
-
-Old Arduino-IDE sketches and removed modules are stored under `docs/archive/`.
-They are not part of `build_src_filter` and cannot define active `setup()` or
-`loop()` functions.
+`lib/can_router` provides the shared listener model requested for avoiding
+competing TWAI reads. It is covered by native tests. The current live sender path
+still uses the existing CAN/OBD flow; wiring TWAI RX through `CanRouter` should
+be done as a dedicated hardware-tested step so ISO-TP timing is not changed
+silently.

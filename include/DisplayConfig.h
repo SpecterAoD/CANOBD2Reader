@@ -25,6 +25,9 @@ constexpr float SpeedSmoothingAlpha = 0.28f;
 constexpr float RpmSmoothingAlpha = 0.20f;
 constexpr uint32_t ValueTimeoutMs = 3000;
 constexpr uint32_t ConnectionTimeoutMs = 3000;
+constexpr uint32_t EspNowTimeoutMs = 3000;
+constexpr uint32_t ObdTimeoutMs = 5000;
+constexpr uint32_t CanTimeoutMs = 5000;
 constexpr uint32_t ButtonDebounceMs = 250;
 constexpr std::size_t TelemetryQueueLength = 16;
 
