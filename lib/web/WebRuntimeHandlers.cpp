@@ -1,10 +1,13 @@
 #include "WebRuntimeHandlers.h"
 
 #include <cstddef>
+#include <cstdio>
+#include <cstring>
 
 #if defined(ARDUINO)
   #include <Esp.h>
   #include <Update.h>
+  #include <mbedtls/sha256.h>
 #endif
 
 #if defined(ARDUINO)
@@ -16,6 +19,8 @@
 #include "RuntimeSimulation.h"
 
 namespace {
+
+constexpr size_t kOtaSearchTailSize = 96;
 
 bool asciiEqualsIgnoreCase(char a, char b) {
     if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
@@ -83,9 +88,119 @@ bool containsTokenIgnoreCase(const char* haystack, const char* needle) {
     return false;
 }
 
+bool bufferContainsText(const uint8_t* data, size_t size, const char* text) {
+    if (data == nullptr || size == 0 || text == nullptr || text[0] == '\0') return false;
+
+    const size_t textLength = std::strlen(text);
+    if (textLength == 0 || textLength > size) return false;
+
+    for (size_t index = 0; index + textLength <= size; ++index) {
+        if (std::memcmp(data + index, text, textLength) == 0) return true;
+    }
+    return false;
+}
+
+void appendJsonEscapedField(String& json, const char* key, const String& value) {
+    json += '"';
+    json += key;
+    json += "\":\"";
+    json += WebRuntimeHandlers::jsonEscape(value);
+    json += "\",";
+}
+
+void appendJsonEscapedField(String& json, const char* key, const char* value) {
+    appendJsonEscapedField(json, key, String(value == nullptr ? "" : value));
+}
+
+void appendJsonBoolField(String& json, const char* key, bool value) {
+    json += '"';
+    json += key;
+    json += "\":";
+    json += value ? "true," : "false,";
+}
+
+void appendJsonUnsignedField(String& json, const char* key, unsigned long value) {
+    char buffer[24];
+    std::snprintf(buffer, sizeof(buffer), "%lu", value);
+    json += '"';
+    json += key;
+    json += "\":";
+    json += buffer;
+    json += ',';
+}
+
 #if defined(ARDUINO)
 bool otaSessionActive = false;
 bool otaSessionRejected = false;
+bool otaSessionTargetSeen = false;
+bool otaSessionVersionSeen = false;
+char otaSessionSha256[65] = {};
+uint8_t otaSearchTail[kOtaSearchTailSize] = {};
+size_t otaSearchTailLength = 0;
+mbedtls_sha256_context otaSha256Context;
+
+void resetOtaValidationState() {
+    mbedtls_sha256_free(&otaSha256Context);
+    otaSessionTargetSeen = false;
+    otaSessionVersionSeen = false;
+    otaSessionSha256[0] = '\0';
+    otaSearchTailLength = 0;
+    std::memset(otaSearchTail, 0, sizeof(otaSearchTail));
+    mbedtls_sha256_init(&otaSha256Context);
+    mbedtls_sha256_starts_ret(&otaSha256Context, 0);
+}
+
+void updateOtaValidationState(const uint8_t* data, size_t size) {
+    if (data == nullptr || size == 0) return;
+
+    mbedtls_sha256_update_ret(&otaSha256Context, data, size);
+
+    uint8_t combined[kOtaSearchTailSize * 2];
+    size_t combinedSize = 0;
+    if (otaSearchTailLength > 0) {
+        std::memcpy(combined, otaSearchTail, otaSearchTailLength);
+        combinedSize = otaSearchTailLength;
+    }
+    const size_t copySize = size > sizeof(combined) - combinedSize ? sizeof(combined) - combinedSize : size;
+    std::memcpy(combined + combinedSize, data, copySize);
+    combinedSize += copySize;
+
+    if (!otaSessionTargetSeen) {
+        otaSessionTargetSeen = bufferContainsText(data, size, ProjectConfig::TargetName) ||
+                               bufferContainsText(combined, combinedSize, ProjectConfig::TargetName);
+    }
+    if (!otaSessionVersionSeen) {
+        otaSessionVersionSeen = bufferContainsText(data, size, ProjectConfig::FirmwareVersion) ||
+                                bufferContainsText(combined, combinedSize, ProjectConfig::FirmwareVersion);
+    }
+
+    if (size >= sizeof(otaSearchTail)) {
+        std::memcpy(otaSearchTail, data + size - sizeof(otaSearchTail), sizeof(otaSearchTail));
+        otaSearchTailLength = sizeof(otaSearchTail);
+    } else {
+        const size_t keepPrefix = otaSearchTailLength + size > sizeof(otaSearchTail)
+                                      ? otaSearchTailLength + size - sizeof(otaSearchTail)
+                                      : 0;
+        if (keepPrefix > 0 && keepPrefix < otaSearchTailLength) {
+            std::memmove(otaSearchTail, otaSearchTail + keepPrefix, otaSearchTailLength - keepPrefix);
+            otaSearchTailLength -= keepPrefix;
+        } else if (keepPrefix >= otaSearchTailLength) {
+            otaSearchTailLength = 0;
+        }
+        std::memcpy(otaSearchTail + otaSearchTailLength, data, size);
+        otaSearchTailLength += size;
+    }
+}
+
+void finalizeOtaSha256() {
+    uint8_t digest[32];
+    mbedtls_sha256_finish_ret(&otaSha256Context, digest);
+    for (size_t i = 0; i < sizeof(digest); ++i) {
+        std::snprintf(otaSessionSha256 + (i * 2), 3, "%02x", digest[i]);
+    }
+    otaSessionSha256[64] = '\0';
+    mbedtls_sha256_free(&otaSha256Context);
+}
 #endif
 
 } // namespace
@@ -143,6 +258,20 @@ bool firmwareFilenameMatchesTarget(const char* filename, const char* expectedTar
     return containsTokenIgnoreCase(filename, expectedTarget);
 }
 
+bool firmwareBufferContainsText(const uint8_t* data, size_t size, const char* text) {
+    return bufferContainsText(data, size, text);
+}
+
+bool firmwareBufferContainsTargetMarker(const uint8_t* data, size_t size, const char* expectedTarget) {
+    if (expectedTarget == nullptr || expectedTarget[0] == '\0') return false;
+    return firmwareBufferContainsText(data, size, expectedTarget);
+}
+
+bool firmwareBufferContainsVersionMarker(const uint8_t* data, size_t size, const char* expectedVersion) {
+    if (expectedVersion == nullptr || expectedVersion[0] == '\0') return false;
+    return firmwareBufferContainsText(data, size, expectedVersion);
+}
+
 #if defined(ARDUINO)
 String updateErrorText(const char* prefix) {
     return String(prefix == nullptr ? "Update error" : prefix) + ", error=" + String(Update.getError());
@@ -151,6 +280,7 @@ String updateErrorText(const char* prefix) {
 bool beginWebOtaUpload(const String& filename, String& status, LogCallback logCallback) {
     otaSessionActive = false;
     otaSessionRejected = false;
+    resetOtaValidationState();
 
     status = "Upload gestartet: " + filename;
     if (logCallback != nullptr) logCallback("[WebOTA] " + status);
@@ -193,6 +323,8 @@ bool writeWebOtaChunk(uint8_t* data, size_t size, String& status, LogCallback lo
         return false;
     }
 
+    updateOtaValidationState(data, size);
+
     if (Update.write(data, size) != size) {
         status = updateErrorText("Web-OTA Schreibfehler");
         if (logCallback != nullptr) logCallback("[WebOTA] " + status);
@@ -215,10 +347,28 @@ bool finishWebOtaUpload(size_t totalSize, String& status, LogCallback logCallbac
         return false;
     }
 
+    finalizeOtaSha256();
+
+    if (!otaSessionTargetSeen || !otaSessionVersionSeen) {
+        Update.end();
+        otaSessionActive = false;
+        status = String("OTA abgelehnt: Firmware-Metadaten ungueltig (target=") +
+                 (otaSessionTargetSeen ? "ok" : "fehlt") + ", version=" +
+                 (otaSessionVersionSeen ? "ok" : "fehlt") + ")";
+        if (logCallback != nullptr) {
+            logCallback("[WebOTA] " + status);
+            logCallback(String("[WebOTA] sha256=") + otaSessionSha256);
+        }
+        return false;
+    }
+
     if (Update.end(true)) {
         otaSessionActive = false;
         status = "Web-OTA abgeschlossen: " + String(totalSize) + " Bytes";
-        if (logCallback != nullptr) logCallback("[WebOTA] " + status);
+        if (logCallback != nullptr) {
+            logCallback("[WebOTA] " + status);
+            logCallback(String("[WebOTA] sha256=") + otaSessionSha256);
+        }
         return true;
     }
 
@@ -234,30 +384,40 @@ void abortWebOtaUpload(String& status, LogCallback logCallback) {
     }
     otaSessionActive = false;
     otaSessionRejected = false;
+    otaSessionSha256[0] = '\0';
     status = "Web-OTA abgebrochen";
     if (logCallback != nullptr) logCallback("[WebOTA] " + status);
 }
 
 void appendFirmwareJson(String& json, const String& otaStatus) {
     const String securityWarning = WebSecurity::targetSecurityWarning(ProjectConfig::TargetName);
-    json += "\"firmware\":\"" + jsonEscape(ProjectConfig::FirmwareVersion) + "\",";
-    json += "\"target\":\"" + jsonEscape(ProjectConfig::TargetName) + "\",";
-    json += "\"protocol\":" + String(ProjectConfig::ProtocolVersion) + ",";
-    json += "\"buildTime\":\"" + jsonEscape(String(__DATE__) + " " + String(__TIME__)) + "\",";
-    json += "\"otaStatus\":\"" + jsonEscape(otaStatus) + "\",";
-    json += "\"otaFilenameHint\":\"" + jsonEscape(String(ProjectConfig::TargetName) + ".bin") + "\",";
-    json += "\"otaTargetFilenameRequired\":" + String(SecurityConfig::RequireOtaTargetInFilename ? "true" : "false") + ",";
-    json += "\"securityReady\":" + String(securityWarning.length() == 0 ? "true" : "false") + ",";
-    json += "\"securityWarning\":\"" + jsonEscape(securityWarning) + "\",";
-    json += "\"freeSketchSpace\":" + String(ESP.getFreeSketchSpace()) + ",";
-    json += "\"sketchSize\":" + String(ESP.getSketchSize()) + ",";
-    json += "\"flashSize\":" + String(ESP.getFlashChipSize()) + ",";
+    char buildTime[32];
+    std::snprintf(buildTime, sizeof(buildTime), "%s %s", __DATE__, __TIME__);
+    char otaFilenameHint[48];
+    std::snprintf(otaFilenameHint, sizeof(otaFilenameHint), "%s.bin", ProjectConfig::TargetName);
+
+    appendJsonEscapedField(json, "firmware", ProjectConfig::FirmwareVersion);
+    appendJsonEscapedField(json, "target", ProjectConfig::TargetName);
+    appendJsonUnsignedField(json, "protocol", ProjectConfig::ProtocolVersion);
+    appendJsonEscapedField(json, "buildTime", buildTime);
+    appendJsonEscapedField(json, "otaStatus", otaStatus);
+    appendJsonEscapedField(json, "otaFilenameHint", otaFilenameHint);
+    appendJsonBoolField(json, "otaTargetFilenameRequired", SecurityConfig::RequireOtaTargetInFilename);
+    appendJsonBoolField(json, "otaMetadataRequired", true);
+    appendJsonBoolField(json, "securityReady", securityWarning.length() == 0);
+    appendJsonEscapedField(json, "securityWarning", securityWarning);
+    appendJsonUnsignedField(json, "freeSketchSpace", ESP.getFreeSketchSpace());
+    appendJsonUnsignedField(json, "sketchSize", ESP.getSketchSize());
+    appendJsonUnsignedField(json, "flashSize", ESP.getFlashChipSize());
+#if defined(ARDUINO)
+    appendJsonEscapedField(json, "otaLastSha256", otaSessionSha256);
+#endif
 }
 
 void appendDiagnosticLogJson(String& json, size_t maxBytes) {
-    json += "\"diagnosticLogMounted\":" + String(DiagnosticLog::mounted() ? "true" : "false") + ",";
-    json += "\"diagnosticLogSize\":" + String(DiagnosticLog::size()) + ",";
-    json += "\"diagnosticLogMaxSize\":" + String(maxBytes) + ",";
+    appendJsonBoolField(json, "diagnosticLogMounted", DiagnosticLog::mounted());
+    appendJsonUnsignedField(json, "diagnosticLogSize", DiagnosticLog::size());
+    appendJsonUnsignedField(json, "diagnosticLogMaxSize", maxBytes);
 }
 
 void sendRestartResponseAndRestart(WebServer& server, uint32_t delayMs, LogCallback logCallback) {

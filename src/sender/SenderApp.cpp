@@ -39,6 +39,7 @@
 #include "SenderUdsScheduler.h"
 #include "SenderWebStatus.h"
 #include "SenderLoopState.h"
+#include "SenderRuntimeCoordinator.h"
 // End region ================================== Includes ==================================
 
 // region ================================== #define ==================================
@@ -61,15 +62,88 @@ constexpr uint32_t kPollingRateMs = SenderConfig::PollingRateMs;
 constexpr uint32_t kCanIdleTimeoutMs = SenderConfig::CanIdleTimeoutMs;
 }
 
-// region ========================== Laufzeitvariablen ==========================
-Runtime::SenderLoopState runtimeState;
+namespace {
 
-// End region ========================== Laufzeitvariablen ==========================
+void sendHeartbeat(Runtime::SenderLoopState& runtimeState) {
+  const uint32_t now = millis();
+  SenderHeartbeat::Input input{};
+  input.espNowReady = runtimeState.espNowReady;
+  input.senderRunning = WebConsoleHandler::isStarted();
+  input.canDriverReady = runtimeState.canDriverReady;
+  input.canRecent = runtimeState.canRecent(now, DisplayConfig::CanTimeoutMs);
+  input.obdEnabled = SenderConfig::EnableOBD2;
+  input.obdRecent = SenderTelemetry::lastObdResponseAt() > 0 &&
+                    now - SenderTelemetry::lastObdResponseAt() <= DisplayConfig::ObdTimeoutMs;
+  input.udsEnabled = SenderConfig::EnableUDS;
+  input.udsAvailable = Uds::Diagnostics::available();
+  input.simulationEnabled = Simulation::RuntimeSimulation::enabled();
 
-// region ========================== Funktionsprototypen ==========================
-void sendHeartbeat();
-void updateWebConsoleStatus();
-// End region ========================== Funktionsprototypen ==========================
+  SenderHeartbeat::tick(now,
+                        runtimeState.lastHeartbeatSentAt,
+                        runtimeState.heartbeatCount,
+                        input,
+                        SenderTelemetry::sendStatus);
+}
+
+void updateWebConsoleStatus(const Runtime::SenderLoopState& runtimeState) {
+  SenderWebStatus::Input input;
+  input.canBusActive = runtimeState.canBusActive;
+  input.canDriverReady = runtimeState.canDriverReady;
+  input.espNowReady = runtimeState.espNowReady;
+  input.lastCanMessageAt = runtimeState.lastCanMessageAt;
+  input.heartbeatCount = runtimeState.heartbeatCount;
+  WebConsoleHandler::updateRuntimeStatus(SenderWebStatus::build(input));
+}
+
+Runtime::SenderRuntimeCoordinator::CanAlertResult processCanAlerts(uint32_t waitMs) {
+  const SenderCanAlerts::Result result = SenderCanAlerts::process(waitMs, SenderTelemetry::sendStatus);
+  static String lastCanError;
+  lastCanError = result.errorText;
+  return {result.rxData, result.errorLedRequested, lastCanError.c_str()};
+}
+
+void tickObd(Runtime::SenderLoopState& runtimeState) {
+  SenderObdScheduler::tick(runtimeState.currentMillis,
+                           runtimeState.lastCanMessageAt,
+                           SenderTelemetry::lastObdResponseAtRef(),
+                           runtimeState.canBusActive,
+                           SenderTelemetry::send,
+                           SenderTelemetry::sendStatus);
+}
+
+void tickUds(Runtime::SenderLoopState& runtimeState) {
+  SenderUdsScheduler::tick(runtimeState.currentMillis,
+                           runtimeState.lastCanMessageAt,
+                           SenderTelemetry::lastObdResponseAtRef(),
+                           runtimeState.canBusActive,
+                           SenderTelemetry::send,
+                           SenderTelemetry::sendStatus);
+}
+
+Runtime::SenderRuntimeCoordinator coordinator(
+    {kPollingRateMs, SenderConfig::TwaiStatusLogIntervalMs, LoggingConfig::TwaiDebugEnabled},
+    {
+        OTAHandler::handleOTA,
+        WebConsoleHandler::handle,
+        updateWebConsoleStatus,
+        SenderLedButton::updateLedTestButton,
+        sendHeartbeat,
+        Simulation::RuntimeSimulation::enabled,
+        SenderSimulationScheduler::tick,
+        WebConsoleHandler::isStarted,
+        processCanAlerts,
+        [](const char* errorText) {
+          SenderTelemetry::setLastError(String(errorText == nullptr ? "" : errorText));
+        },
+        SenderLedButton::pulseError,
+        SenderLedButton::update,
+        tickObd,
+        tickUds,
+        CANHandler::printStatus,
+        SenderPowerScheduler::tick,
+    });
+
+} // namespace
 
 // region ================================== Setup ==================================
 void SenderApp::begin() {
@@ -99,11 +173,9 @@ void SenderApp::begin() {
   debugln("https://gitlab.com/MrDIYca/canabus");
   debugln("------------------------");
 
-  runtimeState.resetForBoot(millis(), kCanIdleTimeoutMs);
-
   const bool espNowReady = SenderEspNow::begin();
-  runtimeState.espNowReady = espNowReady;
-  runtimeState.canDriverReady = Simulation::RuntimeSimulation::enabled() || CANHandler::init();
+  const bool canDriverReady = Simulation::RuntimeSimulation::enabled() || CANHandler::init();
+  coordinator.resetForBoot(millis(), kCanIdleTimeoutMs, espNowReady, canDriverReady);
 
   WebConsoleHandler::begin();
   OTAHandler::initOTA();
@@ -113,7 +185,7 @@ void SenderApp::begin() {
     WebConsoleHandler::log("[Sender] ESP-NOW Init fehlgeschlagen, WebConsole/OTA bleiben aktiv");
   }
 
-  if (!runtimeState.canDriverReady) {
+  if (!canDriverReady) {
     SenderTelemetry::setLastError("CAN Initialisierung fehlgeschlagen");
     WebConsoleHandler::log("[Sender] CAN Init fehlgeschlagen, WebConsole/OTA bleiben aktiv");
   }
@@ -128,123 +200,20 @@ void SenderApp::begin() {
     snprintf(protocolVersion, sizeof(protocolVersion), "%u", ProjectConfig::ProtocolVersion);
     SenderTelemetry::send("STATUS", "PROTO", "Protocol", protocolVersion, "", "OK");
     SenderTelemetry::sendStatus("CAN",
-                                runtimeState.canDriverReady ? "READY" : "INIT_FAIL",
-                                runtimeState.canDriverReady ? "OK" : "ERROR");
-    sendHeartbeat();
+                                canDriverReady ? "READY" : "INIT_FAIL",
+                                canDriverReady ? "OK" : "ERROR");
+    sendHeartbeat(coordinator.state());
   }
 
-  WebConsoleHandler::log(runtimeState.canDriverReady ? "Sender bereit" : "Sender im Fehler-/OTA-Modus");
+  WebConsoleHandler::log(canDriverReady ? "Sender bereit" : "Sender im Fehler-/OTA-Modus");
   SenderLedButton::pulseError(millis());
 }
 // End region ================================== Setup ==================================
-
-void sendHeartbeat() {
-  const uint32_t now = millis();
-  SenderHeartbeat::Input input{};
-  input.espNowReady = runtimeState.espNowReady;
-  input.senderRunning = WebConsoleHandler::isStarted();
-  input.canDriverReady = runtimeState.canDriverReady;
-  input.canRecent = runtimeState.canRecent(now, DisplayConfig::CanTimeoutMs);
-  input.obdEnabled = SenderConfig::EnableOBD2;
-  input.obdRecent = SenderTelemetry::lastObdResponseAt() > 0 &&
-                    now - SenderTelemetry::lastObdResponseAt() <= DisplayConfig::ObdTimeoutMs;
-  input.udsEnabled = SenderConfig::EnableUDS;
-  input.udsAvailable = Uds::Diagnostics::available();
-  input.simulationEnabled = Simulation::RuntimeSimulation::enabled();
-
-  SenderHeartbeat::tick(now,
-                        runtimeState.lastHeartbeatSentAt,
-                        runtimeState.heartbeatCount,
-                        input,
-                        SenderTelemetry::sendStatus);
-}
-
-void updateWebConsoleStatus() {
-  SenderWebStatus::Input input;
-  input.canBusActive = runtimeState.canBusActive;
-  input.canDriverReady = runtimeState.canDriverReady;
-  input.espNowReady = runtimeState.espNowReady;
-  input.lastCanMessageAt = runtimeState.lastCanMessageAt;
-  input.heartbeatCount = runtimeState.heartbeatCount;
-  WebConsoleHandler::updateRuntimeStatus(SenderWebStatus::build(input));
-}
 
 // end region ================ PRINT_CAN_FLAG ================
 
 // region ================================== loop ==================================
 void SenderApp::tick() {
-  runtimeState.updateNow(millis());
-  OTAHandler::handleOTA();
-  WebConsoleHandler::handle();
-  updateWebConsoleStatus();
-  SenderLedButton::updateLedTestButton();
-  sendHeartbeat();
-
-  if (Simulation::RuntimeSimulation::enabled()) {
-    SenderSimulationScheduler::tick(currentMillis);
-    return;
-  }
-
-  if (!WebConsoleHandler::isStarted()) {
-    return;
-  }
-
-  if (!runtimeState.canDriverReady) {
-    return;
-  }
-
-  const SenderCanAlerts::Result canAlerts = SenderCanAlerts::process(kPollingRateMs, SenderTelemetry::sendStatus);
-
-  //------------- CAN Empfang -------------
-  if (canAlerts.rxData) {
-    runtimeState.markCanTraffic(runtimeState.currentMillis);
-  }
-  //---------------------------------------
-
-  //------------ Fehleranzeigen ------------
-  if (canAlerts.errorText.length() > 0) {
-    SenderTelemetry::setLastError(canAlerts.errorText);
-  }
-  //---------------------------------------
-
-  //------------- LED Steuerung ------------
-      // blink LED if needed
-  if (canAlerts.errorLedRequested) {
-    SenderLedButton::pulseError(runtimeState.currentMillis);
-  }
-
-  SenderLedButton::update(runtimeState.currentMillis);
-  //---------------------------------------
-
-  //------------- OBD2 Daten regelmäßig abfragen -------------
-  SenderObdScheduler::tick(runtimeState.currentMillis,
-                           runtimeState.lastCanMessageAt,
-                           SenderTelemetry::lastObdResponseAtRef(),
-                           runtimeState.canBusActive,
-                           SenderTelemetry::send,
-                           SenderTelemetry::sendStatus);
-
-  SenderUdsScheduler::tick(runtimeState.currentMillis,
-                           runtimeState.lastCanMessageAt,
-                           SenderTelemetry::lastObdResponseAtRef(),
-                           runtimeState.canBusActive,
-                           SenderTelemetry::send,
-                           SenderTelemetry::sendStatus);
-  //----------------------------------------------------------
-
-  //--------------TWAI Status-----------
-  // Optional zur Fehlersuche
-  if (LoggingConfig::TwaiDebugEnabled &&
-      runtimeState.currentMillis - runtimeState.lastTwaiStatusLogAt >= SenderConfig::TwaiStatusLogIntervalMs) {
-    CANHandler::printStatus(); // Aktivieren / Deaktivieren: #define TWAI_DEBUG_FLAG 0
-    runtimeState.lastTwaiStatusLogAt = runtimeState.currentMillis;
-  }
-  //-------------------------------------------------------
-
-  SenderPowerScheduler::tick(runtimeState.currentMillis);
-
-  //------------Reduziert Leistung des ESP-------------
-  //SenderPower::reduceHeat(); // Optional
-  //-------------------------------------------------------
+  coordinator.tick(millis());
 }
 // End region ================================== loop ==================================

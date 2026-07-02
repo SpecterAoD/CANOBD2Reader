@@ -12,35 +12,45 @@ CANOBD2Reader/
 ├── platformio.ini
 ├── include/
 │   ├── common_config.h
-│   ├── PIDs.h
-│   ├── PID_Converter.h
-│   ├── TelemetryProtocol.h
-│   └── SimulationData.h
+│   ├── secrets.example.h
+│   └── config/
+│       ├── ProjectConfig.h
+│       ├── SenderConfig.h
+│       ├── DisplayConfig.h
+│       ├── NetworkConfig.h
+│       └── SecurityConfig.h
 ├── lib/
-│   └── common/
-│       ├── protocol.h
-│       ├── protocol.cpp
-│       ├── shared_types.h
-│       ├── simulation_data.h
-│       ├── CANDecoder.cpp
-│       ├── PID_Converter.cpp
-│       └── README.md
+│   ├── telemetry/        # Paketformat, CRC, Sequenzen
+│   ├── isotp/            # ISO-TP Request/Response
+│   ├── obd/              # PID-/VIN-/DTC-Dekodierung
+│   ├── uds/              # UDS-Client und Decoder
+│   ├── runtime/          # Laufzeitzustand und Coordinator-Logik
+│   ├── status/           # Zustands-/Heartbeat-Helfer
+│   ├── web/              # Authentifizierung und OTA/Web-Helfer
+│   ├── transport/        # ESP-NOW Telemetrie-Transport
+│   ├── simulation/       # Native-/Runtime-Simulation
+│   ├── display/          # Gemeinsame Display-Logik
+│   ├── logging/          # Diagnose-Log
+│   └── can_router/       # Vorbereitete CAN-Fan-out-Bausteine
 ├── src/
 │   ├── sender/
 │   │   ├── main.cpp
 │   │   ├── SenderApp.cpp
-│   │   ├── SenderTelemetry.cpp
 │   │   ├── SenderObdScheduler.cpp
 │   │   ├── SenderUdsScheduler.cpp
+│   │   ├── SenderTelemetry.cpp
 │   │   ├── SenderEspNow.cpp
 │   │   └── WebConsoleHandler.cpp
 │   └── display/
 │       ├── main.cpp
 │       ├── DisplayApp.cpp
 │       ├── DisplayReceiver.cpp
+│       ├── DisplayUi.cpp
 │       └── DisplayOta.cpp
+├── test/                 # Native Unity-Tests für Runtime, Security, Codec, ISO-TP, ...
 └── docs/
     ├── architecture.md
+    ├── security.md
     ├── telemetry.md
     └── archive/
 ```
@@ -50,10 +60,10 @@ Die ehemaligen Arduino-IDE-Sketches wurden migriert:
 - `ino/CAN_OBD2_Gateway.ino` → `src/sender/main.cpp`
 - `ino/Anzeige_LilyGoTDisplayS3.ino` → `src/display/main.cpp`
 
-Die vorhandenen Sender-Module (`CANHandler`, `OBDHandler`, `OTAHandler`,
-`NetworkManager`, `WebConsoleHandler`) sind wieder Bestandteil des aktiven
-Sender-Builds. `src/sender/main.cpp` koordiniert Initialisierung und Loop,
-während CAN-, OBD2- und OTA-Logik in den jeweiligen `.cpp/.h`-Modulen liegt.
+`SenderApp` und `DisplayApp` sind heute bewusst nur schmale Einstiegspunkte.
+Die eigentliche Laufzeitlogik liegt in Modulen unter `src/*` sowie in gemeinsam
+genutzten Bibliotheken unter `lib/*` (z. B. `runtime`, `web`, `telemetry`,
+`isotp`, `obd`, `uds`).
 
 Ältere, nicht mehr aktive Referenzdateien liegen zusätzlich unter `docs/archive/`.
 
@@ -83,6 +93,12 @@ bei Bedarf überschrieben werden:
 
 ```bash
 CANOBD2_FIRMWARE_VERSION=V1.2.3 platformio run -e sender -e display
+```
+
+Native Tests:
+
+```bash
+platformio test -e native
 ```
 
 ## Flashen
@@ -159,6 +175,13 @@ Runtime-Verhalten:
 - Beide Geräte verwenden `WIFI_AP_STA`, damit OTA/WebConsole und ESP-NOW parallel grundsätzlich möglich bleiben.
 - Der Sender startet im Auto-Betrieb standardmäßig automatisch. `SenderConfig::RequireWebStart` ist `false`; das Webinterface ist damit nicht mehr erforderlich, um CAN/OBD und ESP-NOW zu starten.
 - Der Sender sendet mindestens alle `SenderConfig::HeartbeatIntervalMs` ein Heartbeat-/Statuspaket per ESP-NOW, auch wenn noch keine OBD-Antwort oder kein CAN-Frame vorliegt.
+- Web-OTA prüft neben Authentifizierung und Dateinamen inzwischen auch eingebettete Firmware-Metadaten (Target/Firmware-Version) vor dem finalen Aktivieren des Uploads.
+
+## CI / Releases
+
+- Pull Requests und normale Branch-Builds kompilieren Sender + Display und führen die Native-Tests aus.
+- Release-Erstellung ist vom Build getrennt und läuft nur für Tags (`firmware-*`, `v*`).
+- Die Firmware-Artefakte enthalten zusätzlich ein `firmware_manifest.json` mit SHA-256-Hashes für Sender und Display.
 
 ### Sender-Start und Statuslogik
 
