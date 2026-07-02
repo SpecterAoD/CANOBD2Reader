@@ -20,27 +20,12 @@
 #include "config/SenderConfig.h"
 #include "config/DisplayConfig.h"
 #include "config/LoggingConfig.h"
-#if __has_include("TelemetryProtocol.h")
-#include "TelemetryProtocol.h"
-#else
-  #include "../include/TelemetryProtocol.h"
-#endif
-#include "TelemetryCodec.h"
-#include "TelemetrySequence.h"
 #include "RuntimeSimulation.h"
-#include "ObdSimulation.h"
-#include "IsoTpSimulation.h"
-#if __has_include("SimulationData.h")
-  #include "SimulationData.h"
-#else
-  #include "../include/SimulationData.h"
-#endif
 #include "CANHandler.h"
 #include "OTAHandler.h"
 #include "SenderPower.h"
 #include "WebConsoleHandler.h"
 #include "DiagnosticLog.h"
-#include "EspNowTelemetryTransport.h"
 #include "ObdDiagnostics.h"
 #include "UdsDiagnostics.h"
 #include "SenderEspNow.h"
@@ -49,7 +34,10 @@
 #include "SenderCanAlerts.h"
 #include "SenderObdScheduler.h"
 #include "SenderPowerScheduler.h"
+#include "SenderSimulationScheduler.h"
+#include "SenderTelemetry.h"
 #include "SenderUdsScheduler.h"
+#include "SenderWebStatus.h"
 // End region ================================== Includes ==================================
 
 // region ================================== #define ==================================
@@ -67,52 +55,27 @@
 // End region ================================== #define ==================================
 
 namespace {
-constexpr size_t kMaxPayloadLength = ProjectConfig::TelemetryPayloadSize;
 constexpr uint8_t kVoltageDividerPin = SenderConfig::VoltageDividerPin;
 constexpr uint32_t kPollingRateMs = SenderConfig::PollingRateMs;
 constexpr uint32_t kCanIdleTimeoutMs = SenderConfig::CanIdleTimeoutMs;
-constexpr uint32_t kSimulationSendIntervalMs = SenderConfig::SimulationIntervalMs;
 }
-
-// region ================================== struct ==================================
-using EspNowTelemetryFrame = Telemetry::TelemetryPacket;
-
-// End region ================================== struct ==================================
 
 // region ========================== Laufzeitvariablen ==========================
 uint32_t currentMillis;
 uint32_t last_can_msg_timestamp = 0;
 uint32_t last_heartbeat_send_time = 0;
-uint32_t last_obd_response_time = 0;
-uint32_t last_simulation_send_time = 0;
 uint32_t last_twai_status_log_time = 0;
-uint32_t telemetry_sequence = 0;
-uint32_t telemetry_send_ok = 0;
-uint32_t telemetry_send_fail = 0;
-uint32_t telemetry_last_summary_ms = 0;
 uint32_t heartbeat_count = 0;
-size_t simulation_sample_index = 0;
 bool can_bus_active = false;
 bool can_driver_ready = false;
 bool esp_now_ready = false;
-String last_error_text = "";
-String last_send_error_text = "";
 
 // End region ========================== Laufzeitvariablen ==========================
 
 // region ========================== Funktionsprototypen ==========================
-void sendTelemetry(const char* type, const char* key, const char* name, const char* value, const char* unit, const char* status);
-void sendStatusFrame(const char* key, const char* value, const char* status);
 void sendHeartbeat();
 void updateWebConsoleStatus();
-void maybeLogTelemetrySendSummary();
-void sendSimulationTelemetry();
 // End region ========================== Funktionsprototypen ==========================
-
-// region ================================== ESP-NOW ==================================
-EspNowTelemetryFrame text_frame;
-char last_telemetry_payload[kMaxPayloadLength] = {};
-// End region ================================== ESP-NOW ==================================
 
 // region ================================== Setup ==================================
 void SenderApp::begin() {
@@ -128,6 +91,8 @@ void SenderApp::begin() {
   Uds::Diagnostics::reset();
   SenderObdScheduler::reset();
   SenderPowerScheduler::reset();
+  SenderSimulationScheduler::reset();
+  SenderTelemetry::reset();
   SenderUdsScheduler::reset();
 
   SenderLedButton::begin();
@@ -150,12 +115,12 @@ void SenderApp::begin() {
   OTAHandler::initOTA();
 
   if (!espNowReady) {
-    last_error_text = "ESP-NOW Initialisierung fehlgeschlagen";
+    SenderTelemetry::setLastError("ESP-NOW Initialisierung fehlgeschlagen");
     WebConsoleHandler::log("[Sender] ESP-NOW Init fehlgeschlagen, WebConsole/OTA bleiben aktiv");
   }
 
   if (!can_driver_ready) {
-    last_error_text = "CAN Initialisierung fehlgeschlagen";
+    SenderTelemetry::setLastError("CAN Initialisierung fehlgeschlagen");
     WebConsoleHandler::log("[Sender] CAN Init fehlgeschlagen, WebConsole/OTA bleiben aktiv");
   }
 
@@ -164,11 +129,11 @@ void SenderApp::begin() {
                            : "[SENDER] Auto start enabled");
 
   if (espNowReady) {
-    sendTelemetry("STATUS", "FW", "Firmware", ProjectConfig::FirmwareVersion, "", "OK");
+    SenderTelemetry::send("STATUS", "FW", "Firmware", ProjectConfig::FirmwareVersion, "", "OK");
     char protocolVersion[4];
     snprintf(protocolVersion, sizeof(protocolVersion), "%u", ProjectConfig::ProtocolVersion);
-    sendTelemetry("STATUS", "PROTO", "Protocol", protocolVersion, "", "OK");
-    sendStatusFrame("CAN", can_driver_ready ? "READY" : "INIT_FAIL", can_driver_ready ? "OK" : "ERROR");
+    SenderTelemetry::send("STATUS", "PROTO", "Protocol", protocolVersion, "", "OK");
+    SenderTelemetry::sendStatus("CAN", can_driver_ready ? "READY" : "INIT_FAIL", can_driver_ready ? "OK" : "ERROR");
     sendHeartbeat();
   }
 
@@ -176,81 +141,6 @@ void SenderApp::begin() {
   SenderLedButton::pulseError(millis());
 }
 // End region ================================== Setup ==================================
-
-// region ================ Telemetrie senden ================
-void sendTelemetry(const char* type,
-                   const char* key,
-                   const char* name,
-                   const char* value,
-                   const char* unit,
-                   const char* status) {
-  TelemetryProtocol::buildPayload(last_telemetry_payload, sizeof(last_telemetry_payload),
-                                  type, key, name, value, unit, status,
-                                  telemetry_sequence = Telemetry::nextSequence());
-
-  const Telemetry::PacketType packetType =
-      strcmp(type, "OBD") == 0 ? Telemetry::PacketType::Obd :
-      strcmp(type, "CAN") == 0 ? Telemetry::PacketType::Can :
-      strcmp(type, "DTC") == 0 ? Telemetry::PacketType::Diagnostic :
-      strcmp(type, "STATUS") == 0 ? Telemetry::PacketType::Status :
-      Telemetry::PacketType::Text;
-
-  Telemetry::TelemetryCodec::encodeText(text_frame,
-                                        packetType,
-                                        telemetry_sequence,
-                                        millis(),
-                                        last_telemetry_payload);
-  const esp_err_t sendResult = Transport::sendTelemetryPacket(text_frame);
-  if (sendResult == ESP_OK) {
-    ++telemetry_send_ok;
-    last_send_error_text = "";
-    if (strcmp(type, "STATUS") == 0 && strcmp(key, "HEARTBEAT") == 0) {
-      WebConsoleHandler::log("[ESP-NOW] Heartbeat sent seq=" + String(static_cast<unsigned long>(telemetry_sequence)));
-    }
-  } else {
-    ++telemetry_send_fail;
-    last_send_error_text = "ESP-NOW send error " + String(static_cast<int>(sendResult));
-    last_error_text = last_send_error_text;
-    WebConsoleHandler::log("[ESP-NOW] Send failed error=" + String(static_cast<int>(sendResult)) +
-                           " seq=" + String(static_cast<unsigned long>(telemetry_sequence)));
-    if (LoggingConfig::TraceSenderTelemetry && LoggingConfig::SerialEnabled) {
-      WebConsoleHandler::log("[sender-tx] send failed seq=" +
-                             String(static_cast<unsigned long>(telemetry_sequence)) +
-                             " err=" + String(static_cast<int>(sendResult)));
-    }
-  }
-
-  maybeLogTelemetrySendSummary();
-  WebConsoleHandler::recordTelemetry(last_telemetry_payload);
-  if (strcmp(status, "OK") != 0) {
-    last_error_text = String(type) + "/" + key + ": " + status;
-  }
-  if (strcmp(type, "OBD") == 0 && strcmp(status, "OK") == 0) {
-    last_obd_response_time = millis();
-  }
-}
-
-void maybeLogTelemetrySendSummary() {
-  if (!(LoggingConfig::TraceSenderTelemetry && LoggingConfig::SerialEnabled)) return;
-
-  const uint32_t now = millis();
-  if (telemetry_last_summary_ms == 0) {
-    telemetry_last_summary_ms = now;
-    return;
-  }
-
-  if (now - telemetry_last_summary_ms < LoggingConfig::TraceSummaryIntervalMs) return;
-
-  WebConsoleHandler::log("[sender-tx] seq=" + String(static_cast<unsigned long>(telemetry_sequence)) +
-                         " ok=" + String(static_cast<unsigned long>(telemetry_send_ok)) +
-                         " fail=" + String(static_cast<unsigned long>(telemetry_send_fail)) +
-                         " sim=" + String(Simulation::RuntimeSimulation::enabled() ? "on" : "off"));
-  telemetry_last_summary_ms = now;
-}
-
-void sendStatusFrame(const char* key, const char* value, const char* status) {
-  sendTelemetry("STATUS", key, key, value, "", status);
-}
 
 void sendHeartbeat() {
   const uint32_t now = millis();
@@ -261,102 +151,23 @@ void sendHeartbeat() {
   input.canRecent = last_can_msg_timestamp > 0 &&
                     now - last_can_msg_timestamp <= DisplayConfig::CanTimeoutMs;
   input.obdEnabled = SenderConfig::EnableOBD2;
-  input.obdRecent = last_obd_response_time > 0 &&
-                    now - last_obd_response_time <= DisplayConfig::ObdTimeoutMs;
+  input.obdRecent = SenderTelemetry::lastObdResponseAt() > 0 &&
+                    now - SenderTelemetry::lastObdResponseAt() <= DisplayConfig::ObdTimeoutMs;
   input.udsEnabled = SenderConfig::EnableUDS;
   input.udsAvailable = Uds::Diagnostics::available();
   input.simulationEnabled = Simulation::RuntimeSimulation::enabled();
 
-  SenderHeartbeat::tick(now, last_heartbeat_send_time, heartbeat_count, input, sendStatusFrame);
+  SenderHeartbeat::tick(now, last_heartbeat_send_time, heartbeat_count, input, SenderTelemetry::sendStatus);
 }
-
-void sendSimulationTelemetry() {
-  if (millis() - last_simulation_send_time < kSimulationSendIntervalMs) return;
-  last_simulation_send_time = millis();
-
-  const auto scenario = Simulation::RuntimeSimulation::scenario();
-  const auto simulated = Simulation::simulatedPidValue(simulation_sample_index, millis(), scenario);
-  char value[16];
-  snprintf(value, sizeof(value), simulated.decimals == 0 ? "%.0f" : "%.1f", static_cast<double>(simulated.value));
-  sendTelemetry(simulated.type,
-                simulated.key,
-                simulated.name,
-                strcmp(simulated.status, "OK") == 0 ? value : "N/A",
-                simulated.unit,
-                simulated.status);
-
-  simulation_sample_index++;
-
-  // Status-, CAN- und DTC-Pakete werden zwischen die Messwerte gemischt, damit
-  // alle Display-Seiten ohne Fahrzeug und ohne CAN-Transceiver getestet werden koennen.
-  if (simulation_sample_index % Simulation::simulatedPidCount() == 0) {
-    const auto isoTp = Simulation::buildIsoTpSequence(scenario);
-    sendStatusFrame("CAN", "SIMULATED", "OK");
-    sendStatusFrame("OBD", isoTp.timeoutExpected ? "TIMEOUT" : "SIMULATED", isoTp.timeoutExpected ? "TIMEOUT" : "OK");
-    sendStatusFrame("SIM", Simulation::RuntimeSimulation::enabled() ? "ACTIVE" : "INACTIVE", "OK");
-    sendTelemetry("STATUS", "SIM_SCENARIO", "SimScenario", Simulation::RuntimeSimulation::scenarioName(), "", "OK");
-    sendTelemetry("STATUS", "SIM_DETAIL", "SimDetail", Simulation::scenarioDiagnosticText(scenario), "", "OK");
-    sendTelemetry("CAN", "RAW", "LastCAN", "0x7E8 DLC8 04 41 0C 1A F8 55 55 55", "", "OK");
-    sendTelemetry("CAN", "HINT", "CANHint", Simulation::scenarioDiagnosticText(scenario), "", isoTp.negativeResponse ? "ERROR" : (isoTp.timeoutExpected ? "TIMEOUT" : "OK"));
-    sendTelemetry("CAN", "COUNT", "CANCount", "128", "frames", "OK");
-    sendTelemetry("DTC", "ACTIVE", "DTC",
-                  scenario == Simulation::Scenario::NormalSingleFrame ? "Keine" : "P0133 P0420",
-                  "",
-                  scenario == Simulation::Scenario::NormalSingleFrame ? "OK" : "WARN");
-  }
-}
-// end region ================ Telemetrie senden ================
 
 void updateWebConsoleStatus() {
-  Runtime::WebRuntimeStatus status;
-  status.canActive = can_bus_active;
-  status.obdActive = SenderConfig::EnableOBD2 && last_obd_response_time > 0 &&
-                     millis() - last_obd_response_time <= DisplayConfig::ObdTimeoutMs;
-  status.pidSupportReady = SenderObdScheduler::supportedPidsInitialized();
-  status.simulationActive = Simulation::RuntimeSimulation::enabled();
-  status.simulationScenario = Simulation::RuntimeSimulation::scenarioName();
-  status.batteryVoltage = SenderPower::getLastVoltage();
-  status.uptimeMs = millis();
-  status.telemetrySequence = telemetry_sequence;
-  status.telemetrySendOk = telemetry_send_ok;
-  status.telemetrySendFail = telemetry_send_fail;
-  status.heartbeatCount = heartbeat_count;
-  status.lastCanAgeMs = last_can_msg_timestamp == 0 ? 0 : millis() - last_can_msg_timestamp;
-  status.lastObdAgeMs = last_obd_response_time == 0 ? 0 : millis() - last_obd_response_time;
-  status.canState = can_driver_ready ? (can_bus_active ? "ACTIVE" : "IDLE") : "INIT_FAIL";
-  status.obdState = SenderConfig::EnableOBD2 ? (status.obdActive ? "ACTIVE" : "NO_RESPONSE") : "DISABLED";
-  status.espNowState = esp_now_ready ? "READY" : "INIT_FAIL";
-  status.lastSendError = last_send_error_text;
-  status.lastDtc = SenderObdScheduler::lastDtcText();
-  status.lastVin = SenderObdScheduler::lastVinText();
-  status.lastTelemetry = String(last_telemetry_payload);
-  status.lastError = last_error_text;
-  status.obdRequestCount = Obd::Diagnostics::requestCount();
-  status.obdSendFailureCount = Obd::Diagnostics::sendFailureCount();
-  status.obdTimeoutCount = Obd::Diagnostics::timeoutCount();
-  status.obdValidResponseCount = Obd::Diagnostics::validResponseCount();
-  status.obdNegativeResponseCount = Obd::Diagnostics::negativeResponseCount();
-  status.obdTimeoutStreak = Obd::Diagnostics::timeoutStreak();
-  status.obdPhysicalFallbackActive = Obd::Diagnostics::physicalFallbackActive();
-  status.obdRequestCanId = Obd::Diagnostics::requestCanId();
-  status.supportedPidMask01_20 = Obd::Diagnostics::supportedPidMask(0);
-  status.supportedPidMask21_40 = Obd::Diagnostics::supportedPidMask(1);
-  status.supportedPidMask41_60 = Obd::Diagnostics::supportedPidMask(2);
-  status.lastObdRequest = Obd::Diagnostics::lastRequest();
-  status.lastEcuResponse = Obd::Diagnostics::lastEcuResponse();
-  status.lastNegativeResponse = Obd::Diagnostics::lastNegativeResponse();
-  status.udsAvailable = Uds::Diagnostics::available();
-  status.udsRequestCount = Uds::Diagnostics::requestCount();
-  status.udsSendFailureCount = Uds::Diagnostics::sendFailureCount();
-  status.udsTimeoutCount = Uds::Diagnostics::timeoutCount();
-  status.udsPositiveResponseCount = Uds::Diagnostics::positiveResponseCount();
-  status.udsNegativeResponseCount = Uds::Diagnostics::negativeResponseCount();
-  status.lastUdsRequest = Uds::Diagnostics::lastRequest();
-  status.lastUdsResponse = Uds::Diagnostics::lastResponse();
-  status.lastUdsNegativeResponse = Uds::Diagnostics::lastNegativeResponse();
-  status.lastUdsDid = SenderUdsScheduler::lastDidText();
-  status.lastUdsDtc = SenderUdsScheduler::lastDtcText();
-  WebConsoleHandler::updateRuntimeStatus(status);
+  SenderWebStatus::Input input;
+  input.canBusActive = can_bus_active;
+  input.canDriverReady = can_driver_ready;
+  input.espNowReady = esp_now_ready;
+  input.lastCanMessageAt = last_can_msg_timestamp;
+  input.heartbeatCount = heartbeat_count;
+  WebConsoleHandler::updateRuntimeStatus(SenderWebStatus::build(input));
 }
 
 // end region ================ PRINT_CAN_FLAG ================
@@ -371,7 +182,7 @@ void SenderApp::tick() {
   sendHeartbeat();
 
   if (Simulation::RuntimeSimulation::enabled()) {
-    sendSimulationTelemetry();
+    SenderSimulationScheduler::tick(currentMillis);
     return;
   }
 
@@ -383,7 +194,7 @@ void SenderApp::tick() {
     return;
   }
 
-  const SenderCanAlerts::Result canAlerts = SenderCanAlerts::process(kPollingRateMs, sendStatusFrame);
+  const SenderCanAlerts::Result canAlerts = SenderCanAlerts::process(kPollingRateMs, SenderTelemetry::sendStatus);
 
   //------------- CAN Empfang -------------
   if (canAlerts.rxData) {
@@ -393,7 +204,7 @@ void SenderApp::tick() {
 
   //------------ Fehleranzeigen ------------
   if (canAlerts.errorText.length() > 0) {
-    last_error_text = canAlerts.errorText;
+    SenderTelemetry::setLastError(canAlerts.errorText);
   }
   //---------------------------------------
 
@@ -409,17 +220,17 @@ void SenderApp::tick() {
   //------------- OBD2 Daten regelmäßig abfragen -------------
   SenderObdScheduler::tick(currentMillis,
                            last_can_msg_timestamp,
-                           last_obd_response_time,
+                           SenderTelemetry::lastObdResponseAtRef(),
                            can_bus_active,
-                           sendTelemetry,
-                           sendStatusFrame);
+                           SenderTelemetry::send,
+                           SenderTelemetry::sendStatus);
 
   SenderUdsScheduler::tick(currentMillis,
                            last_can_msg_timestamp,
-                           last_obd_response_time,
+                           SenderTelemetry::lastObdResponseAtRef(),
                            can_bus_active,
-                           sendTelemetry,
-                           sendStatusFrame);
+                           SenderTelemetry::send,
+                           SenderTelemetry::sendStatus);
   //----------------------------------------------------------
 
   //--------------TWAI Status-----------
