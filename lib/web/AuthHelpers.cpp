@@ -2,7 +2,33 @@
 
 #include <cstring>
 
+#include "config/NetworkConfig.h"
+#include "secrets_defaults.h"
+
 namespace WebSecurity {
+
+namespace {
+
+bool stringEquals(const char* left, const char* right) {
+    return WebSecurity::constantTimeEquals(left, right);
+}
+
+bool hasExampleEspNowKey() {
+    return std::memcmp(NetworkConfig::EspNowAesKey,
+                       SecretsExampleDefaults::EspNowAesKey,
+                       sizeof(SecretsExampleDefaults::EspNowAesKey)) == 0;
+}
+
+void appendWarning(String& warning, const char* issue) {
+    if (warning.length() > 0) warning += "; ";
+    warning += issue;
+}
+
+bool targetIs(const char* target, const char* expected) {
+    return stringEquals(target, expected);
+}
+
+} // namespace
 
 bool constantTimeEquals(const char* left, const char* right) {
     if (left == nullptr || right == nullptr) return false;
@@ -40,6 +66,82 @@ bool isConfiguredToken(const char* token) {
     if (token == nullptr || token[0] == '\0') return false;
     if (SecurityConfig::ApiToken == nullptr || SecurityConfig::ApiToken[0] == '\0') return false;
     return constantTimeEquals(token, SecurityConfig::ApiToken);
+}
+
+String senderManagementSecurityWarning() {
+    String warning;
+    if (!SecurityConfig::BlockNetworkFeaturesOnPlaceholderSecrets) return warning;
+
+    if (stringEquals(NetworkConfig::SenderWebPassword, SecretsExampleDefaults::SenderWebPassword)) {
+        appendWarning(warning, "Sender-AP-Passwort ist noch Platzhalter");
+    }
+    if (stringEquals(NetworkConfig::SenderOtaPassword, SecretsExampleDefaults::SenderOtaPassword)) {
+        appendWarning(warning, "Sender-OTA-Passwort ist noch Platzhalter");
+    }
+    if (stringEquals(SecurityConfig::WebPassword, SecretsExampleDefaults::WebPassword)) {
+        appendWarning(warning, "Web-Passwort ist noch Platzhalter");
+    }
+    if (stringEquals(SecurityConfig::ApiToken, SecretsExampleDefaults::ApiToken)) {
+        appendWarning(warning, "API-Token ist noch Platzhalter");
+    }
+    return warning;
+}
+
+String displayManagementSecurityWarning() {
+    String warning;
+    if (!SecurityConfig::BlockNetworkFeaturesOnPlaceholderSecrets) return warning;
+
+    if (stringEquals(NetworkConfig::DisplayWebPassword, SecretsExampleDefaults::DisplayWebPassword)) {
+        appendWarning(warning, "Display-AP-Passwort ist noch Platzhalter");
+    }
+    if (stringEquals(SecurityConfig::WebPassword, SecretsExampleDefaults::WebPassword)) {
+        appendWarning(warning, "Web-Passwort ist noch Platzhalter");
+    }
+    if (stringEquals(SecurityConfig::ApiToken, SecretsExampleDefaults::ApiToken)) {
+        appendWarning(warning, "API-Token ist noch Platzhalter");
+    }
+    return warning;
+}
+
+String espNowSecurityWarning() {
+    String warning;
+    if (!SecurityConfig::BlockNetworkFeaturesOnPlaceholderSecrets) return warning;
+
+    if (hasExampleEspNowKey()) {
+        appendWarning(warning, "ESP-NOW-Key ist noch Platzhalter");
+    }
+    return warning;
+}
+
+String targetSecurityWarning(const char* target, bool includeEspNow) {
+    String warning;
+
+    if (targetIs(target, "sender")) {
+        warning = senderManagementSecurityWarning();
+    } else if (targetIs(target, "display")) {
+        warning = displayManagementSecurityWarning();
+    }
+
+    if (includeEspNow) {
+        const String espNowWarning = espNowSecurityWarning();
+        if (espNowWarning.length() > 0) {
+            if (warning.length() > 0) warning += "; ";
+            warning += espNowWarning;
+        }
+    }
+    return warning;
+}
+
+bool senderManagementConfigurationSafe() {
+    return senderManagementSecurityWarning().length() == 0;
+}
+
+bool displayManagementConfigurationSafe() {
+    return displayManagementSecurityWarning().length() == 0;
+}
+
+bool espNowConfigurationSafe() {
+    return espNowSecurityWarning().length() == 0;
 }
 
 #if defined(ARDUINO)

@@ -1,9 +1,17 @@
 #include "OTAHandler.h"
 
+#include "AuthHelpers.h"
+
 namespace OTAHandler {
 
     void initOTA() {
         if (!SenderConfig::EnableSenderOta) return;
+
+        const String securityWarning = WebSecurity::senderManagementSecurityWarning();
+        if (SecurityConfig::BlockNetworkFeaturesOnPlaceholderSecrets && securityWarning.length() > 0) {
+            Logger::alarm(("[OTA] Start blockiert: " + securityWarning).c_str());
+            return;
+        }
 
         Logger::debug("[OTA] Initialisierung...");
 

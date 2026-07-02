@@ -1,4 +1,5 @@
 #include <unity.h>
+#include "SenderLoopState.h"
 #include "SenderRuntimeState.h"
 
 void setUp() {
@@ -29,9 +30,42 @@ void test_consumption_average_after_ten_samples() {
     TEST_ASSERT_EQUAL_UINT32(0, Runtime::SenderRuntimeState::consumptionSampleCount());
 }
 
+void test_sender_loop_state_tracks_can_activity() {
+    Runtime::SenderLoopState state;
+    state.resetForBoot(1000, 250);
+
+    TEST_ASSERT_FALSE(state.canBusActive);
+    TEST_ASSERT_FALSE(state.canRecent(1000, 200));
+
+    state.markCanTraffic(1250);
+    TEST_ASSERT_TRUE(state.canBusActive);
+    TEST_ASSERT_TRUE(state.canRecent(1300, 100));
+    TEST_ASSERT_FALSE(state.canRecent(1400, 100));
+}
+
+void test_sender_loop_state_resets_timestamps() {
+    Runtime::SenderLoopState state;
+    state.markCanTraffic(500);
+    state.heartbeatCount = 3;
+    state.canDriverReady = true;
+    state.espNowReady = true;
+
+    state.resetForBoot(50, 200);
+
+    TEST_ASSERT_EQUAL_UINT32(0, state.lastCanMessageAt);
+    TEST_ASSERT_EQUAL_UINT32(0, state.lastHeartbeatSentAt);
+    TEST_ASSERT_EQUAL_UINT32(0, state.lastTwaiStatusLogAt);
+    TEST_ASSERT_EQUAL_UINT32(0, state.heartbeatCount);
+    TEST_ASSERT_FALSE(state.canBusActive);
+    TEST_ASSERT_FALSE(state.canDriverReady);
+    TEST_ASSERT_FALSE(state.espNowReady);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_consumption_requires_speed_and_fuel_rate);
     RUN_TEST(test_consumption_average_after_ten_samples);
+    RUN_TEST(test_sender_loop_state_tracks_can_activity);
+    RUN_TEST(test_sender_loop_state_resets_timestamps);
     return UNITY_END();
 }

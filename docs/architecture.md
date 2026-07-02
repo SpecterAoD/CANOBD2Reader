@@ -28,7 +28,8 @@ flowchart LR
 - `lib/can_router`: fixed-size CAN frame fan-out for future TWAI routing.
 - `lib/obd`: PID decoding and derived OBD calculations such as boost pressure.
 - `lib/simulation`: runtime-only OBD/ISO-TP/display simulation scenarios.
-- `lib/runtime`: mutable runtime state such as sender consumption averaging.
+- `lib/runtime`: mutable runtime state such as sender loop state and
+  consumption averaging.
 - `lib/display`: display severity calculation.
 - `lib/web`: shared web authentication helpers.
 

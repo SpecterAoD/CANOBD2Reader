@@ -20,6 +20,7 @@ constexpr const char* ApiToken = Secrets::ApiToken;
 constexpr bool RequireOtaAuthentication = true;
 constexpr bool RequireSimulationAuthentication = true;
 constexpr bool RequireRestartAuthentication = true;
+constexpr bool BlockNetworkFeaturesOnPlaceholderSecrets = true;
 constexpr bool RejectOtaWhenSketchSpaceUnknown = true;
 // Web-OTA cannot safely infer the PlatformIO environment from a raw ESP32 image.
 // Requiring a target-specific filename catches accidental sender/display swaps

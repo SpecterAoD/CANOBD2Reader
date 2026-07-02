@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - master
+    tags:
+      - 'firmware-*'
+      - 'v*'
   pull_request:
   workflow_dispatch:
 
@@ -57,13 +60,17 @@ jobs:
           if [[ ! "$minor" =~ ^[0-9]+$ ]]; then minor=0; fi
           if [[ ! "$patch" =~ ^[0-9]+$ ]]; then patch=0; fi
 
-          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            patch=$((patch + 1))
-            version="${major}.${minor}.${patch}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            raw_tag="${GITHUB_REF_NAME#firmware-}"
+            raw_tag="${raw_tag#v}"
+            raw_tag="${raw_tag#V}"
+            version="${raw_tag}"
             version_tag="V${version}"
-            echo "$version_tag" > "$VERSION_FILE"
-          else
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
             version="${major}.${minor}.${patch}-pr${{ github.event.number }}.${{ github.run_number }}"
+            version_tag="V${version}"
+          else
+            version="${major}.${minor}.${patch}-ci.${{ github.run_number }}"
             version_tag="V${version}"
           fi
 
@@ -71,22 +78,6 @@ jobs:
           echo "VERSION_TAG=$version_tag" >> "$GITHUB_ENV"
           echo "CANOBD2_FIRMWARE_VERSION=$version_tag" >> "$GITHUB_ENV"
           echo "Firmware version: $version_tag"
-
-      - name: Commit version bump
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- "$VERSION_FILE"; then
-            echo "VERSION.txt already up to date"
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$VERSION_FILE"
-          git commit -m "chore: bump firmware version to $VERSION_TAG [skip ci]"
-          git push
 
       - name: Build sender and display firmware
         run: |
@@ -133,10 +124,10 @@ jobs:
           path: output/
 
       - name: Create GitHub release
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: firmware-${{ env.VERSION_TAG }}
+          tag_name: ${{ github.ref_name }}
           name: CAN OBD2 Firmware ${{ env.VERSION_TAG }}
           files: output/*
           generate_release_notes: true

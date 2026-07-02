@@ -30,6 +30,15 @@ void test_api_token_config_is_present_and_checked() {
     TEST_ASSERT_FALSE(WebSecurity::isConfiguredToken(nullptr));
 }
 
+void test_placeholder_secret_guards_are_reported() {
+    TEST_ASSERT_TRUE(WebSecurity::senderManagementSecurityWarning().length() > 0);
+    TEST_ASSERT_TRUE(WebSecurity::displayManagementSecurityWarning().length() > 0);
+    TEST_ASSERT_TRUE(WebSecurity::espNowSecurityWarning().length() > 0);
+    TEST_ASSERT_FALSE(WebSecurity::senderManagementConfigurationSafe());
+    TEST_ASSERT_FALSE(WebSecurity::displayManagementConfigurationSafe());
+    TEST_ASSERT_FALSE(WebSecurity::espNowConfigurationSafe());
+}
+
 void test_ota_target_filename_guard() {
     TEST_ASSERT_TRUE(SecurityConfig::RequireOtaTargetInFilename);
 
@@ -42,6 +51,10 @@ void test_ota_target_filename_guard() {
     TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("CANOBD2_display_V1.0.11.bin", "display"));
     TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("sender.bin", "display"));
     TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("", "display"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("resender.bin", "sender"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("display_senderish.bin", "sender"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("sender.txt", "sender"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("../sender.bin", "sender"));
 }
 
 int main(int, char**) {
@@ -49,6 +62,7 @@ int main(int, char**) {
     RUN_TEST(test_constant_time_equals);
     RUN_TEST(test_authentication_config_is_present);
     RUN_TEST(test_api_token_config_is_present_and_checked);
+    RUN_TEST(test_placeholder_secret_guards_are_reported);
     RUN_TEST(test_ota_target_filename_guard);
     return UNITY_END();
 }

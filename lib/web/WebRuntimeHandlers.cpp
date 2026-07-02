@@ -1,5 +1,7 @@
 #include "WebRuntimeHandlers.h"
 
+#include <cstddef>
+
 #if defined(ARDUINO)
   #include <Esp.h>
   #include <Update.h>
@@ -7,6 +9,7 @@
 
 #if defined(ARDUINO)
   #include "DiagnosticLog.h"
+  #include "AuthHelpers.h"
   #include "config/ProjectConfig.h"
   #include "config/SecurityConfig.h"
 #endif
@@ -31,6 +34,50 @@ bool containsIgnoreCase(const char* haystack, const char* needle) {
             ++n;
         }
         if (*n == '\0') return true;
+    }
+
+    return false;
+}
+
+bool isAsciiAlphaNumeric(char value) {
+    return (value >= 'a' && value <= 'z') ||
+           (value >= 'A' && value <= 'Z') ||
+           (value >= '0' && value <= '9');
+}
+
+bool endsWithIgnoreCase(const char* value, const char* suffix) {
+    if (value == nullptr || suffix == nullptr) return false;
+
+    std::size_t valueLength = 0;
+    while (value[valueLength] != '\0') ++valueLength;
+    std::size_t suffixLength = 0;
+    while (suffix[suffixLength] != '\0') ++suffixLength;
+    if (suffixLength == 0 || suffixLength > valueLength) return false;
+
+    const std::size_t start = valueLength - suffixLength;
+    for (std::size_t index = 0; index < suffixLength; ++index) {
+        if (!asciiEqualsIgnoreCase(value[start + index], suffix[index])) return false;
+    }
+    return true;
+}
+
+bool containsTokenIgnoreCase(const char* haystack, const char* needle) {
+    if (haystack == nullptr || needle == nullptr || needle[0] == '\0') return false;
+
+    for (const char* cursor = haystack; *cursor != '\0'; ++cursor) {
+        const char* h = cursor;
+        const char* n = needle;
+        while (*h != '\0' && *n != '\0' && asciiEqualsIgnoreCase(*h, *n)) {
+            ++h;
+            ++n;
+        }
+        if (*n != '\0') continue;
+
+        const char previous = cursor == haystack ? '\0' : *(cursor - 1);
+        const char next = *h;
+        const bool leftBoundary = previous == '\0' || !isAsciiAlphaNumeric(previous);
+        const bool rightBoundary = next == '\0' || !isAsciiAlphaNumeric(next);
+        if (leftBoundary && rightBoundary) return true;
     }
 
     return false;
@@ -80,18 +127,20 @@ bool firmwareFilenameMatchesTarget(const char* filename, const char* expectedTar
     if (expectedTarget == nullptr || expectedTarget[0] == '\0') return false;
     if (containsIgnoreCase(expectedTarget, "unknown")) return true;
     if (filename == nullptr || filename[0] == '\0') return false;
+    if (!endsWithIgnoreCase(filename, ".bin")) return false;
+    if (containsIgnoreCase(filename, "/") || containsIgnoreCase(filename, "\\")) return false;
 
-    const bool isSenderTarget = containsIgnoreCase(expectedTarget, "sender");
-    const bool isDisplayTarget = containsIgnoreCase(expectedTarget, "display");
+    const bool isSenderTarget = containsTokenIgnoreCase(expectedTarget, "sender");
+    const bool isDisplayTarget = containsTokenIgnoreCase(expectedTarget, "display");
 
     if (isSenderTarget) {
-        return containsIgnoreCase(filename, "sender") && !containsIgnoreCase(filename, "display");
+        return containsTokenIgnoreCase(filename, "sender") && !containsTokenIgnoreCase(filename, "display");
     }
     if (isDisplayTarget) {
-        return containsIgnoreCase(filename, "display") && !containsIgnoreCase(filename, "sender");
+        return containsTokenIgnoreCase(filename, "display") && !containsTokenIgnoreCase(filename, "sender");
     }
 
-    return containsIgnoreCase(filename, expectedTarget);
+    return containsTokenIgnoreCase(filename, expectedTarget);
 }
 
 #if defined(ARDUINO)
@@ -105,6 +154,14 @@ bool beginWebOtaUpload(const String& filename, String& status, LogCallback logCa
 
     status = "Upload gestartet: " + filename;
     if (logCallback != nullptr) logCallback("[WebOTA] " + status);
+
+    const String securityWarning = WebSecurity::targetSecurityWarning(ProjectConfig::TargetName, false);
+    if (SecurityConfig::BlockNetworkFeaturesOnPlaceholderSecrets && securityWarning.length() > 0) {
+        otaSessionRejected = true;
+        status = "OTA abgelehnt: unsichere Platzhalter-Secrets aktiv (" + securityWarning + ")";
+        if (logCallback != nullptr) logCallback("[WebOTA] " + status);
+        return false;
+    }
 
     if (SecurityConfig::RequireOtaTargetInFilename &&
         !firmwareFilenameMatchesTarget(filename.c_str(), ProjectConfig::TargetName)) {
@@ -182,6 +239,7 @@ void abortWebOtaUpload(String& status, LogCallback logCallback) {
 }
 
 void appendFirmwareJson(String& json, const String& otaStatus) {
+    const String securityWarning = WebSecurity::targetSecurityWarning(ProjectConfig::TargetName);
     json += "\"firmware\":\"" + jsonEscape(ProjectConfig::FirmwareVersion) + "\",";
     json += "\"target\":\"" + jsonEscape(ProjectConfig::TargetName) + "\",";
     json += "\"protocol\":" + String(ProjectConfig::ProtocolVersion) + ",";
@@ -189,6 +247,8 @@ void appendFirmwareJson(String& json, const String& otaStatus) {
     json += "\"otaStatus\":\"" + jsonEscape(otaStatus) + "\",";
     json += "\"otaFilenameHint\":\"" + jsonEscape(String(ProjectConfig::TargetName) + ".bin") + "\",";
     json += "\"otaTargetFilenameRequired\":" + String(SecurityConfig::RequireOtaTargetInFilename ? "true" : "false") + ",";
+    json += "\"securityReady\":" + String(securityWarning.length() == 0 ? "true" : "false") + ",";
+    json += "\"securityWarning\":\"" + jsonEscape(securityWarning) + "\",";
     json += "\"freeSketchSpace\":" + String(ESP.getFreeSketchSpace()) + ",";
     json += "\"sketchSize\":" + String(ESP.getSketchSize()) + ",";
     json += "\"flashSize\":" + String(ESP.getFlashChipSize()) + ",";

@@ -9,7 +9,9 @@
 #include "config/ProjectConfig.h"
 #include "config/DisplayConfig.h"
 #include "config/NetworkConfig.h"
+#include "config/SecurityConfig.h"
 #include "config/LoggingConfig.h"
+#include "AuthHelpers.h"
 #include "DisplayData.h"
 #include "TelemetryCodec.h"
 #include "StatusLogic.h"
@@ -196,6 +198,13 @@ void begin() {
   telemetryQueue = xQueueCreate(DisplayConfig::TelemetryQueueLength, sizeof(QueuedTelemetryPacket));
   if (telemetryQueue == nullptr) {
     DisplayData::runtime().lastError = "Telemetry Queue fehlgeschlagen";
+    return;
+  }
+
+  const String securityWarning = WebSecurity::espNowSecurityWarning();
+  if (SecurityConfig::BlockNetworkFeaturesOnPlaceholderSecrets && securityWarning.length() > 0) {
+    DisplayData::runtime().lastError = "ESP-NOW blockiert: " + securityWarning;
+    DiagnosticLog::appendf("[DISPLAY] %s", DisplayData::runtime().lastError.c_str());
     return;
   }
 

@@ -42,6 +42,11 @@ Protected endpoints include:
 Web OTA now requires authentication and checks whether OTA sketch space is
 available before starting `Update.begin()`. CI publishes stable firmware names
 (`sender.bin`, `display.bin`) and SHA-256 values in `firmware_manifest.json`.
+The runtime also rejects OTA uploads when placeholder web credentials,
+placeholder API tokens or placeholder AP/OTA passwords from
+`include/secrets.example.h` are still active. Filename validation now requires
+the `.bin` suffix and a target token such as `sender.bin`,
+`CANOBD2_sender_V1.2.3.bin`, `display.bin` or `CANOBD2_display_V1.2.3.bin`.
 The current firmware still relies on the ESP32 bootloader and partition table
 for binary integrity; cryptographic target-specific metadata validation inside
 the uploaded `.bin` remains an open hardening step.
@@ -56,4 +61,5 @@ slots.
 - Target validation inside `.bin` files is not yet cryptographic. A future
   manifest/signature step should bind target, version, protocol and hash to each
   firmware image.
-- The example ESP-NOW key is public and must be replaced in `include/secrets.h`.
+- The example ESP-NOW key is public and now blocks ESP-NOW startup until it is
+  replaced in `include/secrets.h`.

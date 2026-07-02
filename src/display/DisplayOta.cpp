@@ -21,25 +21,6 @@ namespace {
   bool webUpdateInProgress = false;
   String webOtaStatus = "Bereit";
 
-  String jsonEscape(const String& value) {
-    String escaped;
-    escaped.reserve(value.length() + 8);
-    for (uint16_t i = 0; i < value.length(); ++i) {
-      const char c = value[i];
-      if (c == '"' || c == '\\') {
-        escaped += '\\';
-        escaped += c;
-      } else if (c == '\n') {
-        escaped += "\\n";
-      } else if (c == '\r') {
-        escaped += "\\r";
-      } else {
-        escaped += c;
-      }
-    }
-    return escaped;
-  }
-
   String simulationJson() {
     return WebRuntimeHandlers::simulationJson();
   }
@@ -89,7 +70,7 @@ const $=id=>document.getElementById(id);
 const scenarios=%%SIMULATION_SCENARIOS%%;
 scenarios.forEach(x=>{let o=document.createElement('option');o.value=x;o.textContent=x;$('scenarioSelect').appendChild(o)});
 function bytes(v){return Math.round((v||0)/1024)+' KB'}
-async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('ota').textContent=bytes(s.freeSketchSpace)+' frei';$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('diaglog').textContent=(s.diagnosticLogMounted?'bereit':'nicht gemountet')+' · '+bytes(s.diagnosticLogSize)+' / '+bytes(s.diagnosticLogMaxSize);$('status').textContent=s.update?'Update läuft':'Bereit';$('detail').textContent=s.otaStatus+' · '+(s.lastError||'Keine Fehler');$('state').textContent=s.update?'Update':'OK';$('state').className='pill '+(s.update?'err':'ok')}catch(e){$('state').textContent='offline';$('state').className='pill err'}}
+async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('ota').textContent=bytes(s.freeSketchSpace)+' frei';$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('diaglog').textContent=(s.diagnosticLogMounted?'bereit':'nicht gemountet')+' · '+bytes(s.diagnosticLogSize)+' / '+bytes(s.diagnosticLogMaxSize);$('status').textContent=s.update?'Update läuft':'Bereit';$('detail').textContent=(s.securityWarning||s.otaStatus)+' · '+(s.lastError||'Keine Fehler');$('state').textContent=s.update?'Update':(s.securityReady?'OK':'Warnung');$('state').className='pill '+(s.update?'err':(s.securityReady?'ok':'err'))}catch(e){$('state').textContent='offline';$('state').className='pill err'}}
 async function refreshSimulation(){try{let s=await fetch('/api/simulation',{cache:'no-store'}).then(r=>r.json());$('sim').textContent=s.simulation?'aktiv':'inaktiv';$('scenario').textContent=s.scenario||'--';$('scenarioSelect').value=s.scenario||'NormalSingleFrame'}catch(e){}}
 async function loadLog(){try{let p=$('logs');p.style.display='block';p.textContent=await fetch('/log/file',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
 $('restart').onclick=async()=>{if(confirm('Display wirklich neu starten?'))await fetch('/api/restart',{method:'POST'})}
@@ -115,11 +96,11 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     json += "{";
     WebRuntimeHandlers::appendFirmwareJson(json, webOtaStatus);
     WebRuntimeHandlers::appendDiagnosticLogJson(json, LoggingConfig::DiagnosticLogMaxBytes);
-    json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
+    json += "\"ip\":\"" + WebRuntimeHandlers::jsonEscape(WiFi.softAPIP().toString()) + "\",";
     json += "\"uptime\":" + String(millis()) + ",";
     json += "\"update\":" + String(webUpdateInProgress ? "true" : "false") + ",";
     json += "\"simulation\":" + String(Simulation::RuntimeSimulation::enabled() ? "true" : "false") + ",";
-    json += "\"simulationScenario\":\"" + jsonEscape(Simulation::RuntimeSimulation::scenarioName()) + "\",";
+    json += "\"simulationScenario\":\"" + WebRuntimeHandlers::jsonEscape(Simulation::RuntimeSimulation::scenarioName()) + "\",";
     json += "\"espNowConnected\":" + String(DisplayData::isEspNowConnected() ? "true" : "false") + ",";
     json += "\"canStatusRecent\":" + String(DisplayData::isCanStatusRecent() ? "true" : "false") + ",";
     json += "\"obdStatusRecent\":" + String(DisplayData::isObdStatusRecent() ? "true" : "false") + ",";
@@ -131,7 +112,7 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     json += "\"receivedPackets\":" + String(runtime.receivedPackets) + ",";
     json += "\"droppedPackets\":" + String(runtime.droppedPackets) + ",";
     json += "\"crcErrors\":" + String(runtime.crcErrors) + ",";
-    json += "\"lastError\":\"" + jsonEscape(runtime.lastError) + "\"";
+    json += "\"lastError\":\"" + WebRuntimeHandlers::jsonEscape(runtime.lastError) + "\"";
     json += "}";
     server.send(200, "application/json", json);
   }
@@ -269,6 +250,15 @@ namespace DisplayOta {
                            ProjectConfig::FirmwareVersion,
                            ProjectConfig::ProtocolVersion,
                            ProjectConfig::TargetName);
+
+    const String securityWarning = WebSecurity::displayManagementSecurityWarning();
+    if (SecurityConfig::BlockNetworkFeaturesOnPlaceholderSecrets && securityWarning.length() > 0) {
+      webOtaStatus = "Gesperrt: " + securityWarning;
+      DisplayData::runtime().lastError = webOtaStatus;
+      DiagnosticLog::appendf("[DISPLAY] %s", webOtaStatus.c_str());
+      return;
+    }
+
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(NetworkConfig::DisplayWebSsid,
                 NetworkConfig::DisplayWebPassword,
