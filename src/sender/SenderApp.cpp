@@ -95,6 +95,12 @@ void updateWebConsoleStatus(const Runtime::SenderLoopState& runtimeState) {
   WebConsoleHandler::updateRuntimeStatus(SenderWebStatus::build(input));
 }
 
+void updateLedTestButton() {
+  // The button module returns whether the LED test is currently active.
+  // The runtime coordinator only needs to trigger the non-blocking update.
+  (void)SenderLedButton::updateLedTestButton();
+}
+
 Runtime::SenderRuntimeCoordinator::CanAlertResult processCanAlerts(uint32_t waitMs) {
   const SenderCanAlerts::Result result = SenderCanAlerts::process(waitMs, SenderTelemetry::sendStatus);
   static String lastCanError;
@@ -120,28 +126,34 @@ void tickUds(Runtime::SenderLoopState& runtimeState) {
                            SenderTelemetry::sendStatus);
 }
 
+void setLastTelemetryError(const char* errorText) {
+  SenderTelemetry::setLastError(String(errorText == nullptr ? "" : errorText));
+}
+
+Runtime::SenderRuntimeCoordinator::Services makeCoordinatorServices() {
+  Runtime::SenderRuntimeCoordinator::Services services{};
+  services.handleOta = OTAHandler::handleOTA;
+  services.handleWeb = WebConsoleHandler::handle;
+  services.updateWebStatus = updateWebConsoleStatus;
+  services.updateLedTestButton = updateLedTestButton;
+  services.sendHeartbeat = sendHeartbeat;
+  services.simulationEnabled = Simulation::RuntimeSimulation::enabled;
+  services.tickSimulation = SenderSimulationScheduler::tick;
+  services.senderStarted = WebConsoleHandler::isStarted;
+  services.processCanAlerts = processCanAlerts;
+  services.setLastError = setLastTelemetryError;
+  services.pulseErrorLed = SenderLedButton::pulseError;
+  services.updateLed = SenderLedButton::update;
+  services.tickObd = tickObd;
+  services.tickUds = tickUds;
+  services.logTwaiStatus = CANHandler::printStatus;
+  services.tickPower = SenderPowerScheduler::tick;
+  return services;
+}
+
 Runtime::SenderRuntimeCoordinator coordinator(
     {kPollingRateMs, SenderConfig::TwaiStatusLogIntervalMs, LoggingConfig::TwaiDebugEnabled},
-    {
-        OTAHandler::handleOTA,
-        WebConsoleHandler::handle,
-        updateWebConsoleStatus,
-        SenderLedButton::updateLedTestButton,
-        sendHeartbeat,
-        Simulation::RuntimeSimulation::enabled,
-        SenderSimulationScheduler::tick,
-        WebConsoleHandler::isStarted,
-        processCanAlerts,
-        [](const char* errorText) {
-          SenderTelemetry::setLastError(String(errorText == nullptr ? "" : errorText));
-        },
-        SenderLedButton::pulseError,
-        SenderLedButton::update,
-        tickObd,
-        tickUds,
-        CANHandler::printStatus,
-        SenderPowerScheduler::tick,
-    });
+    makeCoordinatorServices());
 
 } // namespace
 

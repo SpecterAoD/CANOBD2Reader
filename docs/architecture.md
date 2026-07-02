@@ -35,10 +35,12 @@ flowchart LR
 
 ## Configuration model
 
-Compile-time configuration is exposed through `include/Config.h` as a
-compatibility facade. New static values should be added to focused config files
-such as `ProjectConfig.h`, `SenderConfig.h`, `DisplayConfig.h`,
-`SimulationConfig.h` or `SecurityConfig.h`.
+Compile-time configuration is split into focused headers under
+`include/config`. New static values should be added to the matching module,
+for example `ProjectConfig.h`, `SenderConfig.h`, `DisplayConfig.h`,
+`NetworkConfig.h`, `SimulationConfig.h`, `SecurityConfig.h` or
+`LoggingConfig.h`. The old `include/Config.h` facade was removed deliberately
+and must not be reintroduced.
 
 Runtime values must not be added to config headers. Mutable state belongs in
 `lib/runtime` or in the relevant firmware module.

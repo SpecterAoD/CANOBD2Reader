@@ -462,7 +462,8 @@ Builds reproduzierbar bleiben und der Workflow keine Commits in den Branch
 zurückschreibt.
 
 Die erzeugten Dateien liegen danach als GitHub-Actions-Artefakt vor. Ein
-GitHub Release wird nur bei Tag-Pushes (`firmware-*` oder `v*`) veröffentlicht:
+GitHub Release wird nicht im normalen CI-Build erzeugt; siehe Abschnitt
+`GitHub Release erstellen`:
 
 - `CAN_OBD2_sender_<VERSION>.bin`
 - `CAN_OBD2_display_<VERSION>.bin`
@@ -471,6 +472,27 @@ GitHub Release wird nur bei Tag-Pushes (`firmware-*` oder `v*`) veröffentlicht:
 - `firmware_manifest.json`
 
 Für Web-OTA vom iPhone werden normalerweise nur die `.bin`-Dateien benötigt.
+
+Hinweis: GitHub Actions kopiert fuer CI- und Release-Builds automatisch
+`include/secrets.example.h` nach `include/secrets.h`. Damit bauen Sender und
+Display reproduzierbar mit den Beispielpasswoertern aus dem Repository. Reale
+Geraete sollten weiterhin mit einer lokalen, nicht eingecheckten
+`include/secrets.h` gebaut werden.
+
+## GitHub Release erstellen
+
+Releases sind vom normalen CI-Build getrennt. Dadurch erzeugt ein normaler Push
+keine Tags und keine Releases mehr.
+
+1. In GitHub `Actions` oeffnen.
+2. Workflow `Release Firmware` auswaehlen.
+3. `Run workflow` anklicken.
+4. Version ohne fuehrendes `V` eingeben, z. B. `1.0.14`.
+5. Optional `prerelease` oder `draft` aktivieren.
+
+Der Workflow baut Sender und Display, fuehrt die Native-Tests aus, erstellt den
+Tag `firmware-V<version>` und veroeffentlicht danach ein GitHub Release mit den
+Firmware-Artefakten.
 
 ## Telemetrie-Protokoll
 

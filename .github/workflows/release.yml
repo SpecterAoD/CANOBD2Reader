@@ -1,32 +1,54 @@
-name: Build Firmware
+name: Release Firmware
 
 on:
-  push:
-    branches:
-      - main
-      - master
-  pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Firmware version without leading V, for example 1.0.14"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark the GitHub release as prerelease"
+        required: true
+        default: false
+        type: boolean
+      draft:
+        description: "Create the GitHub release as draft"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build:
-    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
+  release:
     runs-on: ubuntu-24.04
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      version_tag: ${{ steps.version.outputs.version_tag }}
 
     env:
-      VERSION_FILE: VERSION.txt
+      VERSION: ${{ inputs.version }}
+      VERSION_TAG: V${{ inputs.version }}
+      RELEASE_TAG: firmware-V${{ inputs.version }}
+      CANOBD2_FIRMWARE_VERSION: V${{ inputs.version }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Validate version input
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9]+)*$ ]]; then
+            echo "Invalid version '${VERSION}'. Use values like 1.0.14 or 1.0.14-rc1." >&2
+            exit 1
+          fi
+          if git rev-parse "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Release tag '${RELEASE_TAG}' already exists." >&2
+            exit 1
+          fi
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -38,50 +60,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install platformio
 
-      - name: Use example secrets for CI build
+      - name: Use example secrets for release build
         shell: bash
         run: |
           set -euo pipefail
           cp include/secrets.example.h include/secrets.h
-          echo "CI builds use include/secrets.example.h placeholder credentials."
-
-      - name: Calculate firmware version
-        id: version
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ ! -f "$VERSION_FILE" ]; then
-            echo "V1.0.0" > "$VERSION_FILE"
-          fi
-
-          raw_version="$(tr -d '\r\n[:space:]' < "$VERSION_FILE")"
-          raw_version="${raw_version#v}"
-          raw_version="${raw_version#V}"
-
-          IFS='.' read -r major minor patch <<< "$raw_version"
-          major="${major:-1}"
-          minor="${minor:-0}"
-          patch="${patch:-0}"
-
-          if [[ ! "$major" =~ ^[0-9]+$ ]]; then major=1; fi
-          if [[ ! "$minor" =~ ^[0-9]+$ ]]; then minor=0; fi
-          if [[ ! "$patch" =~ ^[0-9]+$ ]]; then patch=0; fi
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            version="${major}.${minor}.${patch}-pr${{ github.event.number }}.${{ github.run_number }}"
-            version_tag="V${version}"
-          else
-            version="${major}.${minor}.${patch}-ci.${{ github.run_number }}"
-            version_tag="V${version}"
-          fi
-
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-          echo "VERSION_TAG=$version_tag" >> "$GITHUB_ENV"
-          echo "CANOBD2_FIRMWARE_VERSION=$version_tag" >> "$GITHUB_ENV"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "version_tag=$version_tag" >> "$GITHUB_OUTPUT"
-          echo "Firmware version: $version_tag"
+          echo "Release builds use include/secrets.example.h placeholder credentials."
 
       - name: Build sender and display firmware
         run: |
@@ -126,3 +110,22 @@ jobs:
         with:
           name: CAN_OBD2_firmware_${{ env.VERSION_TAG }}
           path: output/
+
+      - name: Create release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${RELEASE_TAG}" -m "CAN OBD2 Firmware ${VERSION_TAG}"
+          git push origin "${RELEASE_TAG}"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: CAN OBD2 Firmware ${{ env.VERSION_TAG }}
+          files: output/*
+          draft: ${{ inputs.draft }}
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
