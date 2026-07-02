@@ -1,0 +1,208 @@
+name: Firmware build
+description: Build CANOBD2 sender/display firmware and prepare release artifacts.
+
+inputs:
+  version:
+    description: Firmware version without leading V.
+    required: true
+  target:
+    description: sender, display or all.
+    required: true
+  run_tests:
+    description: Run native unit tests.
+    required: false
+    default: "true"
+  release_type:
+    description: test, prerelease or release.
+    required: false
+    default: test
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+
+    - name: Install PlatformIO
+      shell: bash
+      run: |
+        set -euo pipefail
+        python -m pip install --upgrade pip
+        python -m pip install platformio
+
+    - name: Use example secrets
+      shell: bash
+      run: |
+        set -euo pipefail
+        cp include/secrets.example.h include/secrets.h
+        echo "Build uses include/secrets.example.h placeholder credentials."
+
+    - name: Validate target
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+      run: |
+        set -euo pipefail
+        case "${TARGET}" in
+          sender|display|all) ;;
+          *)
+            echo "Invalid target '${TARGET}'. Use sender, display or all." >&2
+            exit 1
+            ;;
+        esac
+
+    - name: PlatformIO check
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+      run: |
+        set -euo pipefail
+        case "${TARGET}" in
+          sender)
+            platformio check -e sender
+            ;;
+          display)
+            platformio check -e display
+            ;;
+          all)
+            platformio check -e sender
+            platformio check -e display
+            ;;
+        esac
+
+    - name: Build firmware
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+        CANOBD2_FIRMWARE_VERSION: V${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        case "${TARGET}" in
+          sender)
+            platformio run -e sender
+            ;;
+          display)
+            platformio run -e display
+            ;;
+          all)
+            platformio run -e sender -e display
+            ;;
+        esac
+
+    - name: Run native unit tests
+      if: ${{ inputs.run_tests == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        platformio test -e native
+
+    - name: Prepare firmware artifacts
+      shell: bash
+      env:
+        VERSION_TAG: V${{ inputs.version }}
+        TARGET: ${{ inputs.target }}
+        RELEASE_TYPE: ${{ inputs.release_type }}
+      run: |
+        set -euo pipefail
+
+        mkdir -p output ota flash_package
+
+        sender_sha256=""
+        display_sha256=""
+        sender_bin=""
+        display_bin=""
+        sender_stable=""
+        display_stable=""
+
+        if [[ "${TARGET}" == "sender" || "${TARGET}" == "all" ]]; then
+          sender_bin="CAN_OBD2_sender_${VERSION_TAG}.bin"
+          sender_stable="sender.bin"
+          cp .pio/build/sender/firmware.bin "output/${sender_bin}"
+          cp .pio/build/sender/firmware.bin "output/${sender_stable}"
+          cp .pio/build/sender/firmware.elf "output/CAN_OBD2_sender_${VERSION_TAG}.elf"
+          sender_sha256="$(sha256sum "output/${sender_stable}" | awk '{print $1}')"
+        fi
+
+        if [[ "${TARGET}" == "display" || "${TARGET}" == "all" ]]; then
+          display_bin="CAN_OBD2_display_${VERSION_TAG}.bin"
+          display_stable="display.bin"
+          cp .pio/build/display/firmware.bin "output/${display_bin}"
+          cp .pio/build/display/firmware.bin "output/${display_stable}"
+          cp .pio/build/display/firmware.elf "output/CAN_OBD2_display_${VERSION_TAG}.elf"
+          display_sha256="$(sha256sum "output/${display_stable}" | awk '{print $1}')"
+        fi
+
+        {
+          echo "{"
+          echo "  \"version\": \"${VERSION_TAG}\","
+          echo "  \"commit\": \"${GITHUB_SHA}\","
+          echo "  \"target\": \"${TARGET}\","
+          echo "  \"release_type\": \"${RELEASE_TYPE}\","
+          echo "  \"protocol\": 2,"
+          echo "  \"sender_bin\": \"${sender_bin}\","
+          echo "  \"display_bin\": \"${display_bin}\","
+          echo "  \"sender_bin_stable\": \"${sender_stable}\","
+          echo "  \"display_bin_stable\": \"${display_stable}\","
+          echo "  \"sender_sha256\": \"${sender_sha256}\","
+          echo "  \"display_sha256\": \"${display_sha256}\""
+          echo "}"
+        } > output/firmware_manifest.json
+
+        {
+          echo "# CAN OBD2 Firmware ${VERSION_TAG}"
+          echo
+          echo "- Type: ${RELEASE_TYPE}"
+          echo "- Target: ${TARGET}"
+          echo "- Commit: ${GITHUB_SHA}"
+          echo "- Protocol: 2"
+          echo
+          echo "## Firmware files"
+          if [[ -n "${sender_bin}" ]]; then
+            echo "- Sender: ${sender_bin}"
+          fi
+          if [[ -n "${display_bin}" ]]; then
+            echo "- Display: ${display_bin}"
+          fi
+          echo
+          echo "## OTA"
+          echo "Use sender.bin for sender Web-OTA and display.bin for display Web-OTA."
+        } > output/RELEASE_NOTES.md
+
+        cp output/firmware_manifest.json ota/latest.json
+        if [[ -f output/sender.bin ]]; then cp output/sender.bin ota/sender.bin; fi
+        if [[ -f output/display.bin ]]; then cp output/display.bin ota/display.bin; fi
+        (cd ota && sha256sum * > SHA256SUMS.txt)
+        (cd ota && zip -r "../output/CAN_OBD2_OTA_${VERSION_TAG}.zip" .)
+
+        cp output/firmware_manifest.json flash_package/firmware_manifest.json
+        cp output/RELEASE_NOTES.md flash_package/RELEASE_NOTES.md
+        cp output/*.bin flash_package/
+        if [[ -f output/sender.bin ]]; then
+          printf '%s\r\n' \
+            '@echo off' \
+            'echo Flash CAN OBD2 sender firmware' \
+            'echo.' \
+            'echo Adjust COM port if required.' \
+            'python -m esptool --chip esp32 --port COM3 --baud 921600 write_flash 0x10000 sender.bin' \
+            'pause' > flash_package/flash_sender.bat
+        fi
+        if [[ -f output/display.bin ]]; then
+          printf '%s\r\n' \
+            '@echo off' \
+            'echo Flash CAN OBD2 display firmware' \
+            'echo.' \
+            'echo Adjust COM port if required.' \
+            'python -m esptool --chip esp32s3 --port COM3 --baud 921600 write_flash 0x10000 display.bin' \
+            'pause' > flash_package/flash_display.bat
+        fi
+        (cd flash_package && sha256sum * > SHA256SUMS.txt)
+        (cd flash_package && zip -r "../output/CAN_OBD2_FLASH_${VERSION_TAG}.zip" .)
+
+        (
+          cd output
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%P\0' \
+            | sort -z \
+            | xargs -0 sha256sum > SHA256SUMS.txt
+        )

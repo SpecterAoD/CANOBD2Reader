@@ -1,0 +1,48 @@
+name: Test Firmware Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Firmware version without leading V, for example 1.0.15.test1"
+        required: true
+        type: string
+      target:
+        description: "Firmware target to build"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - sender
+          - display
+      run_tests:
+        description: "Run native unit tests"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build firmware artifacts
+        uses: ./.github/actions/firmware-build
+        with:
+          version: ${{ inputs.version }}
+          target: ${{ inputs.target }}
+          run_tests: ${{ inputs.run_tests }}
+          release_type: test
+
+      - name: Upload test firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: TEST_V${{ inputs.version }}
+          path: output/
