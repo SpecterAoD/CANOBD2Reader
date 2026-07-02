@@ -5,6 +5,9 @@
 
 namespace {
 
+constexpr uint32_t kTestPollingRateMs = 25;
+constexpr uint32_t kTestTwaiLogIntervalMs = 100;
+
 struct CoordinatorFixture {
     bool simulationEnabled = false;
     bool senderStarted = true;
@@ -61,7 +64,7 @@ void tickPower(uint32_t nowMs) {
 
 Runtime::SenderRuntimeCoordinator makeCoordinator() {
     return Runtime::SenderRuntimeCoordinator(
-        {25, 100, true},
+        {kTestPollingRateMs, kTestTwaiLogIntervalMs, true},
         {handleOta,
          handleWeb,
          updateWebStatus,

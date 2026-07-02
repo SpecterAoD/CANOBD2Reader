@@ -20,7 +20,11 @@
 
 namespace {
 
+// Tail buffer for sliding-window metadata checks across OTA chunks.
 constexpr size_t kOtaSearchTailSize = 96;
+constexpr size_t kOtaCombinedSearchWindowSize = kOtaSearchTailSize * 2;
+constexpr size_t kSha256DigestSize = 32;
+constexpr size_t kSha256HexStringSize = (kSha256DigestSize * 2) + 1;
 
 bool asciiEqualsIgnoreCase(char a, char b) {
     if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
@@ -134,7 +138,7 @@ bool otaSessionActive = false;
 bool otaSessionRejected = false;
 bool otaSessionTargetSeen = false;
 bool otaSessionVersionSeen = false;
-char otaSessionSha256[65] = {};
+char otaSessionSha256[kSha256HexStringSize] = {};
 uint8_t otaSearchTail[kOtaSearchTailSize] = {};
 size_t otaSearchTailLength = 0;
 mbedtls_sha256_context otaSha256Context;
@@ -155,7 +159,7 @@ void updateOtaValidationState(const uint8_t* data, size_t size) {
 
     mbedtls_sha256_update_ret(&otaSha256Context, data, size);
 
-    uint8_t combined[kOtaSearchTailSize * 2];
+    uint8_t combined[kOtaCombinedSearchWindowSize];
     size_t combinedSize = 0;
     if (otaSearchTailLength > 0) {
         std::memcpy(combined, otaSearchTail, otaSearchTailLength);
@@ -193,12 +197,12 @@ void updateOtaValidationState(const uint8_t* data, size_t size) {
 }
 
 void finalizeOtaSha256() {
-    uint8_t digest[32];
+    uint8_t digest[kSha256DigestSize];
     mbedtls_sha256_finish_ret(&otaSha256Context, digest);
     for (size_t i = 0; i < sizeof(digest); ++i) {
         std::snprintf(otaSessionSha256 + (i * 2), 3, "%02x", digest[i]);
     }
-    otaSessionSha256[64] = '\0';
+    otaSessionSha256[kSha256HexStringSize - 1] = '\0';
     mbedtls_sha256_free(&otaSha256Context);
 }
 #endif
