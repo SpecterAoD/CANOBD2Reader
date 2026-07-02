@@ -9,6 +9,7 @@ namespace IsoTp {
 
 constexpr std::size_t MaxPayload = ProjectConfig::MaxIsoTpPayload;
 constexpr uint32_t FunctionalRequestId = 0x7DF;
+constexpr uint32_t PhysicalRequestId = 0x7E0;
 constexpr uint32_t FirstResponseId = 0x7E8;
 constexpr uint32_t LastResponseId = 0x7EF;
 

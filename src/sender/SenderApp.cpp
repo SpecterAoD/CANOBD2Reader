@@ -53,6 +53,12 @@
 #include "StatusLogic.h"
 #include "DiagnosticLog.h"
 #include "EspNowTelemetryTransport.h"
+#include "ObdDiagnostics.h"
+#include "DtcDecoder.h"
+#include "VinDecoder.h"
+#include "UdsClient.h"
+#include "UdsDecoder.h"
+#include "UdsDiagnostics.h"
 // End region ================================== Includes ==================================
 
 // region ================================== #define ==================================
@@ -77,13 +83,14 @@ constexpr uint8_t kButtonPin = Config::Sender::ButtonPin;
 constexpr uint8_t kVoltageDividerPin = Config::Sender::VoltageDividerPin;
 constexpr uint32_t kPollingRateMs = Config::Sender::PollingRateMs;
 constexpr uint32_t kCanIdleTimeoutMs = Config::Sender::CanIdleTimeoutMs;
-constexpr uint32_t kObdResponseTimeoutMs = Config::Sender::ObdResponseTimeoutMs;
-constexpr uint32_t kObdTxTimeoutMs = Config::Sender::ObdTxTimeoutMs;
 constexpr uint32_t kBatterySendIntervalMs = Config::Sender::BatterySendIntervalMs;
 constexpr uint32_t kHeartbeatIntervalMs = Config::Sender::HeartbeatIntervalMs;
 constexpr uint32_t kSupportedPidRefreshIntervalMs = Config::Sender::SupportedPidRefreshIntervalMs;
 constexpr uint32_t kDtcQueryIntervalMs = Config::Sender::DtcQueryIntervalMs;
+constexpr uint32_t kVinQueryIntervalMs = Config::Sender::VinQueryIntervalMs;
+constexpr uint32_t kUdsQueryIntervalMs = Config::Sender::UdsQueryIntervalMs;
 constexpr uint32_t kSimulationSendIntervalMs = Config::Sender::SimulationIntervalMs;
+constexpr uint16_t kUdsVinDid = 0xF190;
 }
 
 // region ================================== struct ==================================
@@ -101,6 +108,8 @@ unsigned long last_heartbeat_send_time = 0;
 unsigned long last_obd_response_time = 0;
 unsigned long last_supported_pid_refresh_time = 0;
 unsigned long last_dtc_query_time = 0;
+unsigned long last_vin_query_time = 0;
+unsigned long last_uds_query_time = 0;
 unsigned long last_simulation_send_time = 0;
 unsigned long last_led_test_change_time = 0;
 unsigned long last_twai_status_log_time = 0;
@@ -119,6 +128,9 @@ uint32_t supported_pids_01_20 = 0;
 uint32_t supported_pids_21_40 = 0;
 uint32_t supported_pids_41_60 = 0;
 String last_dtc_text = "--";
+String last_vin_text = "--";
+String last_uds_did_text = "--";
+String last_uds_dtc_text = "--";
 String last_error_text = "";
 String last_send_error_text = "";
 
@@ -134,6 +146,8 @@ void maybeLogTelemetrySendSummary();
 void refreshSupportedPIDs();
 bool isPIDSupported(byte pid);
 void queryAndSendDTCs();
+void queryAndSendVin();
+void queryAndSendUdsDiagnostics();
 void sendSimulationTelemetry();
 void handleLedTestButton();
 // End region ========================== Funktionsprototypen ==========================
@@ -145,6 +159,7 @@ uint8_t peerAddress[6] = {};
 EspNowTelemetryFrame text_frame;
 char last_telemetry_payload[kMaxPayloadLength] = {};
 esp_now_peer_info_t peerInfo = {};
+Uds::Client udsClient;
 
 bool initESPNow() {
 
@@ -201,6 +216,8 @@ void SenderApp::begin() {
                          Config::Project::FirmwareVersion,
                          Config::Project::ProtocolVersion,
                          Config::Project::TargetName);
+  Obd::Diagnostics::reset();
+  Uds::Diagnostics::reset();
 
   pinMode(kLedPin1, OUTPUT);
   pinMode(kLedPin2, OUTPUT);
@@ -251,43 +268,6 @@ void SenderApp::begin() {
 }
 // End region ================================== Setup ==================================
 
-// region ================= DTC Anfrage senden =================
-bool sendDTCRequest() {
-  twai_message_t request = {};
-  request.identifier = 0x7DF;
-  request.extd = 0;
-  request.rtr = 0;
-  request.data_length_code = 8;
-  request.data[0] = 0x01;      // Ein Datenbyte: Mode 03
-  request.data[1] = read_DTCs;
-  for (int i = 2; i < 8; i++) request.data[i] = 0x55;
-
-  esp_err_t result = twai_transmit(&request, pdMS_TO_TICKS(kObdTxTimeoutMs));
-  return result == ESP_OK;
-}
-// End region ================= DTC Anfrage senden =================
-
-bool receiveDTCResponse(byte* outData, byte& outLen) {
-  unsigned long start = millis();
-  while (millis() - start < kObdResponseTimeoutMs) {
-    twai_message_t response;
-    if (twai_receive(&response, pdMS_TO_TICKS(10)) == ESP_OK) {
-      if (response.identifier >= 0x7E8 && response.identifier <= 0x7EF &&
-          response.data_length_code >= 3 && response.data_length_code <= 8 &&
-          response.data[1] == (read_DTCs | 0x40)) {
-        last_can_msg_timestamp = millis();
-        can_bus_active = true;
-
-        outLen = response.data_length_code - 2;
-        if (outLen > 6) outLen = 6;
-        memcpy(outData, &response.data[2], outLen);
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 // region ================= Supported PIDs =================
 uint32_t bytesToMask(const byte* data, byte length) {
   if (length < 4) return 0;
@@ -304,6 +284,9 @@ bool querySupportedPidRange(byte rangePid, uint32_t& targetMask) {
   if (!OBD2Handler::sendRequest(read_LiveData, rangePid)) return false;
   if (!OBD2Handler::receiveResponse(read_LiveData, rangePid, responseData, responseLen)) return false;
 
+  last_can_msg_timestamp = millis();
+  last_obd_response_time = millis();
+  can_bus_active = true;
   targetMask = bytesToMask(responseData, responseLen);
   return targetMask != 0;
 }
@@ -340,6 +323,10 @@ void refreshSupportedPIDs() {
   }
 
   supported_pids_initialized = ok;
+  Obd::Diagnostics::setSupportedPidMasks(supported_pids_01_20,
+                                         supported_pids_21_40,
+                                         supported_pids_41_60,
+                                         ok);
   if (ok) {
     char masks[112];
     snprintf(masks, sizeof(masks), "[OBD] Supported PIDs 01-20=0x%08lX 21-40=0x%08lX 41-60=0x%08lX",
@@ -354,62 +341,126 @@ void refreshSupportedPIDs() {
 }
 // End region ================= Supported PIDs =================
 
-// region ================= DTCs lesen =================
-char dtcTypeChar(byte highBits) {
-  switch (highBits & 0x03) {
-    case 0: return 'P';
-    case 1: return 'C';
-    case 2: return 'B';
-    default: return 'U';
-  }
-}
-
-void appendDTC(char* buffer, size_t bufferSize, byte a, byte b) {
-  if (a == 0 && b == 0) return;
-
-  char code[8];
-  snprintf(code, sizeof(code), "%c%01X%03X",
-           dtcTypeChar(a >> 6),
-           (a >> 4) & 0x03,
-           ((a & 0x0F) << 8) | b);
-
-  const size_t used = strlen(buffer);
-  if (used >= bufferSize - 1) return;
-
-  snprintf(buffer + used, bufferSize - used, "%s%s", used > 0 ? " " : "", code);
-}
-
 void queryAndSendDTCs() {
-  byte responseData[8];
-  byte responseLen = 0;
+  const uint8_t payload[] = {read_DTCs};
+  IsoTp::Payload response{};
 
-  if (!sendDTCRequest()) {
+  if (!OBD2Handler::requestPayload(read_DTCs, payload, sizeof(payload), 0xFF, response)) {
     last_dtc_text = "SEND_FAIL";
-    WebConsoleHandler::log("[DTC] Request send failed");
-    sendTelemetry("DTC", "ACTIVE", "DTC", "N/A", "", "SEND_FAIL");
-    return;
-  }
-
-  if (!receiveDTCResponse(responseData, responseLen)) {
-    last_dtc_text = "TIMEOUT";
-    WebConsoleHandler::log("[DTC] Timeout waiting for response");
-    sendTelemetry("DTC", "ACTIVE", "DTC", "N/A", "", "TIMEOUT");
+    if (OBD2Handler::lastResponseWasNegative()) {
+      last_dtc_text = Obd::Diagnostics::lastNegativeResponse();
+      WebConsoleHandler::log("[DTC] Negative response: " + last_dtc_text);
+      sendTelemetry("DTC", "ACTIVE", "DTC", last_dtc_text.c_str(), "", "ERROR");
+    } else {
+      last_dtc_text = "TIMEOUT";
+      WebConsoleHandler::log("[DTC] Timeout waiting for ISO-TP response");
+      sendTelemetry("DTC", "ACTIVE", "DTC", "N/A", "", "TIMEOUT");
+    }
+    Obd::Diagnostics::setDtc(last_dtc_text.c_str());
     return;
   }
 
   char dtcList[64] = {0};
-  for (byte i = 0; i + 1 < responseLen; i += 2) {
-    appendDTC(dtcList, sizeof(dtcList), responseData[i], responseData[i + 1]);
-  }
+  last_can_msg_timestamp = millis();
+  last_obd_response_time = millis();
+  can_bus_active = true;
+  const size_t dataOffset = response.length > 0 ? 1 : 0; // skip 0x43 positive response byte
+  Obd::decodeDtcList(response.bytes.data() + dataOffset,
+                     response.length > dataOffset ? response.length - dataOffset : 0,
+                     dtcList,
+                     sizeof(dtcList));
 
   if (dtcList[0] == '\0') {
     last_dtc_text = "Keine";
+    Obd::Diagnostics::setDtc("Keine");
     WebConsoleHandler::log("[DTC] No active DTCs");
     sendTelemetry("DTC", "ACTIVE", "DTC", "Keine", "", "OK");
   } else {
     last_dtc_text = dtcList;
+    Obd::Diagnostics::setDtc(dtcList);
     WebConsoleHandler::log("[DTC] Active codes: " + String(dtcList));
     sendTelemetry("DTC", "ACTIVE", "DTC", dtcList, "", "WARN");
+  }
+}
+
+void queryAndSendVin() {
+  const uint8_t payload[] = {read_VehicleInfo, read_VIN};
+  IsoTp::Payload response{};
+
+  if (!OBD2Handler::requestPayload(read_VehicleInfo, payload, sizeof(payload), read_VIN, response)) {
+    if (OBD2Handler::lastResponseWasNegative()) {
+      last_vin_text = Obd::Diagnostics::lastNegativeResponse();
+      WebConsoleHandler::log("[VIN] Negative response: " + last_vin_text);
+      sendTelemetry("STATUS", "VIN", "VIN", last_vin_text.c_str(), "", "ERROR");
+    } else {
+      last_vin_text = "TIMEOUT";
+      WebConsoleHandler::log("[VIN] Timeout waiting for ISO-TP response");
+      sendTelemetry("STATUS", "VIN", "VIN", "N/A", "", "TIMEOUT");
+    }
+    Obd::Diagnostics::setVin(last_vin_text.c_str());
+    return;
+  }
+
+  char vin[24] = {};
+  if (Obd::decodeVin(response.bytes.data(), response.length, vin, sizeof(vin))) {
+    last_can_msg_timestamp = millis();
+    last_obd_response_time = millis();
+    can_bus_active = true;
+    last_vin_text = vin;
+    Obd::Diagnostics::setVin(vin);
+    WebConsoleHandler::log("[VIN] " + String(vin));
+    sendTelemetry("STATUS", "VIN", "VIN", vin, "", "OK");
+  } else {
+    last_vin_text = "INVALID";
+    Obd::Diagnostics::setVin("INVALID");
+    WebConsoleHandler::log("[VIN] Invalid Mode 09 PID 02 response");
+    sendTelemetry("STATUS", "VIN", "VIN", "N/A", "", "ERROR");
+  }
+}
+
+void queryAndSendUdsDiagnostics() {
+  if (!Config::Sender::EnableUDS) return;
+
+  udsClient.setRequestId(IsoTp::PhysicalRequestId);
+
+  Uds::Response response{};
+  if (udsClient.testerPresent(response)) {
+    sendStatusFrame("UDS", "TESTER_PRESENT", "OK");
+  } else {
+    sendStatusFrame("UDS", response.negative ? Uds::Diagnostics::lastNegativeResponse() : "NO_RESPONSE",
+                    response.negative ? "ERROR" : "WARN");
+  }
+
+  if (udsClient.readDataByIdentifier(kUdsVinDid, response)) {
+    char vin[24] = {};
+    if (Uds::decodeAsciiDid(response.data, response.length, kUdsVinDid, vin, sizeof(vin))) {
+      last_uds_did_text = String("VIN=") + vin;
+      Uds::Diagnostics::setLastDid(kUdsVinDid, vin);
+      WebConsoleHandler::log("[UDS] DID 0xF190 VIN=" + String(vin));
+      sendTelemetry("STATUS", "UDS_DID_F190", "UDS_VIN", vin, "", "OK");
+    } else {
+      last_uds_did_text = "DID_F190_INVALID";
+      Uds::Diagnostics::setLastDid(kUdsVinDid, "INVALID");
+      WebConsoleHandler::log("[UDS] DID 0xF190 invalid response");
+      sendTelemetry("STATUS", "UDS_DID_F190", "UDS_VIN", "N/A", "", "ERROR");
+    }
+  } else {
+    last_uds_did_text = response.negative ? Uds::Diagnostics::lastNegativeResponse() : "TIMEOUT";
+    Uds::Diagnostics::setLastDid(kUdsVinDid, last_uds_did_text.c_str());
+    sendTelemetry("STATUS", "UDS_DID_F190", "UDS_VIN", last_uds_did_text.c_str(), "", response.negative ? "ERROR" : "TIMEOUT");
+  }
+
+  if (udsClient.readDtcInformation(0x02, 0xFF, response)) {
+    char summary[48];
+    snprintf(summary, sizeof(summary), "len=%u", static_cast<unsigned>(response.length));
+    last_uds_dtc_text = summary;
+    Uds::Diagnostics::setLastDtcSummary(summary);
+    WebConsoleHandler::log("[UDS] DTC information " + String(summary));
+    sendTelemetry("DTC", "UDS", "UDS_DTC", summary, "", "OK");
+  } else {
+    last_uds_dtc_text = response.negative ? Uds::Diagnostics::lastNegativeResponse() : "TIMEOUT";
+    Uds::Diagnostics::setLastDtcSummary(last_uds_dtc_text.c_str());
+    sendTelemetry("DTC", "UDS", "UDS_DTC", last_uds_dtc_text.c_str(), "", response.negative ? "ERROR" : "TIMEOUT");
   }
 }
 // End region ================= DTCs lesen =================
@@ -515,6 +566,8 @@ void sendHeartbeat() {
                   can_driver_ready ? (canRecent ? "OK" : "WARN") : "ERROR");
   sendStatusFrame("OBD", Config::Sender::EnableOBD2 ? (obdRecent ? "ACTIVE" : "NO_RESPONSE") : "DISABLED",
                   Config::Sender::EnableOBD2 ? (obdRecent ? "OK" : "WARN") : "WARN");
+  sendStatusFrame("UDS", Config::Sender::EnableUDS ? (Uds::Diagnostics::available() ? "AVAILABLE" : "UNKNOWN") : "DISABLED",
+                  Config::Sender::EnableUDS ? (Uds::Diagnostics::available() ? "OK" : "WARN") : "WARN");
   sendStatusFrame("SIM", Simulation::RuntimeSimulation::enabled() ? "ACTIVE" : "INACTIVE",
                   Simulation::RuntimeSimulation::enabled() ? "OK" : "WARN");
 }
@@ -577,8 +630,34 @@ void updateWebConsoleStatus() {
   status.espNowState = esp_now_ready ? "READY" : "INIT_FAIL";
   status.lastSendError = last_send_error_text;
   status.lastDtc = last_dtc_text;
+  status.lastVin = last_vin_text;
   status.lastTelemetry = String(last_telemetry_payload);
   status.lastError = last_error_text;
+  status.obdRequestCount = Obd::Diagnostics::requestCount();
+  status.obdSendFailureCount = Obd::Diagnostics::sendFailureCount();
+  status.obdTimeoutCount = Obd::Diagnostics::timeoutCount();
+  status.obdValidResponseCount = Obd::Diagnostics::validResponseCount();
+  status.obdNegativeResponseCount = Obd::Diagnostics::negativeResponseCount();
+  status.obdTimeoutStreak = Obd::Diagnostics::timeoutStreak();
+  status.obdPhysicalFallbackActive = Obd::Diagnostics::physicalFallbackActive();
+  status.obdRequestCanId = Obd::Diagnostics::requestCanId();
+  status.supportedPidMask01_20 = Obd::Diagnostics::supportedPidMask(0);
+  status.supportedPidMask21_40 = Obd::Diagnostics::supportedPidMask(1);
+  status.supportedPidMask41_60 = Obd::Diagnostics::supportedPidMask(2);
+  status.lastObdRequest = Obd::Diagnostics::lastRequest();
+  status.lastEcuResponse = Obd::Diagnostics::lastEcuResponse();
+  status.lastNegativeResponse = Obd::Diagnostics::lastNegativeResponse();
+  status.udsAvailable = Uds::Diagnostics::available();
+  status.udsRequestCount = Uds::Diagnostics::requestCount();
+  status.udsSendFailureCount = Uds::Diagnostics::sendFailureCount();
+  status.udsTimeoutCount = Uds::Diagnostics::timeoutCount();
+  status.udsPositiveResponseCount = Uds::Diagnostics::positiveResponseCount();
+  status.udsNegativeResponseCount = Uds::Diagnostics::negativeResponseCount();
+  status.lastUdsRequest = Uds::Diagnostics::lastRequest();
+  status.lastUdsResponse = Uds::Diagnostics::lastResponse();
+  status.lastUdsNegativeResponse = Uds::Diagnostics::lastNegativeResponse();
+  status.lastUdsDid = Uds::Diagnostics::lastDid();
+  status.lastUdsDtc = Uds::Diagnostics::lastDtcSummary();
   WebConsoleHandler::updateRuntimeStatus(status);
 }
 
@@ -685,24 +764,41 @@ void SenderApp::tick() {
     }
 
     static bool unsupported_pid_reported[Config::ObdPidCount] = {false};
-    for (size_t i = 0; i < Config::ObdPidCount; i++) {
-      if (!isPIDSupported(Config::ObdRequestedPids[i])) {
-        if (!unsupported_pid_reported[i]) {
-          char pidHex[4];
-          snprintf(pidHex, sizeof(pidHex), "%02X", Config::ObdRequestedPids[i]);
-          sendTelemetry("OBD", pidHex, getPIDName(Config::ObdRequestedPids[i]), "N/A", "", "UNSUPPORTED");
-          unsupported_pid_reported[i] = true;
+    if (supported_pids_initialized) {
+      for (size_t i = 0; i < Config::ObdPidCount; i++) {
+        if (!isPIDSupported(Config::ObdRequestedPids[i])) {
+          if (!unsupported_pid_reported[i]) {
+            char pidHex[4];
+            snprintf(pidHex, sizeof(pidHex), "%02X", Config::ObdRequestedPids[i]);
+            sendTelemetry("OBD", pidHex, getPIDName(Config::ObdRequestedPids[i]), "N/A", "", "UNSUPPORTED");
+            unsupported_pid_reported[i] = true;
+          }
+          continue;
         }
-        continue;
+        if (OBD2Handler::requestAndSendPID(Config::ObdRequestedPids[i])) {
+          last_obd_response_time = currentMillis;
+          last_can_msg_timestamp = currentMillis;
+          can_bus_active = true;
+        }
       }
-      if (OBD2Handler::requestAndSendPID(Config::ObdRequestedPids[i])) {
-        last_obd_response_time = currentMillis;
-      }
+    } else {
+      sendStatusFrame("OBD", "PID_SUPPORT_TIMEOUT", "WARN");
     }
 
     if (currentMillis - last_dtc_query_time >= kDtcQueryIntervalMs) {
       queryAndSendDTCs();
       last_dtc_query_time = currentMillis;
+    }
+
+    if (currentMillis - last_vin_query_time >= kVinQueryIntervalMs) {
+      queryAndSendVin();
+      last_vin_query_time = currentMillis;
+    }
+
+    if (Config::Sender::EnableUDS &&
+        currentMillis - last_uds_query_time >= kUdsQueryIntervalMs) {
+      queryAndSendUdsDiagnostics();
+      last_uds_query_time = currentMillis;
     }
 
     last_obd_request_time = currentMillis;

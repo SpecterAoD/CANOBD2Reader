@@ -20,6 +20,12 @@ namespace {
         return String(prefix) + ", error=" + String(Update.getError());
     }
 
+    String hex32(uint32_t value, uint8_t width = 8) {
+        char buffer[12];
+        snprintf(buffer, sizeof(buffer), width == 3 ? "0x%03lX" : "0x%08lX", static_cast<unsigned long>(value));
+        return String(buffer);
+    }
+
 }
 
 void WebConsoleHandler::begin() {
@@ -47,6 +53,8 @@ void WebConsoleHandler::begin() {
     server.on("/log/file", HTTP_GET, handlePersistentLog);
     server.on("/log/download", HTTP_GET, handleDownloadLog);
     server.on("/api/log/clear", HTTP_POST, handleClearLog);
+    server.on("/api/diagnostic/snapshot", HTTP_GET, handleDiagnosticSnapshot);
+    server.on("/api/diagnostic/download", HTTP_GET, handleDiagnosticDownload);
     server.on("/status", HTTP_GET, handleStatus);
     server.on("/start", HTTP_POST, handleStart);
     server.on("/restart", HTTP_POST, handleRestart);
@@ -166,6 +174,24 @@ input[type=file]{width:100%;padding:12px;border-radius:14px;background:#0f172a;c
 <div class="card wide"><div class="label">Simulation</div><div id="sim" class="value">--</div><div class="small">Szenario: <span id="scenario">--</span></div></div>
 <div class="card wide"><div class="label">Simulationsszenario</div><select id="scenarioSelect" style="width:100%;padding:11px;border-radius:12px;background:#0f172a;color:#f8fafc;border:1px solid #263244"></select><div class="actions"><button id="simToggle">Simulation umschalten</button><button id="simOn" class="primary">Simulation einschalten</button><button id="simOff">Simulation ausschalten</button></div></div>
 <div class="card wide"><div class="label">DTC / Fehlercodes</div><div id="dtc" class="value">--</div></div>
+<div class="card wide"><div class="label">VIN</div><div id="vin" class="value">--</div></div>
+<div class="card wide"><div class="label">OBD Diagnose</div><div class="small">
+Requests: <span id="obdReq">--</span> · OK: <span id="obdOk">--</span> · Timeouts: <span id="obdTimeouts">--</span><br>
+Negative: <span id="obdNeg">--</span> · SendFail: <span id="obdSendFail">--</span> · Timeout-Streak: <span id="obdStreak">--</span><br>
+Request-ID: <span id="obdReqId">--</span> · Fallback: <span id="obdFallback">--</span>
+</div></div>
+<div class="card wide"><div class="label">Letzte OBD Anfrage</div><div id="lastObdReq" class="small">--</div></div>
+<div class="card wide"><div class="label">Letzte ECU Antwort</div><div id="lastEcuResp" class="small">--</div></div>
+<div class="card wide"><div class="label">Letzte Negative Response</div><div id="lastNrc" class="small">--</div></div>
+<div class="card wide"><div class="label">Supported PID Masks</div><div class="small">01-20: <span id="pidMask1">--</span><br>21-40: <span id="pidMask2">--</span><br>41-60: <span id="pidMask3">--</span></div></div>
+<div class="card wide"><div class="label">UDS Diagnose</div><div class="small">
+Verfuegbar: <span id="udsAvail">--</span> · Requests: <span id="udsReq">--</span> · OK: <span id="udsOk">--</span><br>
+Timeouts: <span id="udsTimeouts">--</span> · Negative: <span id="udsNeg">--</span> · SendFail: <span id="udsSendFail">--</span>
+</div></div>
+<div class="card wide"><div class="label">Letzte UDS Anfrage</div><div id="lastUdsReq" class="small">--</div></div>
+<div class="card wide"><div class="label">Letzte UDS Antwort</div><div id="lastUdsResp" class="small">--</div></div>
+<div class="card wide"><div class="label">UDS DID / DTC</div><div class="small">DID: <span id="udsDid">--</span><br>DTC: <span id="udsDtc">--</span><br>NRC: <span id="udsNrc">--</span></div></div>
+<div class="card wide"><div class="label">Diagnose-Snapshot</div><div class="actions"><a class="btn primary" href="/api/diagnostic/download">JSON herunterladen</a><button id="loadSnapshot">Snapshot anzeigen</button></div><pre id="snapshot">Noch kein Snapshot geladen.</pre></div>
 <div class="card wide"><div class="label">Fehlerstatus</div><div id="err" class="small">--</div></div>
 </div></section>
 <section id="log" class="page"><div class="grid">
@@ -183,10 +209,11 @@ const scenarios=['NormalSingleFrame','NormalMultiFrameVin','NormalMultiFrameDtc'
 scenarios.forEach(x=>{let o=document.createElement('option');o.value=x;o.textContent=x;$('scenarioSelect').appendChild(o)});
 document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active')});
 function yn(v){return v?'aktiv':'aus'}function cls(el,state){el.className='value '+(state?'okText':'warnText')}function bytes(v){return Math.round((v||0)/1024)+' KB'}
-async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('otastatus').textContent=s.otaStatus;$('freeota').textContent=bytes(s.freeSketchSpace);$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('diaglog').textContent=(s.diagnosticLogMounted?'bereit':'nicht gemountet')+' · '+bytes(s.diagnosticLogSize)+' / '+bytes(s.diagnosticLogMaxSize);$('run').textContent=s.started?'läuft':'gestoppt';$('run').className='pill '+(s.started?'ok':'warn');$('can').textContent=s.canState;cls($('can'),s.canActive);$('obd').textContent=s.obdState||yn(s.obdActive);cls($('obd'),s.obdActive);$('espnow').textContent=s.espNowState;cls($('espnow'),s.espNowState==='READY');$('heartbeat').textContent=s.heartbeats;$('bat').textContent=s.battery.toFixed(2)+' V';$('seq').textContent=s.seq;$('tel').textContent=s.lastTelemetry;$('pid').textContent=s.pidSupport?'bereit':'unbekannt';cls($('pid'),s.pidSupport);$('canage').textContent=(s.lastCanAge/1000).toFixed(1)+'s';$('dtc').textContent=s.lastDtc||'--';$('err').textContent=s.lastSendError||s.lastError||'OK';}catch(e){$('run').textContent='offline';$('run').className='pill err'}}
+async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('otastatus').textContent=s.otaStatus;$('freeota').textContent=bytes(s.freeSketchSpace);$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('diaglog').textContent=(s.diagnosticLogMounted?'bereit':'nicht gemountet')+' · '+bytes(s.diagnosticLogSize)+' / '+bytes(s.diagnosticLogMaxSize);$('run').textContent=s.started?'läuft':'gestoppt';$('run').className='pill '+(s.started?'ok':'warn');$('can').textContent=s.canState;cls($('can'),s.canActive);$('obd').textContent=s.obdState||yn(s.obdActive);cls($('obd'),s.obdActive);$('espnow').textContent=s.espNowState;cls($('espnow'),s.espNowState==='READY');$('heartbeat').textContent=s.heartbeats;$('bat').textContent=s.battery.toFixed(2)+' V';$('seq').textContent=s.seq;$('tel').textContent=s.lastTelemetry;$('pid').textContent=s.pidSupport?'bereit':'unbekannt';cls($('pid'),s.pidSupport);$('canage').textContent=(s.lastCanAge/1000).toFixed(1)+'s';$('dtc').textContent=s.lastDtc||'--';$('vin').textContent=s.lastVin||'--';$('obdReq').textContent=s.obdRequestCount;$('obdOk').textContent=s.obdValidResponseCount;$('obdTimeouts').textContent=s.obdTimeoutCount;$('obdNeg').textContent=s.obdNegativeResponseCount;$('obdSendFail').textContent=s.obdSendFailureCount;$('obdStreak').textContent=s.obdTimeoutStreak;$('obdReqId').textContent=s.obdRequestCanId;$('obdFallback').textContent=s.obdPhysicalFallbackActive?'0x7E0 aktiv':'0x7DF';$('lastObdReq').textContent=s.lastObdRequest||'--';$('lastEcuResp').textContent=s.lastEcuResponse||'--';$('lastNrc').textContent=s.lastNegativeResponse||'--';$('pidMask1').textContent=s.supportedPidMask01_20;$('pidMask2').textContent=s.supportedPidMask21_40;$('pidMask3').textContent=s.supportedPidMask41_60;$('udsAvail').textContent=s.udsAvailable?'ja':'nein';$('udsReq').textContent=s.udsRequestCount;$('udsOk').textContent=s.udsPositiveResponseCount;$('udsTimeouts').textContent=s.udsTimeoutCount;$('udsNeg').textContent=s.udsNegativeResponseCount;$('udsSendFail').textContent=s.udsSendFailureCount;$('lastUdsReq').textContent=s.lastUdsRequest||'--';$('lastUdsResp').textContent=s.lastUdsResponse||'--';$('udsDid').textContent=s.lastUdsDid||'--';$('udsDtc').textContent=s.lastUdsDtc||'--';$('udsNrc').textContent=s.lastUdsNegativeResponse||'--';$('err').textContent=s.lastSendError||s.lastError||'OK';}catch(e){$('run').textContent='offline';$('run').className='pill err'}}
 async function refreshLog(){try{$('logs').textContent=await fetch('/log',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
 async function loadPersistentLog(){try{$('logs').textContent=await fetch('/log/file',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
 async function refreshSimulation(){try{let s=await fetch('/api/simulation',{cache:'no-store'}).then(r=>r.json());$('sim').textContent=s.simulation?'aktiv':'inaktiv';$('sim').className='value '+(s.simulation?'okText':'warnText');$('scenario').textContent=s.scenario||'--';$('scenarioSelect').value=s.scenario||'NormalSingleFrame'}catch(e){}}
+async function loadSnapshot(){try{$('snapshot').textContent=JSON.stringify(await fetch('/api/diagnostic/snapshot',{cache:'no-store'}).then(r=>r.json()),null,2)}catch(e){$('snapshot').textContent='Snapshot konnte nicht geladen werden'}}
 $('start').onclick=async()=>{await fetch('/start',{method:'POST'});refresh()}
 $('restart').onclick=async()=>{if(confirm('Sender wirklich neu starten?'))await fetch('/api/restart',{method:'POST'})}
 $('simToggle').onclick=async()=>{await fetch('/api/simulation/toggle',{method:'POST'});refreshSimulation()}
@@ -194,6 +221,7 @@ $('simOn').onclick=async()=>{await fetch('/api/simulation/on',{method:'POST'});r
 $('simOff').onclick=async()=>{await fetch('/api/simulation/off',{method:'POST'});refreshSimulation()}
 $('scenarioSelect').onchange=async()=>{await fetch('/api/simulation/scenario?scenario='+encodeURIComponent($('scenarioSelect').value),{method:'POST'});refreshSimulation()}
 $('loadFileLog').onclick=loadPersistentLog
+$('loadSnapshot').onclick=loadSnapshot
 $('clearLog').onclick=async()=>{if(confirm('Diagnose-Log wirklich löschen?')){await fetch('/api/log/clear',{method:'POST'});refreshLog();refresh()}}
 setInterval(refresh,1000);setInterval(refreshLog,1500);setInterval(refreshSimulation,1000);refresh();refreshLog();refreshSimulation();
 </script>
@@ -239,7 +267,7 @@ void WebConsoleHandler::handleStatus() {
     if (!WebSecurity::requireAuthentication(server)) return;
     WebConsoleRuntimeStatus s = runtimeStatus;
     String json;
-    json.reserve(512);
+    json.reserve(1600);
     json += "{";
     json += "\"firmware\":\"" + jsonEscape(Config::Project::FirmwareVersion) + "\",";
     json += "\"target\":\"" + jsonEscape(Config::Project::TargetName) + "\",";
@@ -263,6 +291,9 @@ void WebConsoleHandler::handleStatus() {
     json += "\"txFail\":" + String(s.telemetrySendFail) + ",";
     json += "\"heartbeats\":" + String(s.heartbeatCount) + ",";
     json += "\"pidSupport\":" + String(s.pidSupportReady ? "true" : "false") + ",";
+    json += "\"supportedPidMask01_20\":\"" + hex32(s.supportedPidMask01_20) + "\",";
+    json += "\"supportedPidMask21_40\":\"" + hex32(s.supportedPidMask21_40) + "\",";
+    json += "\"supportedPidMask41_60\":\"" + hex32(s.supportedPidMask41_60) + "\",";
     json += "\"simulation\":" + String(s.simulationActive ? "true" : "false") + ",";
     json += "\"simulationScenario\":\"" + jsonEscape(s.simulationScenario) + "\",";
     json += "\"battery\":" + String(s.batteryVoltage, 2) + ",";
@@ -270,12 +301,104 @@ void WebConsoleHandler::handleStatus() {
     json += "\"lastCanAge\":" + String(s.lastCanAgeMs) + ",";
     json += "\"lastObdAge\":" + String(s.lastObdAgeMs) + ",";
     json += "\"canState\":\"" + jsonEscape(s.canState) + "\",";
+    json += "\"obdRequestCount\":" + String(s.obdRequestCount) + ",";
+    json += "\"obdSendFailureCount\":" + String(s.obdSendFailureCount) + ",";
+    json += "\"obdTimeoutCount\":" + String(s.obdTimeoutCount) + ",";
+    json += "\"obdValidResponseCount\":" + String(s.obdValidResponseCount) + ",";
+    json += "\"obdNegativeResponseCount\":" + String(s.obdNegativeResponseCount) + ",";
+    json += "\"obdTimeoutStreak\":" + String(s.obdTimeoutStreak) + ",";
+    json += "\"obdPhysicalFallbackActive\":" + String(s.obdPhysicalFallbackActive ? "true" : "false") + ",";
+    json += "\"obdRequestCanId\":\"" + hex32(s.obdRequestCanId, 3) + "\",";
+    json += "\"lastObdRequest\":\"" + jsonEscape(s.lastObdRequest) + "\",";
+    json += "\"lastEcuResponse\":\"" + jsonEscape(s.lastEcuResponse) + "\",";
+    json += "\"lastNegativeResponse\":\"" + jsonEscape(s.lastNegativeResponse) + "\",";
+    json += "\"udsAvailable\":" + String(s.udsAvailable ? "true" : "false") + ",";
+    json += "\"udsRequestCount\":" + String(s.udsRequestCount) + ",";
+    json += "\"udsSendFailureCount\":" + String(s.udsSendFailureCount) + ",";
+    json += "\"udsTimeoutCount\":" + String(s.udsTimeoutCount) + ",";
+    json += "\"udsPositiveResponseCount\":" + String(s.udsPositiveResponseCount) + ",";
+    json += "\"udsNegativeResponseCount\":" + String(s.udsNegativeResponseCount) + ",";
+    json += "\"lastUdsRequest\":\"" + jsonEscape(s.lastUdsRequest) + "\",";
+    json += "\"lastUdsResponse\":\"" + jsonEscape(s.lastUdsResponse) + "\",";
+    json += "\"lastUdsNegativeResponse\":\"" + jsonEscape(s.lastUdsNegativeResponse) + "\",";
+    json += "\"lastUdsDid\":\"" + jsonEscape(s.lastUdsDid) + "\",";
+    json += "\"lastUdsDtc\":\"" + jsonEscape(s.lastUdsDtc) + "\",";
     json += "\"lastSendError\":\"" + jsonEscape(s.lastSendError) + "\",";
     json += "\"lastDtc\":\"" + jsonEscape(s.lastDtc) + "\",";
+    json += "\"lastVin\":\"" + jsonEscape(s.lastVin) + "\",";
     json += "\"lastTelemetry\":\"" + jsonEscape(s.lastTelemetry) + "\",";
     json += "\"lastError\":\"" + jsonEscape(s.lastError) + "\"";
     json += "}";
     server.send(200, "application/json", json);
+}
+
+void WebConsoleHandler::handleDiagnosticSnapshot() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    WebConsoleRuntimeStatus s = runtimeStatus;
+    String json;
+    json.reserve(1800);
+    json += "{";
+    json += "\"firmware\":\"" + jsonEscape(Config::Project::FirmwareVersion) + "\",";
+    json += "\"target\":\"" + jsonEscape(Config::Project::TargetName) + "\",";
+    json += "\"protocol\":" + String(Config::Project::ProtocolVersion) + ",";
+    json += "\"uptimeMs\":" + String(s.uptimeMs) + ",";
+    json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
+    json += "\"can\":{\"active\":" + String(s.canActive ? "true" : "false") +
+            ",\"state\":\"" + jsonEscape(s.canState) +
+            "\",\"lastAgeMs\":" + String(s.lastCanAgeMs) + "},";
+    json += "\"espNow\":{\"state\":\"" + jsonEscape(s.espNowState) +
+            "\",\"txOk\":" + String(s.telemetrySendOk) +
+            ",\"txFail\":" + String(s.telemetrySendFail) +
+            ",\"sequence\":" + String(s.telemetrySequence) +
+            ",\"heartbeats\":" + String(s.heartbeatCount) + "},";
+    json += "\"obd\":{\"active\":" + String(s.obdActive ? "true" : "false") +
+            ",\"state\":\"" + jsonEscape(s.obdState) +
+            "\",\"lastAgeMs\":" + String(s.lastObdAgeMs) +
+            ",\"requestCanId\":\"" + hex32(s.obdRequestCanId, 3) +
+            "\",\"physicalFallbackActive\":" + String(s.obdPhysicalFallbackActive ? "true" : "false") +
+            ",\"requests\":" + String(s.obdRequestCount) +
+            ",\"sendFailures\":" + String(s.obdSendFailureCount) +
+            ",\"timeouts\":" + String(s.obdTimeoutCount) +
+            ",\"validResponses\":" + String(s.obdValidResponseCount) +
+            ",\"negativeResponses\":" + String(s.obdNegativeResponseCount) +
+            ",\"timeoutStreak\":" + String(s.obdTimeoutStreak) +
+            ",\"lastRequest\":\"" + jsonEscape(s.lastObdRequest) +
+            "\",\"lastEcuResponse\":\"" + jsonEscape(s.lastEcuResponse) +
+            "\",\"lastNegativeResponse\":\"" + jsonEscape(s.lastNegativeResponse) + "\"},";
+    json += "\"uds\":{\"available\":" + String(s.udsAvailable ? "true" : "false") +
+            ",\"requests\":" + String(s.udsRequestCount) +
+            ",\"sendFailures\":" + String(s.udsSendFailureCount) +
+            ",\"timeouts\":" + String(s.udsTimeoutCount) +
+            ",\"positiveResponses\":" + String(s.udsPositiveResponseCount) +
+            ",\"negativeResponses\":" + String(s.udsNegativeResponseCount) +
+            ",\"lastRequest\":\"" + jsonEscape(s.lastUdsRequest) +
+            "\",\"lastResponse\":\"" + jsonEscape(s.lastUdsResponse) +
+            "\",\"lastNegativeResponse\":\"" + jsonEscape(s.lastUdsNegativeResponse) +
+            "\",\"lastDid\":\"" + jsonEscape(s.lastUdsDid) +
+            "\",\"lastDtc\":\"" + jsonEscape(s.lastUdsDtc) + "\"},";
+    json += "\"supportedPids\":{\"ready\":" + String(s.pidSupportReady ? "true" : "false") +
+            ",\"01_20\":\"" + hex32(s.supportedPidMask01_20) +
+            "\",\"21_40\":\"" + hex32(s.supportedPidMask21_40) +
+            "\",\"41_60\":\"" + hex32(s.supportedPidMask41_60) + "\"},";
+    json += "\"vehicle\":{\"vin\":\"" + jsonEscape(s.lastVin) +
+            "\",\"dtc\":\"" + jsonEscape(s.lastDtc) +
+            "\",\"battery\":" + String(s.batteryVoltage, 2) + "},";
+    json += "\"simulation\":{\"active\":" + String(s.simulationActive ? "true" : "false") +
+            ",\"scenario\":\"" + jsonEscape(s.simulationScenario) + "\"},";
+    json += "\"lastTelemetry\":\"" + jsonEscape(s.lastTelemetry) + "\",";
+    json += "\"lastError\":\"" + jsonEscape(s.lastError) + "\",";
+    json += "\"lastSendError\":\"" + jsonEscape(s.lastSendError) + "\"";
+    json += "}";
+    server.send(200, "application/json", json);
+}
+
+void WebConsoleHandler::handleDiagnosticDownload() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    String filename = "CANOBD2_sender_";
+    filename += Config::Project::FirmwareVersion;
+    filename += "_diagnostic_snapshot.json";
+    server.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+    handleDiagnosticSnapshot();
 }
 
 void WebConsoleHandler::handleStart() {

@@ -26,8 +26,34 @@ struct WebConsoleRuntimeStatus {
     String espNowState = "UNKNOWN";
     String lastSendError = "";
     String lastDtc = "--";
+    String lastVin = "--";
     String lastTelemetry = "--";
     String lastError = "";
+    uint32_t obdRequestCount = 0;
+    uint32_t obdSendFailureCount = 0;
+    uint32_t obdTimeoutCount = 0;
+    uint32_t obdValidResponseCount = 0;
+    uint32_t obdNegativeResponseCount = 0;
+    uint32_t obdTimeoutStreak = 0;
+    bool obdPhysicalFallbackActive = false;
+    uint32_t obdRequestCanId = 0x7DF;
+    uint32_t supportedPidMask01_20 = 0;
+    uint32_t supportedPidMask21_40 = 0;
+    uint32_t supportedPidMask41_60 = 0;
+    String lastObdRequest = "--";
+    String lastEcuResponse = "--";
+    String lastNegativeResponse = "--";
+    bool udsAvailable = false;
+    uint32_t udsRequestCount = 0;
+    uint32_t udsSendFailureCount = 0;
+    uint32_t udsTimeoutCount = 0;
+    uint32_t udsPositiveResponseCount = 0;
+    uint32_t udsNegativeResponseCount = 0;
+    String lastUdsRequest = "--";
+    String lastUdsResponse = "--";
+    String lastUdsNegativeResponse = "--";
+    String lastUdsDid = "--";
+    String lastUdsDtc = "--";
 };
 
 class WebConsoleHandler {
@@ -60,6 +86,8 @@ private:
     static void handleDownloadLog();
     static void handleClearLog();
     static void handleStatus();
+    static void handleDiagnosticSnapshot();
+    static void handleDiagnosticDownload();
     static void handleStart();
     static void handleRestart();
     static void handleApiRestart();

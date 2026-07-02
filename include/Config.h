@@ -147,6 +147,7 @@ namespace Config {
     namespace Sender {
         constexpr bool EnableCAN = SenderConfig::EnableCAN;
         constexpr bool EnableOBD2 = SenderConfig::EnableOBD2;
+        constexpr bool EnableUDS = SenderConfig::EnableUDS;
         constexpr bool SendRawData = SenderConfig::SendRawData;
         constexpr bool SendRawDataOnly = SenderConfig::SendRawDataOnly;
 
@@ -169,6 +170,11 @@ namespace Config {
         constexpr uint32_t LedTestDebounceMs = SenderConfig::LedTestDebounceMs;
         constexpr uint32_t SupportedPidRefreshIntervalMs = SenderConfig::SupportedPidRefreshMs;
         constexpr uint32_t DtcQueryIntervalMs = SenderConfig::DtcQueryIntervalMs;
+        constexpr uint32_t VinQueryIntervalMs = SenderConfig::VinQueryIntervalMs;
+        constexpr uint32_t UdsQueryIntervalMs = SenderConfig::UdsQueryIntervalMs;
+        constexpr uint32_t UdsResponseTimeoutMs = SenderConfig::UdsResponseTimeoutMs;
+        constexpr bool EnablePhysicalObdFallback = SenderConfig::EnablePhysicalObdFallback;
+        constexpr uint8_t FunctionalTimeoutsBeforePhysicalFallback = SenderConfig::FunctionalTimeoutsBeforePhysicalFallback;
         constexpr uint32_t StartStopDelayMs = SenderConfig::StartStopDelayMs;
         constexpr int CpuFrequency = SenderConfig::CpuFrequency;
 
@@ -240,6 +246,7 @@ namespace Config {
 
     constexpr bool EnableCAN = Sender::EnableCAN;
     constexpr bool EnableOBD2 = Sender::EnableOBD2;
+    constexpr bool EnableUDS = Sender::EnableUDS;
     constexpr bool sendRAWData = Sender::SendRawData;
     constexpr bool sendRawDataOnly = Sender::SendRawDataOnly;
     constexpr int PollingRateMs = Sender::PollingRateMs;

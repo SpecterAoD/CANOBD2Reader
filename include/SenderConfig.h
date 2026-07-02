@@ -7,6 +7,7 @@
 namespace SenderConfig {
 constexpr bool EnableCAN = true;
 constexpr bool EnableOBD2 = true;
+constexpr bool EnableUDS = true;
 constexpr bool SendRawData = false;
 constexpr bool SendRawDataOnly = false;
 constexpr bool RequireWebStart = false;
@@ -31,6 +32,11 @@ constexpr uint32_t SimulationIntervalMs = 250;
 constexpr uint32_t LedTestDebounceMs = 50;
 constexpr uint32_t SupportedPidRefreshMs = 60000;
 constexpr uint32_t DtcQueryIntervalMs = 30000;
+constexpr uint32_t VinQueryIntervalMs = 120000;
+constexpr uint32_t UdsQueryIntervalMs = 60000;
+constexpr uint32_t UdsResponseTimeoutMs = 350;
+constexpr bool EnablePhysicalObdFallback = true;
+constexpr uint8_t FunctionalTimeoutsBeforePhysicalFallback = 3;
 constexpr uint32_t StartStopDelayMs = 300000;
 constexpr int CpuFrequency = 80;
 

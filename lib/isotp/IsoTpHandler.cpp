@@ -21,7 +21,7 @@ bool IsoTpHandler::sendRequest(uint8_t mode, const uint8_t* payload, std::size_t
     }
 
     twai_message_t request = {};
-    request.identifier = FunctionalRequestId;
+    request.identifier = requestId_;
     request.extd = 0;
     request.rtr = 0;
     request.data_length_code = 8;
@@ -62,6 +62,11 @@ bool IsoTpHandler::sendRequest(uint8_t mode, const uint8_t* payload, std::size_t
 bool IsoTpHandler::receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Payload& out, uint32_t timeoutMs) {
 #if defined(ARDUINO)
     reassembler_.reset();
+    lastStatus_ = Status::Idle;
+    lastResponseId_ = 0;
+    lastNegativeService_ = 0;
+    lastNegativeCode_ = 0;
+    lastResponseWasNegative_ = false;
     const uint32_t start = millis();
 
     while (millis() - start < timeoutMs) {
@@ -88,11 +93,14 @@ bool IsoTpHandler::receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Pa
             continue;
         }
         if (status != Status::Complete) {
+            lastStatus_ = status;
             Logger::warn("[ISOTP] Reassembly error");
             return false;
         }
 
         out = reassembler_.payload();
+        lastStatus_ = Status::Complete;
+        lastResponseId_ = out.responseId;
         char responseLine[112];
         snprintf(responseLine, sizeof(responseLine),
                  "[ISOTP] Response id=0x%03lX len=%u first=0x%02X",
@@ -101,11 +109,14 @@ bool IsoTpHandler::receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Pa
                  out.length > 0 ? out.bytes[0] : 0);
         Logger::obd(responseLine);
         if (out.length >= 2 && out.bytes[0] == 0x7F) {
+            lastResponseWasNegative_ = true;
+            lastNegativeService_ = out.length > 1 ? out.bytes[1] : 0;
+            lastNegativeCode_ = out.length > 2 ? out.bytes[2] : 0;
             char negativeLine[96];
             snprintf(negativeLine, sizeof(negativeLine),
                      "[ISOTP] Negative response service=0x%02X nrc=0x%02X",
-                     out.length > 1 ? out.bytes[1] : 0,
-                     out.length > 2 ? out.bytes[2] : 0);
+                     lastNegativeService_,
+                     lastNegativeCode_);
             Logger::warn(negativeLine);
             return false;
         }
@@ -118,6 +129,7 @@ bool IsoTpHandler::receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Pa
         Logger::debug("[ISOTP] Reassembly complete");
         return true;
     }
+    lastStatus_ = Status::Timeout;
     Logger::warn("[ISOTP] Timeout waiting for response");
     return false;
 #else

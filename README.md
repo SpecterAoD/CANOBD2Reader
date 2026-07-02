@@ -275,7 +275,9 @@ Verschieben bedient. Nach dem Flashen:
 Die Oberfläche hat vier Seiten, die über Buttons umgeschaltet werden:
 
 - Status: CAN, OBD2, Batteriespannung, Telemetrie-Zähler, letztes Paket
-- Diag: PID-Support, letzter CAN-Zeitstempel, DTCs, Fehlerstatus
+- Diag: PID-Support, letzter CAN-Zeitstempel, VIN, DTCs, OBD-ZÃ¤hler,
+  letzte OBD-Anfrage, letzte ECU-Antwort, letzte Negative Response und
+  herunterladbarer Diagnose-Snapshot
 - Log: Live-Log und persistenter Sender-Diagnose-Log
 - OTA: Firmwaredatei `firmware.bin` direkt über die Webseite hochladen
 
@@ -297,6 +299,12 @@ Der Log enthält unter anderem:
 - CAN-/TWAI-Status und CAN-Rohframes
 - OBD-Rohantworten, dekodierte OBD-Werte und OBD-Timeouts
 - Supported-PID-Erkennung
+- automatische Deaktivierung nicht unterstÃ¼tzter PIDs nach erfolgreicher
+  Supported-PID-Abfrage
+- Fallback von funktionaler Anfrage `0x7DF` auf physische Anfrage `0x7E0`,
+  wenn mehrere OBD-Timeouts hintereinander auftreten
+- Negative Responses inklusive NRC-Code und Kurzbeschreibung
+- VIN-Abfrage Ã¼ber Mode 09 PID 02
 - DTC-Abfragen und erkannte Fehlercodes
 - OTA-, Simulation- und Neustart-Ereignisse aus der WebConsole
 
@@ -308,6 +316,59 @@ Abruf über die Sender-WebConsole:
 | `GET` | `/log/file` | vollständiger persistenter Diagnose-Log inklusive Archiv |
 | `POST` | `/api/log/clear` | RAM- und persistenten Log löschen |
 | `GET` | `/status` | enthält `diagnosticLogMounted`, `diagnosticLogSize`, `diagnosticLogMaxSize` |
+
+Zusätzliche OBD-Diagnose-Endpunkte:
+
+| Methode | Pfad | Zweck |
+| --- | --- | --- |
+| `GET` | `/api/diagnostic/snapshot` | strukturierter JSON-Snapshot mit CAN/OBD/ESP-NOW-Zählern |
+| `GET` | `/api/diagnostic/download` | JSON-Snapshot als Datei herunterladen |
+
+Wichtige Diagnosefelder im Snapshot:
+
+- `obd.requests`: Anzahl gesendeter OBD-/ISO-TP-Anfragen
+- `obd.validResponses`: gültige ECU-Antworten
+- `obd.timeouts`: Anfragen ohne ECU-Antwort
+- `obd.negativeResponses`: ECU-Ablehnungen mit NRC
+- `obd.timeoutStreak`: aktuelle Timeout-Serie
+- `obd.requestCanId`: aktuell verwendete Anfrage-ID, normalerweise `0x7DF`,
+  nach Fallback `0x7E0`
+- `obd.lastRequest`: letzte OBD-Anfrage
+- `obd.lastEcuResponse`: letzte ECU-Antwort oder Timeout/NRC
+- `supportedPids`: erkannte Supported-PID-Masks
+- `vehicle.vin` und `vehicle.dtc`: zuletzt gelesene VIN und Fehlercodes
+
+### UDS-Diagnose
+
+Der Sender besitzt zusätzlich ein erstes UDS-Modul nach ISO 14229 auf derselben
+ISO-TP-Schicht wie OBD2. Es ist bewusst auf lesende bzw. ungefährliche
+Diagnosefunktionen begrenzt:
+
+- `0x22 ReadDataByIdentifier`, aktuell DID `0xF190` für VIN/Identifikation
+- `0x19 ReadDTCInformation`, Subfunktion `0x02` mit Statusmaske `0xFF`
+- `0x3E TesterPresent`
+- `0x10 DiagnosticSessionControl` ist im UDS-Client vorbereitet, aber nur als
+  Default-Session-Aufruf erlaubt
+
+Aus Sicherheitsgründen blockiert der UDS-Client aktuell:
+
+- `0x11 ECUReset`
+- `0x27 SecurityAccess`
+- Schreib-, Routine-, Codier- und Flash-Funktionen
+
+UDS nutzt physische Anfrage-ID `0x7E0` und erwartet Antworten im Bereich
+`0x7E8` bis `0x7EF`. Die Sender-WebConsole zeigt im Diagnosebereich:
+
+- UDS verfügbar ja/nein
+- UDS Requests, Timeouts, Sendefehler, positive und negative Antworten
+- letzte UDS-Anfrage
+- letzte UDS-Antwort
+- letzte UDS Negative Response inklusive NRC
+- letzter gelesener DID-Wert
+- letzte UDS-DTC-Zusammenfassung
+
+Dieselben Informationen stehen im JSON unter `/status` und im Snapshot unter
+`/api/diagnostic/snapshot` im Objekt `uds`.
 
 Die Loggröße ist über `SenderConfig::DiagnosticLogMaxBytes` begrenzt. Bei
 Überschreitung wird die aktuelle Datei nach
