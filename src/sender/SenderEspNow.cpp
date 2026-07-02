@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "Logger.h"
+#include "AuthHelpers.h"
 #include "config/NetworkConfig.h"
 
 namespace {
@@ -32,6 +33,12 @@ namespace SenderEspNow {
 bool begin() {
     readyState = false;
     Logger::debug("[ESP-NOW] Initialisiere Sender-Transport");
+
+    const String securityWarning = WebSecurity::espNowSecurityWarning();
+    if (SecurityConfig::BlockNetworkFeaturesOnPlaceholderSecrets && securityWarning.length() > 0) {
+        Logger::alarm(("[ESP-NOW] Start blockiert: " + securityWarning).c_str());
+        return false;
+    }
 
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();

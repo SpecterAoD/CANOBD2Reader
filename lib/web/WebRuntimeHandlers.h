@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #if defined(ARDUINO)
   #include <Arduino.h>
   #include <WebServer.h>
@@ -17,6 +19,9 @@ using LogCallback = void (*)(const String& message);
 String jsonEscape(const String& value);
 String simulationJson();
 bool firmwareFilenameMatchesTarget(const char* filename, const char* expectedTarget);
+bool firmwareBufferContainsText(const uint8_t* data, size_t size, const char* text);
+bool firmwareBufferContainsTargetMarker(const uint8_t* data, size_t size, const char* expectedTarget);
+bool firmwareBufferContainsVersionMarker(const uint8_t* data, size_t size, const char* expectedVersion);
 
 #if defined(ARDUINO)
 String updateErrorText(const char* prefix);

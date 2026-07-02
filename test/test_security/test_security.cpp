@@ -1,6 +1,7 @@
 #include <unity.h>
 #include "AuthHelpers.h"
 #include "WebRuntimeHandlers.h"
+#include "config/ProjectConfig.h"
 #include "config/SecurityConfig.h"
 
 void setUp() {}
@@ -30,6 +31,15 @@ void test_api_token_config_is_present_and_checked() {
     TEST_ASSERT_FALSE(WebSecurity::isConfiguredToken(nullptr));
 }
 
+void test_placeholder_secret_guards_are_reported() {
+    TEST_ASSERT_TRUE(WebSecurity::senderManagementSecurityWarning().length() > 0);
+    TEST_ASSERT_TRUE(WebSecurity::displayManagementSecurityWarning().length() > 0);
+    TEST_ASSERT_TRUE(WebSecurity::espNowSecurityWarning().length() > 0);
+    TEST_ASSERT_FALSE(WebSecurity::senderManagementConfigurationSafe());
+    TEST_ASSERT_FALSE(WebSecurity::displayManagementConfigurationSafe());
+    TEST_ASSERT_FALSE(WebSecurity::espNowConfigurationSafe());
+}
+
 void test_ota_target_filename_guard() {
     TEST_ASSERT_TRUE(SecurityConfig::RequireOtaTargetInFilename);
 
@@ -42,6 +52,22 @@ void test_ota_target_filename_guard() {
     TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("CANOBD2_display_V1.0.11.bin", "display"));
     TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("sender.bin", "display"));
     TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("", "display"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("resender.bin", "sender"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("display_senderish.bin", "sender"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("sender.txt", "sender"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("../sender.bin", "sender"));
+}
+
+void test_ota_metadata_markers_can_be_found_in_binary_data() {
+    String image = String("....sender....") + ProjectConfig::FirmwareVersion + "....";
+    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(image.c_str());
+    const size_t size = image.length();
+
+    TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareBufferContainsText(bytes, size, "sender"));
+    TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareBufferContainsTargetMarker(bytes, size, "sender"));
+    TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareBufferContainsVersionMarker(bytes, size, ProjectConfig::FirmwareVersion));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareBufferContainsTargetMarker(bytes, size, "display"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareBufferContainsVersionMarker(bytes, size, "V9.9.9"));
 }
 
 int main(int, char**) {
@@ -49,6 +75,8 @@ int main(int, char**) {
     RUN_TEST(test_constant_time_equals);
     RUN_TEST(test_authentication_config_is_present);
     RUN_TEST(test_api_token_config_is_present_and_checked);
+    RUN_TEST(test_placeholder_secret_guards_are_reported);
     RUN_TEST(test_ota_target_filename_guard);
+    RUN_TEST(test_ota_metadata_markers_can_be_found_in_binary_data);
     return UNITY_END();
 }
