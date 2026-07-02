@@ -1,7 +1,7 @@
 #include <unity.h>
 #include "DiagnosticLog.h"
-#include "LoggingConfig.h"
-#include "SenderConfig.h"
+#include "config/LoggingConfig.h"
+#include "config/SenderConfig.h"
 
 void setUp() {}
 void tearDown() {}

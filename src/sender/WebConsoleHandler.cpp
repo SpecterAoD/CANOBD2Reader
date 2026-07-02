@@ -5,7 +5,14 @@
 #include "SimulationTypes.h"
 #include "AuthHelpers.h"
 #include "DiagnosticLog.h"
-#include "SenderConfig.h"
+#include "WebAssets.h"
+#include "WebRuntimeHandlers.h"
+#include "config/BuildConfig.h"
+#include "config/ProjectConfig.h"
+#include "config/SenderConfig.h"
+#include "config/NetworkConfig.h"
+#include "config/SecurityConfig.h"
+#include "config/LoggingConfig.h"
 
 namespace {
     constexpr size_t MaxLogLineLength = 180;
@@ -16,14 +23,14 @@ namespace {
         return value.substring(0, maxLength - 3) + "...";
     }
 
-    String updateErrorText(const char* prefix) {
-        return String(prefix) + ", error=" + String(Update.getError());
-    }
-
     String hex32(uint32_t value, uint8_t width = 8) {
         char buffer[12];
         snprintf(buffer, sizeof(buffer), width == 3 ? "0x%03lX" : "0x%08lX", static_cast<unsigned long>(value));
         return String(buffer);
+    }
+
+    void webConsoleLogCallback(const String& message) {
+        WebConsoleHandler::log(message);
     }
 
 }
@@ -32,12 +39,12 @@ void WebConsoleHandler::begin() {
 #if !CANOBD2_ENABLE_SENDER_WEBCONSOLE
     return;
 #endif
-    if (!Config::Feature::EnableSenderWebConsole) return;
+    if (!BuildConfig::SenderWebConsoleEnabled) return;
 
     WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP(Config::Network::SenderWebSsid,
-                Config::Network::SenderWebPassword,
-                Config::Network::EspNowChannel);
+    WiFi.softAP(NetworkConfig::SenderWebSsid,
+                NetworkConfig::SenderWebPassword,
+                NetworkConfig::EspNowChannel);
 
     Logger::setSink([](const char* msg) {
         WebConsoleHandler::log(String(msg));
@@ -74,23 +81,23 @@ void WebConsoleHandler::handle() {
 #if !CANOBD2_ENABLE_SENDER_WEBCONSOLE
     return;
 #endif
-    if (Config::Feature::EnableSenderWebConsole) {
+    if (BuildConfig::SenderWebConsoleEnabled) {
         server.handleClient();
     }
 }
 
 void WebConsoleHandler::log(const String& msg) {
 #if !CANOBD2_ENABLE_SENDER_WEBCONSOLE
-    if (Config::Debug::Serial) Serial.println(msg);
+    if (LoggingConfig::SerialEnabled) Serial.println(msg);
     return;
 #endif
     const String line = clipped(String(millis() / 1000) + "s " + msg, MaxLogLineLength);
-    if (logBuffer.size() >= Config::Network::WebConsoleMaxLines) {
+    if (logBuffer.size() >= NetworkConfig::WebConsoleMaxLines) {
         logBuffer.pop_front();
     }
     logBuffer.push_back(line);
 
-    if (Config::Debug::Serial) {
+    if (LoggingConfig::SerialEnabled) {
         Serial.println(msg);
     }
 
@@ -104,7 +111,7 @@ void WebConsoleHandler::recordTelemetry(const char* payload) {
     }
 }
 
-void WebConsoleHandler::updateRuntimeStatus(const WebConsoleRuntimeStatus& status) {
+void WebConsoleHandler::updateRuntimeStatus(const Runtime::WebRuntimeStatus& status) {
     runtimeStatus = status;
 }
 
@@ -198,14 +205,14 @@ Timeouts: <span id="udsTimeouts">--</span> · Negative: <span id="udsNeg">--</sp
 <div class="card wide"><div class="label">Diagnose-Log</div><div class="small">Persistent: <span id="diaglog">--</span></div><div class="actions"><button id="loadFileLog" class="primary">Persistenten Log laden</button><a class="btn primary" href="/log/download">Log herunterladen</a><button id="clearLog" class="danger">Log löschen</button></div></div>
 <div class="card wide"><div class="label">Live-Log</div><pre id="logs">Lade Log...</pre></div>
 </div></section>
-<section id="ota" class="page"><div class="card wide"><div class="label">Firmware über Web hochladen</div><div class="small">Nur passende <code>firmware.bin</code> für <b>env:sender</b> verwenden. Gerät startet nach erfolgreichem Update neu.</div></div>
+<section id="ota" class="page"><div class="card wide"><div class="label">Firmware über Web hochladen</div><div class="small">Nur passende <code>sender.bin</code> für <b>env:sender</b> verwenden. Dateien mit Display-Firmware werden abgelehnt. Gerät startet nach erfolgreichem Update neu.</div></div>
 <div class="card wide"><div class="label">OTA Status</div><div id="otastatus" class="value">--</div><div class="small">Frei: <span id="freeota">--</span> · Sketch: <span id="sketch">--</span> · Flash: <span id="flash">--</span></div></div>
 <form class="actions" method="POST" action="/update" enctype="multipart/form-data"><input type="file" name="firmware" accept=".bin"><button class="primary" type="submit">OTA Update starten</button></form>
 <div class="actions"><button id="restart" class="danger">Sender neu starten</button></div></section>
 </div>
 <script>
 const $=id=>document.getElementById(id);
-const scenarios=['NormalSingleFrame','NormalMultiFrameVin','NormalMultiFrameDtc','FlowControlRequired','TimeoutAfterFirstFrame','SequenceError','BufferOverflow','MultipleEcusResponse','NegativeResponse','DisplayNormalValues','DisplayWarningValues','DisplayCriticalValues','DisplayTimeoutValues','DisplayMixedValues'];
+const scenarios=%%SIMULATION_SCENARIOS%%;
 scenarios.forEach(x=>{let o=document.createElement('option');o.value=x;o.textContent=x;$('scenarioSelect').appendChild(o)});
 document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active')});
 function yn(v){return v?'aktiv':'aus'}function cls(el,state){el.className='value '+(state?'okText':'warnText')}function bytes(v){return Math.round((v||0)/1024)+' KB'}
@@ -227,14 +234,23 @@ setInterval(refresh,1000);setInterval(refreshLog,1500);setInterval(refreshSimula
 </script>
 </body></html>
 )rawliteral";
-    server.send_P(200, "text/html", html);
+    String page(html);
+    page.replace("%%SIMULATION_SCENARIOS%%", WebAssets::simulationScenariosJsonArray());
+    server.send(200, "text/html", page);
 }
 
 void WebConsoleHandler::handleLog() {
     if (!WebSecurity::requireAuthentication(server)) return;
     String page;
-    for (auto &line : logBuffer) {
-        page += line + "\n";
+    page.reserve(DiagnosticLog::size() + 1024);
+    page += DiagnosticLog::readAll();
+    if (!page.endsWith("\n")) page += "\n";
+
+    if (!logBuffer.empty()) {
+        page += "\n----- live web buffer -----\n";
+        for (auto &line : logBuffer) {
+            page += line + "\n";
+        }
     }
     server.send(200, "text/plain; charset=utf-8", page);
 }
@@ -247,7 +263,7 @@ void WebConsoleHandler::handlePersistentLog() {
 void WebConsoleHandler::handleDownloadLog() {
     if (!WebSecurity::requireAuthentication(server)) return;
     String filename = "CANOBD2_sender_";
-    filename += Config::Project::FirmwareVersion;
+    filename += ProjectConfig::FirmwareVersion;
     filename += "_diagnostic.log";
     server.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
     server.send(200, "text/plain; charset=utf-8", DiagnosticLog::readAll());
@@ -265,21 +281,12 @@ void WebConsoleHandler::handleClearLog() {
 
 void WebConsoleHandler::handleStatus() {
     if (!WebSecurity::requireAuthentication(server)) return;
-    WebConsoleRuntimeStatus s = runtimeStatus;
+    Runtime::WebRuntimeStatus s = runtimeStatus;
     String json;
     json.reserve(1600);
     json += "{";
-    json += "\"firmware\":\"" + jsonEscape(Config::Project::FirmwareVersion) + "\",";
-    json += "\"target\":\"" + jsonEscape(Config::Project::TargetName) + "\",";
-    json += "\"protocol\":" + String(Config::Project::ProtocolVersion) + ",";
-    json += "\"buildTime\":\"" + jsonEscape(String(__DATE__) + " " + String(__TIME__)) + "\",";
-    json += "\"otaStatus\":\"" + jsonEscape(webOtaStatus) + "\",";
-    json += "\"freeSketchSpace\":" + String(ESP.getFreeSketchSpace()) + ",";
-    json += "\"sketchSize\":" + String(ESP.getSketchSize()) + ",";
-    json += "\"flashSize\":" + String(ESP.getFlashChipSize()) + ",";
-    json += "\"diagnosticLogMounted\":" + String(DiagnosticLog::mounted() ? "true" : "false") + ",";
-    json += "\"diagnosticLogSize\":" + String(DiagnosticLog::size()) + ",";
-    json += "\"diagnosticLogMaxSize\":" + String(SenderConfig::DiagnosticLogMaxBytes) + ",";
+    WebRuntimeHandlers::appendFirmwareJson(json, webOtaStatus);
+    WebRuntimeHandlers::appendDiagnosticLogJson(json, SenderConfig::DiagnosticLogMaxBytes);
     json += "\"started\":" + String(isStarted() ? "true" : "false") + ",";
     json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
     json += "\"uptime\":" + String(s.uptimeMs) + ",";
@@ -334,13 +341,13 @@ void WebConsoleHandler::handleStatus() {
 
 void WebConsoleHandler::handleDiagnosticSnapshot() {
     if (!WebSecurity::requireAuthentication(server)) return;
-    WebConsoleRuntimeStatus s = runtimeStatus;
+    Runtime::WebRuntimeStatus s = runtimeStatus;
     String json;
     json.reserve(1800);
     json += "{";
-    json += "\"firmware\":\"" + jsonEscape(Config::Project::FirmwareVersion) + "\",";
-    json += "\"target\":\"" + jsonEscape(Config::Project::TargetName) + "\",";
-    json += "\"protocol\":" + String(Config::Project::ProtocolVersion) + ",";
+    json += "\"firmware\":\"" + jsonEscape(ProjectConfig::FirmwareVersion) + "\",";
+    json += "\"target\":\"" + jsonEscape(ProjectConfig::TargetName) + "\",";
+    json += "\"protocol\":" + String(ProjectConfig::ProtocolVersion) + ",";
     json += "\"uptimeMs\":" + String(s.uptimeMs) + ",";
     json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
     json += "\"can\":{\"active\":" + String(s.canActive ? "true" : "false") +
@@ -395,7 +402,7 @@ void WebConsoleHandler::handleDiagnosticSnapshot() {
 void WebConsoleHandler::handleDiagnosticDownload() {
     if (!WebSecurity::requireAuthentication(server)) return;
     String filename = "CANOBD2_sender_";
-    filename += Config::Project::FirmwareVersion;
+    filename += ProjectConfig::FirmwareVersion;
     filename += "_diagnostic_snapshot.json";
     server.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
     handleDiagnosticSnapshot();
@@ -413,51 +420,44 @@ void WebConsoleHandler::handleRestart() {
 }
 
 void WebConsoleHandler::handleApiRestart() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireRestartAuthentication)) return;
-    log("[WebConsole] Neustart angefordert");
-    server.send(200, "application/json", "{\"restart\":true}");
-    delay(Config::Security::RestartDelayMs);
-    ESP.restart();
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireRestartAuthentication)) return;
+    WebRuntimeHandlers::sendRestartResponseAndRestart(server, SecurityConfig::RestartDelayMs, [](const String& message) {
+        WebConsoleHandler::log(message);
+    });
 }
 
 String WebConsoleHandler::simulationJson() {
-    String json;
-    json.reserve(160);
-    json += "{";
-    json += "\"simulation\":" + String(Simulation::RuntimeSimulation::enabled() ? "true" : "false") + ",";
-    json += "\"scenario\":\"" + jsonEscape(Simulation::RuntimeSimulation::scenarioName()) + "\"";
-    json += "}";
-    return json;
+    return WebRuntimeHandlers::simulationJson();
 }
 
 void WebConsoleHandler::handleSimulationStatus() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireSimulationAuthentication)) return;
     server.send(200, "application/json", simulationJson());
 }
 
 void WebConsoleHandler::handleSimulationOn() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::setEnabled(true);
     log("[Simulation] eingeschaltet");
     server.send(200, "application/json", simulationJson());
 }
 
 void WebConsoleHandler::handleSimulationOff() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::setEnabled(false);
     log("[Simulation] ausgeschaltet");
     server.send(200, "application/json", simulationJson());
 }
 
 void WebConsoleHandler::handleSimulationToggle() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::toggle();
     log(String("[Simulation] ") + (Simulation::RuntimeSimulation::enabled() ? "eingeschaltet" : "ausgeschaltet"));
     server.send(200, "application/json", simulationJson());
 }
 
 void WebConsoleHandler::handleSimulationScenario() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireSimulationAuthentication)) return;
     String raw = server.arg("scenario");
     if (raw.length() == 0) raw = server.arg("plain");
     raw.trim();
@@ -474,16 +474,16 @@ void WebConsoleHandler::handleSimulationScenario() {
 }
 
 void WebConsoleHandler::handleUpdatePage() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireOtaAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireOtaAuthentication)) return;
     server.sendHeader("Location", "/#ota");
     server.send(302, "text/plain", "");
 }
 
 void WebConsoleHandler::handleUpdateFinished() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireOtaAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireOtaAuthentication)) return;
     const bool ok = !Update.hasError();
     if (!ok && webOtaStatus == "Bereit") {
-        webOtaStatus = updateErrorText("Update fehlgeschlagen");
+        webOtaStatus = WebRuntimeHandlers::updateErrorText("Update fehlgeschlagen");
     }
     server.send(ok ? 200 : 500, "text/plain", ok ? "Update erfolgreich, Neustart..." : webOtaStatus);
     if (ok) {
@@ -495,39 +495,23 @@ void WebConsoleHandler::handleUpdateFinished() {
 }
 
 void WebConsoleHandler::handleUpdateUpload() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireOtaAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireOtaAuthentication)) return;
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
         updateInProgress = true;
-        webOtaStatus = "Upload gestartet: " + upload.filename;
-        log("[WebOTA] Upload gestartet: " + upload.filename);
-        if (Config::Security::RejectOtaWhenSketchSpaceUnknown && ESP.getFreeSketchSpace() == 0) {
+        if (SecurityConfig::RejectOtaWhenSketchSpaceUnknown && ESP.getFreeSketchSpace() == 0) {
             webOtaStatus = "OTA abgelehnt: freier Sketch-Speicher unbekannt";
             log("[WebOTA] " + webOtaStatus);
             return;
         }
-        if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-            webOtaStatus = updateErrorText("Update.begin fehlgeschlagen");
-            log("[WebOTA] " + webOtaStatus);
-        }
+        WebRuntimeHandlers::beginWebOtaUpload(upload.filename, webOtaStatus, webConsoleLogCallback);
     } else if (upload.status == UPLOAD_FILE_WRITE) {
-        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-            webOtaStatus = updateErrorText("Schreibfehler");
-            log("[WebOTA] " + webOtaStatus);
-        }
+        WebRuntimeHandlers::writeWebOtaChunk(upload.buf, upload.currentSize, webOtaStatus, webConsoleLogCallback);
     } else if (upload.status == UPLOAD_FILE_END) {
-        if (Update.end(true)) {
-            webOtaStatus = "Upload abgeschlossen: " + String(upload.totalSize) + " Bytes";
-            log("[WebOTA] Upload abgeschlossen: " + String(upload.totalSize) + " Bytes");
-        } else {
-            webOtaStatus = updateErrorText("Update.end fehlgeschlagen");
-            log("[WebOTA] " + webOtaStatus);
-        }
+        WebRuntimeHandlers::finishWebOtaUpload(upload.totalSize, webOtaStatus, webConsoleLogCallback);
         updateInProgress = false;
     } else if (upload.status == UPLOAD_FILE_ABORTED) {
-        Update.end();
+        WebRuntimeHandlers::abortWebOtaUpload(webOtaStatus, webConsoleLogCallback);
         updateInProgress = false;
-        webOtaStatus = "Upload abgebrochen";
-        log("[WebOTA] " + webOtaStatus);
     }
 }

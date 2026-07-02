@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include "SenderConfig.h"
+#include "config/SenderConfig.h"
 
 namespace Obd {
 

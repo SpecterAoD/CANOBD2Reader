@@ -7,8 +7,8 @@
 #if defined(ARDUINO)
 #include <FS.h>
 #include <SPIFFS.h>
-#include "LoggingConfig.h"
-#include "ProjectConfig.h"
+#include "config/LoggingConfig.h"
+#include "config/ProjectConfig.h"
 #endif
 
 namespace DiagnosticLog {

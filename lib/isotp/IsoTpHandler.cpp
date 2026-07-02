@@ -3,7 +3,7 @@
 #if defined(ARDUINO)
 #include <Arduino.h>
 #include "Logger.h"
-#include "SenderConfig.h"
+#include "config/SenderConfig.h"
 #endif
 
 namespace IsoTp {

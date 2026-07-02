@@ -1,8 +1,7 @@
 #include "CANHandler.h"
-#include "Config.h"
+#include "config/SenderConfig.h"
 #include "Utils.h"
 #include "CANDecoder.h"
-#include "SenderConfig.h"
 
 bool CANHandler::driverInstalled = false;
 bool CANHandler::driverStarted = false;
@@ -10,20 +9,16 @@ bool CANHandler::driverStarted = false;
 bool CANHandler::init() {
     Logger::debug(" CAN...............INIT");
     Logger::debug(" TWAI Modus: ");
-    if (Config::Sender::TwaiOperationMode == TWAI_MODE_NORMAL) {
-        Logger::debug("NORMAL (Senden & Empfangen)");
-    } else {
-        Logger::debug("LISTEN_ONLY (Nur Empfangen)");
-    }
+    Logger::debug("NORMAL (Senden & Empfangen)");
 
     // --- Treiber installieren ---
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
-        (gpio_num_t)Config::Sender::ShieldCanTx,
-        (gpio_num_t)Config::Sender::ShieldCanRx,
-        Config::Sender::TwaiOperationMode
+        (gpio_num_t)SenderConfig::CanTxPin,
+        (gpio_num_t)SenderConfig::CanRxPin,
+        TWAI_MODE_NORMAL
     );
-    g_config.rx_queue_len = 32;
-    g_config.tx_queue_len = 2;
+    g_config.rx_queue_len = SenderConfig::CanRxQueueLength;
+    g_config.tx_queue_len = SenderConfig::CanTxQueueLength;
 
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
@@ -90,7 +85,7 @@ void CANHandler::handleMessage(twai_message_t& message) {
     // Raw CAN traffic can be extremely busy on a real vehicle. Keep it behind
     // the explicit sender flag so OBD polling and heartbeat telemetry do not
     // get starved by unrelated bus frames.
-    if (Config::Sender::SendRawData) {
+    if (SenderConfig::SendRawData) {
         CANDecoder::DecodedFrame decoded = CANDecoder::decode(message);
         Utils::sendTelemetry("CAN", "RAW", "LastCAN", decoded.raw, "", "OK");
         Utils::sendTelemetry("CAN", "HINT", "CANHint", decoded.hint, "", "OK");

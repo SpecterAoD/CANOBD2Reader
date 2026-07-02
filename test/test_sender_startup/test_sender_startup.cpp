@@ -1,5 +1,5 @@
 #include <unity.h>
-#include "SenderConfig.h"
+#include "config/SenderConfig.h"
 #include "StatusLogic.h"
 
 void setUp() {}

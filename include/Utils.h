@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include <esp_now.h>
 
-#include "Config.h"
+#include "config/ProjectConfig.h"
 #include "TelemetryCodec.h"
 #include "TelemetryProtocol.h"
 #include "TelemetrySequence.h"

@@ -1,6 +1,7 @@
 #include <unity.h>
 #include "AuthHelpers.h"
-#include "SecurityConfig.h"
+#include "WebRuntimeHandlers.h"
+#include "config/SecurityConfig.h"
 
 void setUp() {}
 void tearDown() {}
@@ -29,10 +30,25 @@ void test_api_token_config_is_present_and_checked() {
     TEST_ASSERT_FALSE(WebSecurity::isConfiguredToken(nullptr));
 }
 
+void test_ota_target_filename_guard() {
+    TEST_ASSERT_TRUE(SecurityConfig::RequireOtaTargetInFilename);
+
+    TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("sender.bin", "sender"));
+    TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("CANOBD2_sender_V1.0.11.bin", "sender"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("display.bin", "sender"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("firmware.bin", "sender"));
+
+    TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("display.bin", "display"));
+    TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("CANOBD2_display_V1.0.11.bin", "display"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("sender.bin", "display"));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareFilenameMatchesTarget("", "display"));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_constant_time_equals);
     RUN_TEST(test_authentication_config_is_present);
     RUN_TEST(test_api_token_config_is_present_and_checked);
+    RUN_TEST(test_ota_target_filename_guard);
     return UNITY_END();
 }

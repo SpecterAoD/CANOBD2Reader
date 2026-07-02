@@ -1,4 +1,11 @@
 #pragma once
+#if defined(ARDUINO)
+  #include <Arduino.h>
+#else
+  #include <cstdint>
+  using byte = std::uint8_t;
+#endif
+
 //-------------------------------------------------------------------------------------//
 // PIDs (https://en.wikipedia.org/wiki/OBD-II_PIDs)
 //-------------------------------------------------------------------------------------//

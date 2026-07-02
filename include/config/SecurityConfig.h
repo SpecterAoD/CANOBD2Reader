@@ -21,6 +21,10 @@ constexpr bool RequireOtaAuthentication = true;
 constexpr bool RequireSimulationAuthentication = true;
 constexpr bool RequireRestartAuthentication = true;
 constexpr bool RejectOtaWhenSketchSpaceUnknown = true;
+// Web-OTA cannot safely infer the PlatformIO environment from a raw ESP32 image.
+// Requiring a target-specific filename catches accidental sender/display swaps
+// before Update.begin() touches flash. CI produces sender.bin and display.bin.
+constexpr bool RequireOtaTargetInFilename = true;
 constexpr uint32_t RestartDelayMs = 300;
 
 }

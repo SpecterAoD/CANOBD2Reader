@@ -3,7 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include "ProjectConfig.h"
+#include "config/ProjectConfig.h"
 
 namespace IsoTp {
 

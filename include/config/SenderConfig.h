@@ -2,12 +2,13 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "LoggingConfig.h"
+#include "config/LoggingConfig.h"
 
 namespace SenderConfig {
 constexpr bool EnableCAN = true;
 constexpr bool EnableOBD2 = true;
 constexpr bool EnableUDS = true;
+constexpr bool EnableSenderOta = true;
 constexpr bool SendRawData = false;
 constexpr bool SendRawDataOnly = false;
 constexpr bool RequireWebStart = false;

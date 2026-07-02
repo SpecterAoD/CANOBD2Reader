@@ -5,8 +5,11 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
-#include "Config.h"
-#include "DisplayConfig.h"
+#include "common_config.h"
+#include "config/ProjectConfig.h"
+#include "config/DisplayConfig.h"
+#include "config/NetworkConfig.h"
+#include "config/LoggingConfig.h"
 #include "DisplayData.h"
 #include "TelemetryCodec.h"
 #include "StatusLogic.h"
@@ -31,14 +34,14 @@ uint32_t rx_parse_errors = 0;
 uint32_t rx_last_summary_ms = 0;
 
 void maybeLogRxSummary() {
-  if (!(Config::Debug::TraceDisplayTelemetry && Config::Debug::Serial)) return;
+  if (!(LoggingConfig::TraceDisplayTelemetry && LoggingConfig::SerialEnabled)) return;
 
   const uint32_t now = millis();
   if (rx_last_summary_ms == 0) {
     rx_last_summary_ms = now;
     return;
   }
-  if (now - rx_last_summary_ms < Config::Debug::TraceSummaryIntervalMs) return;
+  if (now - rx_last_summary_ms < LoggingConfig::TraceSummaryIntervalMs) return;
 
   DiagnosticLog::appendf("[display-rx] packets=%lu crc=%lu badlen=%lu macdrop=%lu queuedrop=%lu parse=%lu lastSeq=%lu",
                          static_cast<unsigned long>(rx_packets),
@@ -47,7 +50,7 @@ void maybeLogRxSummary() {
                          static_cast<unsigned long>(rx_mac_filtered),
                          static_cast<unsigned long>(rx_queue_drops),
                          static_cast<unsigned long>(rx_parse_errors),
-                         static_cast<unsigned long>(DisplayData::lastSequence));
+                         static_cast<unsigned long>(DisplayData::runtime().lastSequence));
   rx_last_summary_ms = now;
 }
 
@@ -78,8 +81,8 @@ void parseTelemetryPayload(const char* payload, uint32_t sequence) {
   const uint8_t fields = countFields(raw);
   if (fields < 3) {
     ++rx_parse_errors;
-    droppedPackets++;
-    lastError = "Ungueltiges Paket";
+    runtime().droppedPackets++;
+    runtime().lastError = "Ungueltiges Paket";
     maybeLogRxSummary();
     return;
   }
@@ -111,25 +114,25 @@ void parseTelemetryPayload(const char* payload, uint32_t sequence) {
   }
 
   if (payloadSequence > 0) {
-    droppedPackets += StatusLogic::packetLossFromSequence(lastSequence, payloadSequence);
+    runtime().droppedPackets += StatusLogic::packetLossFromSequence(runtime().lastSequence, payloadSequence);
   }
-  if (payloadSequence > 0) lastSequence = payloadSequence;
+  if (payloadSequence > 0) runtime().lastSequence = payloadSequence;
 
   upsertValue(type, key, name, value, unit, status, payloadSequence);
   if (type == "STATUS") {
     if (key == "HEARTBEAT") {
-      lastHeartbeatAt = millis();
-      lastHeartbeatSequence = payloadSequence;
+      runtime().lastHeartbeatAt = millis();
+      runtime().lastHeartbeatSequence = payloadSequence;
       DiagnosticLog::appendf("[DISPLAY] Heartbeat received seq=%lu",
                              static_cast<unsigned long>(payloadSequence));
     } else if (key == "CAN") {
-      lastCanStatusAt = millis();
+      runtime().lastCanStatusAt = millis();
     } else if (key == "OBD") {
-      lastObdStatusAt = millis();
+      runtime().lastObdStatusAt = millis();
     }
   }
-  lastRawPayload = raw;
-  lastError = status == "OK" ? "" : status;
+  runtime().lastRawPayload = raw;
+  runtime().lastError = status == "OK" ? "" : status;
   maybeLogRxSummary();
 }
 
@@ -141,12 +144,12 @@ void processQueuedPacket(const QueuedTelemetryPacket& queued) {
   if (status != Telemetry::DecodeStatus::Ok) {
     if (status == Telemetry::DecodeStatus::CrcMismatch) {
       ++rx_crc_errors;
-      crcErrors++;
-      lastError = "CRC-Fehler";
+      runtime().crcErrors++;
+      runtime().lastError = "CRC-Fehler";
     } else {
       ++rx_invalid_length;
-      droppedPackets++;
-      lastError = "Ungueltiges Telemetriepaket";
+      runtime().droppedPackets++;
+      runtime().lastError = "Ungueltiges Telemetriepaket";
     }
     maybeLogRxSummary();
     return;
@@ -157,15 +160,15 @@ void processQueuedPacket(const QueuedTelemetryPacket& queued) {
   payload[packet.payloadLength] = '\0';
 
   ++rx_packets;
-  receivedPackets++;
-  lastReceivedAt = millis();
+  runtime().receivedPackets++;
+  runtime().lastReceivedAt = millis();
   parseTelemetryPayload(payload, packet.sequence);
 }
 
 void onDataRecv(const uint8_t* senderMac, const uint8_t* incomingData, int len) {
   if (senderMac == nullptr || incomingData == nullptr || len <= 0) return;
 
-  if (memcmp(senderMac, Config::Network::SenderAllowedMac, 6) != 0) {
+  if (memcmp(senderMac, NetworkConfig::SenderAllowedMac, 6) != 0) {
     ++rx_mac_filtered;
     return;
   }
@@ -190,9 +193,9 @@ void onDataRecv(const uint8_t* senderMac, const uint8_t* incomingData, int len) 
 namespace DisplayReceiver {
 
 void begin() {
-  telemetryQueue = xQueueCreate(DisplayConfigValues::TelemetryQueueLength, sizeof(QueuedTelemetryPacket));
+  telemetryQueue = xQueueCreate(DisplayConfig::TelemetryQueueLength, sizeof(QueuedTelemetryPacket));
   if (telemetryQueue == nullptr) {
-    DisplayData::lastError = "Telemetry Queue fehlgeschlagen";
+    DisplayData::runtime().lastError = "Telemetry Queue fehlgeschlagen";
     return;
   }
 
@@ -200,26 +203,26 @@ void begin() {
   WiFi.disconnect(false, false);
 
   if (esp_now_init() != ESP_OK) {
-    DisplayData::lastError = "ESP-NOW Init fehlgeschlagen";
+    DisplayData::runtime().lastError = "ESP-NOW Init fehlgeschlagen";
     return;
   }
 
   esp_now_peer_info_t peer = {};
-  memcpy(peer.peer_addr, Config::Network::SenderAllowedMac, 6);
-  peer.channel = Config::Network::EspNowChannel;
-  peer.encrypt = Config::Network::UseEspNowEncryption;
-  if (Config::Network::UseEspNowEncryption) {
-    memcpy(peer.lmk, Config::Network::EspNowAesKey, 16);
+  memcpy(peer.peer_addr, NetworkConfig::SenderAllowedMac, 6);
+  peer.channel = NetworkConfig::EspNowChannel;
+  peer.encrypt = NetworkConfig::UseEspNowEncryption;
+  if (NetworkConfig::UseEspNowEncryption) {
+    memcpy(peer.lmk, NetworkConfig::EspNowAesKey, 16);
   }
 
   esp_err_t peerResult = esp_now_add_peer(&peer);
   if (peerResult != ESP_OK && peerResult != ESP_ERR_ESPNOW_EXIST) {
-    DisplayData::lastError = "ESP-NOW Peer fehlgeschlagen";
+    DisplayData::runtime().lastError = "ESP-NOW Peer fehlgeschlagen";
     return;
   }
 
   esp_now_register_recv_cb(onDataRecv);
-  DisplayData::lastError = "Warte auf Sender";
+  DisplayData::runtime().lastError = "Warte auf Sender";
 }
 
 void processQueuedPackets() {

@@ -1,7 +1,7 @@
 #include "DisplaySeverity.h"
 
 #include <cstring>
-#include "DisplayConfig.h"
+#include "config/DisplayConfig.h"
 
 namespace {
 
@@ -41,38 +41,38 @@ DisplaySeverity severityForMetric(const char* metricName,
     }
 
     if (equalsAny(metricName, "CoolantTemp", "EngineCoolantTemp", "05")) {
-        if (value >= DisplayConfigValues::CoolantCriticalC) return DisplaySeverity::Critical;
-        if (value >= DisplayConfigValues::CoolantWarnC) return DisplaySeverity::Warning;
+        if (value >= DisplayConfig::CoolantCriticalC) return DisplaySeverity::Critical;
+        if (value >= DisplayConfig::CoolantWarnC) return DisplaySeverity::Warning;
         return DisplaySeverity::Ok;
     }
 
     if (equalsAny(metricName, "OilTemp", "EngineOilTemp", "5C")) {
-        if (value >= DisplayConfigValues::OilCriticalC) return DisplaySeverity::Critical;
-        if (value >= DisplayConfigValues::OilWarnC) return DisplaySeverity::Warning;
+        if (value >= DisplayConfig::OilCriticalC) return DisplaySeverity::Critical;
+        if (value >= DisplayConfig::OilWarnC) return DisplaySeverity::Warning;
         return DisplaySeverity::Ok;
     }
 
     if (equalsAny(metricName, "BatteryVoltage", "ControlVoltage", "VOLTAGE")) {
-        if (value <= DisplayConfigValues::VoltageCriticalLow ||
-            value >= DisplayConfigValues::VoltageCriticalHigh) {
+        if (value <= DisplayConfig::VoltageCriticalLow ||
+            value >= DisplayConfig::VoltageCriticalHigh) {
             return DisplaySeverity::Critical;
         }
-        if (value <= DisplayConfigValues::VoltageWarnLow ||
-            value > DisplayConfigValues::VoltageWarnHigh) {
+        if (value <= DisplayConfig::VoltageWarnLow ||
+            value > DisplayConfig::VoltageWarnHigh) {
             return DisplaySeverity::Warning;
         }
         return DisplaySeverity::Ok;
     }
 
     if (equalsAny(metricName, "RPM", "EngineRPM", "0C")) {
-        if (value >= DisplayConfigValues::RpmCritical) return DisplaySeverity::Critical;
-        if (value >= DisplayConfigValues::RpmWarn) return DisplaySeverity::Warning;
+        if (value >= DisplayConfig::RpmCritical) return DisplaySeverity::Critical;
+        if (value >= DisplayConfig::RpmWarn) return DisplaySeverity::Warning;
         return DisplaySeverity::Ok;
     }
 
     if (equalsAny(metricName, "BoostPressureBar", "Boost", "BOOST")) {
-        if (value > DisplayConfigValues::BoostCriticalBar) return DisplaySeverity::Critical;
-        if (value >= DisplayConfigValues::BoostWarnBar) return DisplaySeverity::Warning;
+        if (value > DisplayConfig::BoostCriticalBar) return DisplaySeverity::Critical;
+        if (value >= DisplayConfig::BoostWarnBar) return DisplaySeverity::Warning;
         return DisplaySeverity::Ok;
     }
 

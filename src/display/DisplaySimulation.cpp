@@ -35,14 +35,14 @@ namespace DisplaySimulation {
     }
 
     internalSimulationIndex += Simulation::simulatedPidCount();
-    lastReceivedAt = millis();
-    lastHeartbeatAt = millis();
-    lastHeartbeatSequence = static_cast<uint32_t>(internalSimulationIndex);
+    runtime().lastReceivedAt = millis();
+    runtime().lastHeartbeatAt = millis();
+    runtime().lastHeartbeatSequence = static_cast<uint32_t>(internalSimulationIndex);
     const auto isoTp = Simulation::buildIsoTpSequence(scenario);
     upsertValue("STATUS", "CAN", "CAN", "SIMULATED", "", "OK", internalSimulationIndex);
     upsertValue("STATUS", "OBD", "OBD", isoTp.timeoutExpected ? "TIMEOUT" : "SIMULATED", "", isoTp.timeoutExpected ? "TIMEOUT" : "OK", internalSimulationIndex + 1);
-    lastCanStatusAt = millis();
-    lastObdStatusAt = millis();
+    runtime().lastCanStatusAt = millis();
+    runtime().lastObdStatusAt = millis();
     upsertValue("STATUS", "HEARTBEAT", "Heartbeat", String(static_cast<unsigned long>(internalSimulationIndex)), "", "OK", internalSimulationIndex);
     upsertValue("STATUS", "SIM", "Simulation", Simulation::RuntimeSimulation::enabled() ? "aktiv" : "inaktiv", "", "OK", internalSimulationIndex + 2);
     upsertValue("STATUS", "SIM_SCENARIO", "SimScenario", Simulation::RuntimeSimulation::scenarioName(), "", "OK", internalSimulationIndex + 3);

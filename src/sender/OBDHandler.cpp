@@ -1,5 +1,6 @@
 #include "OBDHandler.h"
 #include "Utils.h"
+#include "PIDs.h"
 #include "PID_Converter.h"
 #include "IsoTpHandler.h"
 #include "BoostCalculator.h"
@@ -71,7 +72,7 @@ bool OBD2Handler::receiveResponse(uint8_t mode, uint8_t pid, uint8_t* outData, u
 }
 
 bool OBD2Handler::receivePayload(uint8_t mode, uint8_t pid, IsoTp::Payload& outPayload) {
-    if (isoTp.receiveResponse(mode, pid, outPayload, Config::Sender::ObdResponseTimeoutMs)) {
+    if (isoTp.receiveResponse(mode, pid, outPayload, SenderConfig::ObdResponseTimeoutMs)) {
         Obd::Diagnostics::recordValidResponse(outPayload.responseId,
                                               outPayload.bytes.data(),
                                               outPayload.length);
@@ -139,7 +140,7 @@ bool OBD2Handler::requestAndSendPID(uint8_t pid) {
 
     if (receiveResponse(read_LiveData, pid, responseData, responseLen)) {
         Logger::obdFrame(pid, responseData, responseLen);
-        if constexpr (Config::Sender::SendRawDataOnly) {
+        if constexpr (SenderConfig::SendRawDataOnly) {
             Utils::sendRawOBDData(pid, responseData, responseLen);
         } else {
             PIDResult result = convertPID(pid, responseData, responseLen);

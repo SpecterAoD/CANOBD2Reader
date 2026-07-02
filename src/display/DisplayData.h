@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DisplayTypes.h"
+#include "DisplayRuntimeState.h"
 
 namespace DisplayData {
   extern DisplayTelemetryValue values[34];
@@ -8,22 +9,12 @@ namespace DisplayData {
   extern uint8_t currentPage;
   extern uint8_t lastRenderedPage;
   extern uint32_t lastScreenRefresh;
-  extern uint32_t lastReceivedAt;
   extern uint32_t lastButtonAt;
-  extern uint32_t receivedPackets;
-  extern uint32_t droppedPackets;
-  extern uint32_t crcErrors;
-  extern uint32_t lastSequence;
-  extern uint32_t lastHeartbeatAt;
-  extern uint32_t lastHeartbeatSequence;
-  extern uint32_t lastCanStatusAt;
-  extern uint32_t lastObdStatusAt;
-  extern String lastRawPayload;
-  extern String lastError;
   extern uint32_t lastInternalSimulationUpdate;
   extern size_t internalSimulationIndex;
   extern bool renderDirty;
 
+  Runtime::DisplayRuntimeState& runtime();
   DisplayTelemetryValue* findValue(const String& name);
   DisplayTelemetryValue* upsertValue(const String& type,
                                      const String& key,

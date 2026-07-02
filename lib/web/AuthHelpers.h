@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstddef>
-#include "SecurityConfig.h"
+#include "config/SecurityConfig.h"
 
 #if defined(ARDUINO)
   #include <Arduino.h>

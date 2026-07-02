@@ -1,7 +1,7 @@
 #include <unity.h>
-#include "ProjectConfig.h"
-#include "SenderConfig.h"
-#include "DisplayConfig.h"
+#include "config/ProjectConfig.h"
+#include "config/SenderConfig.h"
+#include "config/DisplayConfig.h"
 
 void setUp() {}
 void tearDown() {}
@@ -26,7 +26,7 @@ void test_sender_timing() {
 }
 
 void test_display_queue() {
-    TEST_ASSERT_TRUE(DisplayConfigValues::TelemetryQueueLength >= 4);
+    TEST_ASSERT_TRUE(DisplayConfig::TelemetryQueueLength >= 4);
 }
 
 int main(int, char**) {

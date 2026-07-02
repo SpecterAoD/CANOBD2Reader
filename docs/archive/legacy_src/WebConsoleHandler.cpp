@@ -1,10 +1,10 @@
 #include "WebConsoleHandler.h"
 
 void WebConsoleHandler::begin() {
-    if (!Config::EnableWebConsole) return;
+    if (!BuildLegacyConfig::SenderWebConsoleEnabled) return;
 
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(Config::DebugAPSSID, Config::DebugAPPass);
+    WiFi.softAP(NetworkLegacyConfig::SenderWebSsid, NetworkLegacyConfig::SenderWebPassword);
     Serial.print("[WebConsole] AP gestartet: ");
     Serial.println(WiFi.softAPIP());
 
@@ -15,23 +15,23 @@ void WebConsoleHandler::begin() {
 }
 
 void WebConsoleHandler::handle() {
-    if (Config::EnableWebConsole) {
+    if (BuildLegacyConfig::SenderWebConsoleEnabled) {
         server.handleClient();
     }
 }
 
 void WebConsoleHandler::log(const String& msg) {
-    if (!Config::EnableWebConsole) {
-        if (Config::SerialFlag) Serial.println(msg);
+    if (!BuildLegacyConfig::SenderWebConsoleEnabled) {
+        if (LoggingLegacyConfig::SerialEnabled) Serial.println(msg);
         return;
     }
 
-    if (logBuffer.size() >= Config::WebConsoleMaxLines) {
+    if (logBuffer.size() >= NetworkLegacyConfig::WebConsoleMaxLines) {
         logBuffer.pop_front();
     }
     logBuffer.push_back(msg);
 
-    if (Config::SerialFlag) {
+    if (LoggingLegacyConfig::SerialEnabled) {
         Serial.println(msg);
     }
 }

@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace DisplayConfigValues {
+namespace DisplayConfig {
 constexpr uint8_t Rotation = 1;
 constexpr int8_t PowerPin = 15;
 constexpr uint8_t PowerOnLevel = 1;
@@ -16,7 +16,8 @@ constexpr uint8_t MainPageIndex = 0;
 constexpr uint32_t LongPressMs = 1200;
 constexpr bool EnableGraphPages = true;
 
-constexpr uint32_t RefreshMs = 120;
+constexpr uint32_t ScreenRefreshMs = 120;
+constexpr uint32_t RefreshMs = ScreenRefreshMs;
 constexpr uint32_t ForceFullRenderMs = 1200;
 constexpr bool UseSegmentValueRenderer = false;
 constexpr bool EnableStartupValueOverlay = false;
@@ -45,4 +46,13 @@ constexpr uint16_t RpmMin = 0;
 constexpr uint16_t RpmMax = 6000;
 constexpr float BoostWarnBar = 0.8f;
 constexpr float BoostCriticalBar = 1.2f;
+
+constexpr uint16_t Background = 0x0000; // black
+constexpr uint16_t Panel = 0x18E3;      // dark blue/grey panel
+constexpr uint16_t Text = 0xFFFF;       // white
+constexpr uint16_t Muted = 0x7BEF;      // grey
+constexpr uint16_t Accent = 0x07FF;     // cyan
+constexpr uint16_t Ok = 0x07E0;         // green
+constexpr uint16_t Warn = 0xFDA0;       // orange
+constexpr uint16_t Error = 0xF800;      // red
 }

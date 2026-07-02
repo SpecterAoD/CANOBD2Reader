@@ -1,12 +1,12 @@
 #include "CANHandler.h"
-#include "Config.h"
+// Legacy archive: Config.h was removed during config split.
 #include "Utils.h"
 #include "CANDecoder.h"
 
 bool CANHandler::init() {
     Logger::debug(" CAN...............INIT");
     Logger::debug(" TWAI Modus: ");
-    if (Config::TWAI_OPERATION_MODE == TWAI_MODE_NORMAL) {
+    if (TWAI_MODE_NORMAL == TWAI_MODE_NORMAL) {
         Logger::debug("NORMAL (Senden & Empfangen)");
     } else {
         Logger::debug("LISTEN_ONLY (Nur Empfangen)");
@@ -14,9 +14,9 @@ bool CANHandler::init() {
 
     // --- Treiber installieren ---
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
-        (gpio_num_t)Config::SHIELD_CAN_TX, 
-        (gpio_num_t)Config::SHIELD_CAN_RX, 
-        Config::TWAI_OPERATION_MODE
+        (gpio_num_t)SenderLegacyConfig::CanTxPin, 
+        (gpio_num_t)SenderLegacyConfig::CanRxPin, 
+        TWAI_MODE_NORMAL
     );
     g_config.rx_queue_len = 32;
     g_config.tx_queue_len = 2;

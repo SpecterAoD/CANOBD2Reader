@@ -2,7 +2,7 @@
 
 #if defined(ARDUINO)
 #include "Logger.h"
-#include "SenderConfig.h"
+#include "config/SenderConfig.h"
 #endif
 
 #include "UdsDiagnostics.h"

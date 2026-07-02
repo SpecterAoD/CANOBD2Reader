@@ -3,16 +3,16 @@
 namespace OTAHandler {
 
     void initOTA() {
-        if (!Config::OtaEnable) return;
+        if (!SenderLegacyConfig::EnableSenderOta) return;
 
         Logger::debug("[OTA] Initialisierung...");
 
         // Hostname aus Config setzen
-        ArduinoOTA.setHostname(Config::OtaHostname);
+        ArduinoOTA.setHostname(NetworkLegacyConfig::SenderOtaHostname);
 
         // Passwort aus Config setzen (optional)
-        if (strlen(Config::OtaPassword) > 0) {
-            ArduinoOTA.setPassword(Config::OtaPassword);
+        if (strlen(NetworkLegacyConfig::SenderOtaPassword) > 0) {
+            ArduinoOTA.setPassword(NetworkLegacyConfig::SenderOtaPassword);
         }
 
         // Event-Handler
@@ -39,7 +39,7 @@ namespace OTAHandler {
     }
 
     void handleOTA() {
-        if (Config::OtaEnable) {
+        if (SenderLegacyConfig::EnableSenderOta) {
             ArduinoOTA.handle();
         }
     }

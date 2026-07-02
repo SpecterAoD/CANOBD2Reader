@@ -61,12 +61,12 @@ namespace NetworkManager {
         esp_now_register_recv_cb(onDataRecv);
 
         memset(&peerInfo, 0, sizeof(peerInfo));
-        memcpy(peerInfo.peer_addr, Config::EspNowPeerMac, 6);
+        memcpy(peerInfo.peer_addr, NetworkLegacyConfig::DisplayPeerMac, 6);
         peerInfo.channel = 1;
-        peerInfo.encrypt = Config::UseEspNowEncryption;
+        peerInfo.encrypt = NetworkLegacyConfig::UseEspNowEncryption;
 
-        if (Config::UseEspNowEncryption) {
-            memcpy(peerInfo.lmk, Config::EspNowAesKey, 16);
+        if (NetworkLegacyConfig::UseEspNowEncryption) {
+            memcpy(peerInfo.lmk, NetworkLegacyConfig::EspNowAesKey, 16);
         }
 
         if (esp_now_add_peer(&peerInfo) != ESP_OK) {

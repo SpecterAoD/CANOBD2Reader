@@ -3,24 +3,24 @@
 namespace OTAHandler {
 
     void initOTA() {
-        if (!Config::Feature::EnableSenderOta) return;
+        if (!SenderConfig::EnableSenderOta) return;
 
         Logger::debug("[OTA] Initialisierung...");
 
         if (WiFi.status() != WL_CONNECTED && WiFi.getMode() != WIFI_AP && WiFi.getMode() != WIFI_AP_STA) {
             WiFi.mode(WIFI_AP_STA);
-            WiFi.softAP(Config::Network::SenderWebSsid,
-                        Config::Network::SenderWebPassword,
-                        Config::Network::EspNowChannel);
+            WiFi.softAP(NetworkConfig::SenderWebSsid,
+                        NetworkConfig::SenderWebPassword,
+                        NetworkConfig::EspNowChannel);
             Logger::debugf("[OTA] SoftAP gestartet, IP: %s", WiFi.softAPIP().toString().c_str());
         }
 
         // Hostname aus Config setzen
-        ArduinoOTA.setHostname(Config::Network::SenderOtaHostname);
+        ArduinoOTA.setHostname(NetworkConfig::SenderOtaHostname);
 
         // Passwort aus Config setzen (optional)
-        if (strlen(Config::Network::SenderOtaPassword) > 0) {
-            ArduinoOTA.setPassword(Config::Network::SenderOtaPassword);
+        if (strlen(NetworkConfig::SenderOtaPassword) > 0) {
+            ArduinoOTA.setPassword(NetworkConfig::SenderOtaPassword);
         }
 
         // Event-Handler
@@ -48,7 +48,7 @@ namespace OTAHandler {
     }
 
     void handleOTA() {
-        if (Config::Feature::EnableSenderOta) {
+        if (SenderConfig::EnableSenderOta) {
             ArduinoOTA.handle();
         }
     }

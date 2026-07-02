@@ -3,7 +3,6 @@
 #include <Arduino.h>
 #include <driver/twai.h>
 
-#include "Config.h"
 #include "Logger.h"
 
 class CANHandler {

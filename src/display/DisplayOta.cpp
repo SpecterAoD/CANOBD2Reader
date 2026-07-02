@@ -1,24 +1,25 @@
 #include "DisplayOta.h"
 #include "DisplayData.h"
-#include "Config.h"
+#include "common_config.h"
+#include "config/ProjectConfig.h"
+#include "config/NetworkConfig.h"
+#include "config/SecurityConfig.h"
+#include "config/LoggingConfig.h"
 #include "RuntimeSimulation.h"
 #include "SimulationTypes.h"
 #include "AuthHelpers.h"
 #include "DiagnosticLog.h"
-#include "LoggingConfig.h"
+#include "WebAssets.h"
+#include "WebRuntimeHandlers.h"
 #include <ArduinoOTA.h>
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Update.h>
 
 namespace {
-  WebServer server(Config::Network::WebServerPort);
+  WebServer server(NetworkConfig::WebServerPort);
   bool webUpdateInProgress = false;
   String webOtaStatus = "Bereit";
-
-  String updateErrorText(const char* prefix) {
-    return String(prefix) + ", error=" + String(Update.getError());
-  }
 
   String jsonEscape(const String& value) {
     String escaped;
@@ -40,13 +41,12 @@ namespace {
   }
 
   String simulationJson() {
-    String json;
-    json.reserve(160);
-    json += "{";
-    json += "\"simulation\":" + String(Simulation::RuntimeSimulation::enabled() ? "true" : "false") + ",";
-    json += "\"scenario\":\"" + jsonEscape(Simulation::RuntimeSimulation::scenarioName()) + "\"";
-    json += "}";
-    return json;
+    return WebRuntimeHandlers::simulationJson();
+  }
+
+  void displayWebLogCallback(const String& message) {
+    DisplayData::runtime().lastError = message;
+    DiagnosticLog::appendf("[DISPLAY] %s", message.c_str());
   }
 
   void handleRoot() {
@@ -72,7 +72,7 @@ button{border:0;border-radius:14px;padding:13px 10px;background:#075985;color:va
 <body>
 <div class="wrap">
 <header><div><div class="title">CAN OBD2 Display</div><div class="sub" id="ip">Web OTA</div></div><div id="state" class="pill">bereit</div></header>
-<div class="card"><div class="label">Firmware Update</div><div class="small">Nur passende <code>firmware.bin</code> für <b>env:display</b> verwenden. Nach erfolgreichem Upload startet das Display neu.</div></div>
+<div class="card"><div class="label">Firmware Update</div><div class="small">Nur passende <code>display.bin</code> für <b>env:display</b> verwenden. Dateien mit Sender-Firmware werden abgelehnt. Nach erfolgreichem Upload startet das Display neu.</div></div>
 <form method="POST" action="/update" enctype="multipart/form-data">
 <input type="file" name="firmware" accept=".bin">
 <button type="submit">Display Firmware hochladen</button>
@@ -86,7 +86,7 @@ button{border:0;border-radius:14px;padding:13px 10px;background:#075985;color:va
 </div>
 <script>
 const $=id=>document.getElementById(id);
-const scenarios=['NormalSingleFrame','NormalMultiFrameVin','NormalMultiFrameDtc','FlowControlRequired','TimeoutAfterFirstFrame','SequenceError','BufferOverflow','MultipleEcusResponse','NegativeResponse','DisplayNormalValues','DisplayWarningValues','DisplayCriticalValues','DisplayTimeoutValues','DisplayMixedValues'];
+const scenarios=%%SIMULATION_SCENARIOS%%;
 scenarios.forEach(x=>{let o=document.createElement('option');o.value=x;o.textContent=x;$('scenarioSelect').appendChild(o)});
 function bytes(v){return Math.round((v||0)/1024)+' KB'}
 async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('ota').textContent=bytes(s.freeSketchSpace)+' frei';$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('diaglog').textContent=(s.diagnosticLogMounted?'bereit':'nicht gemountet')+' · '+bytes(s.diagnosticLogSize)+' / '+bytes(s.diagnosticLogMaxSize);$('status').textContent=s.update?'Update läuft':'Bereit';$('detail').textContent=s.otaStatus+' · '+(s.lastError||'Keine Fehler');$('state').textContent=s.update?'Update':'OK';$('state').className='pill '+(s.update?'err':'ok')}catch(e){$('state').textContent='offline';$('state').className='pill err'}}
@@ -103,7 +103,9 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
 </script>
 </body></html>
 )rawliteral";
-    server.send_P(200, "text/html", html);
+    String page(html);
+    page.replace("%%SIMULATION_SCENARIOS%%", WebAssets::simulationScenariosJsonArray());
+    server.send(200, "text/html", page);
   }
 
   void handleStatus() {
@@ -111,17 +113,8 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     String json;
     json.reserve(760);
     json += "{";
-    json += "\"firmware\":\"" + jsonEscape(Config::Project::FirmwareVersion) + "\",";
-    json += "\"target\":\"" + jsonEscape(Config::Project::TargetName) + "\",";
-    json += "\"protocol\":" + String(Config::Project::ProtocolVersion) + ",";
-    json += "\"buildTime\":\"" + jsonEscape(String(__DATE__) + " " + String(__TIME__)) + "\",";
-    json += "\"otaStatus\":\"" + jsonEscape(webOtaStatus) + "\",";
-    json += "\"freeSketchSpace\":" + String(ESP.getFreeSketchSpace()) + ",";
-    json += "\"sketchSize\":" + String(ESP.getSketchSize()) + ",";
-    json += "\"flashSize\":" + String(ESP.getFlashChipSize()) + ",";
-    json += "\"diagnosticLogMounted\":" + String(DiagnosticLog::mounted() ? "true" : "false") + ",";
-    json += "\"diagnosticLogSize\":" + String(DiagnosticLog::size()) + ",";
-    json += "\"diagnosticLogMaxSize\":" + String(LoggingConfig::DiagnosticLogMaxBytes) + ",";
+    WebRuntimeHandlers::appendFirmwareJson(json, webOtaStatus);
+    WebRuntimeHandlers::appendDiagnosticLogJson(json, LoggingConfig::DiagnosticLogMaxBytes);
     json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
     json += "\"uptime\":" + String(millis()) + ",";
     json += "\"update\":" + String(webUpdateInProgress ? "true" : "false") + ",";
@@ -130,14 +123,15 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     json += "\"espNowConnected\":" + String(DisplayData::isEspNowConnected() ? "true" : "false") + ",";
     json += "\"canStatusRecent\":" + String(DisplayData::isCanStatusRecent() ? "true" : "false") + ",";
     json += "\"obdStatusRecent\":" + String(DisplayData::isObdStatusRecent() ? "true" : "false") + ",";
-    json += "\"lastPacketAge\":" + String(DisplayData::lastReceivedAt == 0 ? 0 : millis() - DisplayData::lastReceivedAt) + ",";
-    json += "\"lastHeartbeatAge\":" + String(DisplayData::lastHeartbeatAt == 0 ? 0 : millis() - DisplayData::lastHeartbeatAt) + ",";
-    json += "\"lastHeartbeatSequence\":" + String(DisplayData::lastHeartbeatSequence) + ",";
-    json += "\"lastSequence\":" + String(DisplayData::lastSequence) + ",";
-    json += "\"receivedPackets\":" + String(DisplayData::receivedPackets) + ",";
-    json += "\"droppedPackets\":" + String(DisplayData::droppedPackets) + ",";
-    json += "\"crcErrors\":" + String(DisplayData::crcErrors) + ",";
-    json += "\"lastError\":\"" + jsonEscape(DisplayData::lastError) + "\"";
+    auto& runtime = DisplayData::runtime();
+    json += "\"lastPacketAge\":" + String(runtime.lastReceivedAt == 0 ? 0 : millis() - runtime.lastReceivedAt) + ",";
+    json += "\"lastHeartbeatAge\":" + String(runtime.lastHeartbeatAt == 0 ? 0 : millis() - runtime.lastHeartbeatAt) + ",";
+    json += "\"lastHeartbeatSequence\":" + String(runtime.lastHeartbeatSequence) + ",";
+    json += "\"lastSequence\":" + String(runtime.lastSequence) + ",";
+    json += "\"receivedPackets\":" + String(runtime.receivedPackets) + ",";
+    json += "\"droppedPackets\":" + String(runtime.droppedPackets) + ",";
+    json += "\"crcErrors\":" + String(runtime.crcErrors) + ",";
+    json += "\"lastError\":\"" + jsonEscape(runtime.lastError) + "\"";
     json += "}";
     server.send(200, "application/json", json);
   }
@@ -150,7 +144,7 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
   void handleDownloadLog() {
     if (!WebSecurity::requireAuthentication(server)) return;
     String filename = "CANOBD2_display_";
-    filename += Config::Project::FirmwareVersion;
+    filename += ProjectConfig::FirmwareVersion;
     filename += "_diagnostic.log";
     server.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
     server.send(200, "text/plain; charset=utf-8", DiagnosticLog::readAll());
@@ -166,45 +160,43 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
   }
 
   void handleRestart() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireRestartAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireRestartAuthentication)) return;
     DiagnosticLog::appendf("[DISPLAY] Restart requested from web");
-    server.send(200, "application/json", "{\"restart\":true}");
-    delay(Config::Security::RestartDelayMs);
-    ESP.restart();
+    WebRuntimeHandlers::sendRestartResponseAndRestart(server, SecurityConfig::RestartDelayMs, nullptr);
   }
 
   void handleSimulationStatus() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireSimulationAuthentication)) return;
     server.send(200, "application/json", simulationJson());
   }
 
   void handleSimulationOn() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::setEnabled(true);
-    DisplayData::lastError = "Simulation eingeschaltet";
+    DisplayData::runtime().lastError = "Simulation eingeschaltet";
     DiagnosticLog::appendf("[DISPLAY] Simulation enabled");
     server.send(200, "application/json", simulationJson());
   }
 
   void handleSimulationOff() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::setEnabled(false);
-    DisplayData::lastError = "Simulation ausgeschaltet";
+    DisplayData::runtime().lastError = "Simulation ausgeschaltet";
     DiagnosticLog::appendf("[DISPLAY] Simulation disabled");
     server.send(200, "application/json", simulationJson());
   }
 
   void handleSimulationToggle() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireSimulationAuthentication)) return;
     Simulation::RuntimeSimulation::toggle();
-    DisplayData::lastError = Simulation::RuntimeSimulation::enabled() ? "Simulation eingeschaltet" : "Simulation ausgeschaltet";
+    DisplayData::runtime().lastError = Simulation::RuntimeSimulation::enabled() ? "Simulation eingeschaltet" : "Simulation ausgeschaltet";
     DiagnosticLog::appendf("[DISPLAY] Simulation toggled state=%s",
                            Simulation::RuntimeSimulation::enabled() ? "on" : "off");
     server.send(200, "application/json", simulationJson());
   }
 
   void handleSimulationScenario() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireSimulationAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireSimulationAuthentication)) return;
     String raw = server.arg("scenario");
     if (raw.length() == 0) raw = server.arg("plain");
     raw.trim();
@@ -216,19 +208,19 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     }
 
     Simulation::RuntimeSimulation::setScenario(scenario);
-    DisplayData::lastError = "Simulation: " + String(Simulation::RuntimeSimulation::scenarioName());
+    DisplayData::runtime().lastError = "Simulation: " + String(Simulation::RuntimeSimulation::scenarioName());
     DiagnosticLog::appendf("[DISPLAY] Simulation scenario=%s", Simulation::RuntimeSimulation::scenarioName());
     server.send(200, "application/json", simulationJson());
   }
 
   void handleUpdateFinished() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireOtaAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireOtaAuthentication)) return;
     const bool ok = !Update.hasError();
     if (!ok && webOtaStatus == "Bereit") {
-      webOtaStatus = updateErrorText("Update fehlgeschlagen");
+      webOtaStatus = WebRuntimeHandlers::updateErrorText("Update fehlgeschlagen");
     }
     server.send(ok ? 200 : 500, "text/plain", ok ? "Update erfolgreich, Neustart..." : webOtaStatus);
-    DisplayData::lastError = ok ? "Web-OTA erfolgreich" : webOtaStatus;
+    DisplayData::runtime().lastError = ok ? "Web-OTA erfolgreich" : webOtaStatus;
     if (ok) {
       webOtaStatus = "Update erfolgreich, Neustart";
       DiagnosticLog::appendf("[DISPLAY] Web-OTA success, restarting");
@@ -238,47 +230,31 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
   }
 
   void handleUpdateUpload() {
-    if (!WebSecurity::requireAuthentication(server, Config::Security::RequireOtaAuthentication)) return;
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireOtaAuthentication)) return;
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
       webUpdateInProgress = true;
-      webOtaStatus = "Upload gestartet: " + upload.filename;
-      DisplayData::lastError = webOtaStatus;
-      DiagnosticLog::appendf("[DISPLAY] Web-OTA upload started file=%s", upload.filename.c_str());
-      if (Config::Security::RejectOtaWhenSketchSpaceUnknown && ESP.getFreeSketchSpace() == 0) {
+      if (SecurityConfig::RejectOtaWhenSketchSpaceUnknown && ESP.getFreeSketchSpace() == 0) {
         webOtaStatus = "OTA abgelehnt: freier Sketch-Speicher unbekannt";
-        DisplayData::lastError = webOtaStatus;
+        DisplayData::runtime().lastError = webOtaStatus;
         DiagnosticLog::appendf("[DISPLAY] Web-OTA rejected: free sketch space unknown");
         return;
       }
-      if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-        webOtaStatus = updateErrorText("Update.begin fehlgeschlagen");
-        DisplayData::lastError = webOtaStatus;
-        DiagnosticLog::appendf("[DISPLAY] %s", webOtaStatus.c_str());
+      if (!WebRuntimeHandlers::beginWebOtaUpload(upload.filename, webOtaStatus, displayWebLogCallback)) {
+        DisplayData::runtime().lastError = webOtaStatus;
       }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
-      if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-        webOtaStatus = updateErrorText("Web-OTA Schreibfehler");
-        DisplayData::lastError = webOtaStatus;
-        DiagnosticLog::appendf("[DISPLAY] %s", webOtaStatus.c_str());
+      if (!WebRuntimeHandlers::writeWebOtaChunk(upload.buf, upload.currentSize, webOtaStatus, displayWebLogCallback)) {
+        DisplayData::runtime().lastError = webOtaStatus;
       }
     } else if (upload.status == UPLOAD_FILE_END) {
-      if (Update.end(true)) {
-        webOtaStatus = "Web-OTA abgeschlossen: " + String(upload.totalSize) + " Bytes";
-        DisplayData::lastError = webOtaStatus;
-        DiagnosticLog::appendf("[DISPLAY] %s", webOtaStatus.c_str());
-      } else {
-        webOtaStatus = updateErrorText("Update.end fehlgeschlagen");
-        DisplayData::lastError = webOtaStatus;
-        DiagnosticLog::appendf("[DISPLAY] %s", webOtaStatus.c_str());
-      }
+      WebRuntimeHandlers::finishWebOtaUpload(upload.totalSize, webOtaStatus, displayWebLogCallback);
+      DisplayData::runtime().lastError = webOtaStatus;
       webUpdateInProgress = false;
     } else if (upload.status == UPLOAD_FILE_ABORTED) {
-      Update.end();
+      WebRuntimeHandlers::abortWebOtaUpload(webOtaStatus, displayWebLogCallback);
+      DisplayData::runtime().lastError = webOtaStatus;
       webUpdateInProgress = false;
-      webOtaStatus = "Web-OTA abgebrochen";
-      DisplayData::lastError = webOtaStatus;
-      DiagnosticLog::appendf("[DISPLAY] Web-OTA aborted");
     }
   }
 }
@@ -290,32 +266,32 @@ namespace DisplayOta {
 #endif
     DiagnosticLog::begin();
     DiagnosticLog::appendf("[BOOT] Display firmware=%s protocol=%u target=%s",
-                           Config::Project::FirmwareVersion,
-                           Config::Project::ProtocolVersion,
-                           Config::Project::TargetName);
+                           ProjectConfig::FirmwareVersion,
+                           ProjectConfig::ProtocolVersion,
+                           ProjectConfig::TargetName);
     WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP(Config::Network::DisplayWebSsid,
-                Config::Network::DisplayWebPassword,
-                Config::Network::EspNowChannel);
+    WiFi.softAP(NetworkConfig::DisplayWebSsid,
+                NetworkConfig::DisplayWebPassword,
+                NetworkConfig::EspNowChannel);
 
     static const char* authHeaders[] = {"X-API-Token", "Authorization"};
     server.collectHeaders(authHeaders, 2);
 
-    ArduinoOTA.setHostname(Config::Network::DisplayOtaHostname);
-    ArduinoOTA.setPassword(Config::Network::DisplayWebPassword);
+    ArduinoOTA.setHostname(NetworkConfig::DisplayOtaHostname);
+    ArduinoOTA.setPassword(NetworkConfig::DisplayWebPassword);
     ArduinoOTA
       .onStart([]() {
-        DisplayData::lastError = "OTA gestartet";
+        DisplayData::runtime().lastError = "OTA gestartet";
       })
       .onEnd([]() {
-        DisplayData::lastError = "OTA abgeschlossen";
+        DisplayData::runtime().lastError = "OTA abgeschlossen";
       })
       .onProgress([](unsigned int progress, unsigned int total) {
         if (total == 0) return;
-        DisplayData::lastError = "OTA " + String((progress * 100U) / total) + "%";
+        DisplayData::runtime().lastError = "OTA " + String((progress * 100U) / total) + "%";
       })
       .onError([](ota_error_t error) {
-        DisplayData::lastError = "OTA Fehler " + String(static_cast<unsigned int>(error));
+        DisplayData::runtime().lastError = "OTA Fehler " + String(static_cast<unsigned int>(error));
       });
 
     ArduinoOTA.begin();
@@ -335,7 +311,7 @@ namespace DisplayOta {
     server.on("/api/simulation/scenario", HTTP_POST, handleSimulationScenario);
     server.on("/update", HTTP_POST, handleUpdateFinished, handleUpdateUpload);
     server.begin();
-    DisplayData::lastError = "Display Web-OTA bereit";
+    DisplayData::runtime().lastError = "Display Web-OTA bereit";
   }
 
   void handle() {

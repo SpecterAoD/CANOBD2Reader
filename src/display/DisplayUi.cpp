@@ -125,7 +125,7 @@ namespace {
     if (DisplayConfig::EnableStartupValueOverlay && millis() < DisplayConfig::StartupValueOverlayMs) {
       right += " DIAG";
     }
-    if (lastReceivedAt > 0) right += "  " + String((millis() - lastReceivedAt) / 1000) + "s";
+    if (runtime().lastReceivedAt > 0) right += "  " + String((millis() - runtime().lastReceivedAt) / 1000) + "s";
     tft.drawString(right, tft.width() - 4, 10);
   }
 
@@ -532,8 +532,8 @@ namespace {
 
   void drawDiagnosticsPage() {
     using namespace DisplayData;
-    uint32_t totalPackets = receivedPackets + droppedPackets;
-    uint8_t quality = totalPackets == 0 ? 0 : (receivedPackets * 100UL) / totalPackets;
+    uint32_t totalPackets = runtime().receivedPackets + runtime().droppedPackets;
+    uint8_t quality = totalPackets == 0 ? 0 : (runtime().receivedPackets * 100UL) / totalPackets;
     DisplayTelemetryValue* canStatus = findValue("CAN");
     DisplayTelemetryValue* obdStatus = findValue("OBD");
     DisplayTelemetryValue* heartbeat = findValue("HEARTBEAT");
@@ -553,7 +553,7 @@ namespace {
     tft.setTextDatum(ML_DATUM);
     tft.setTextSize(1);
     tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
-    String firmwareLine = String("FW ") + DISPLAY_FIRMWARE_VERSION + "  Seq " + String(lastSequence) + " Q " + String(quality) + "%";
+    String firmwareLine = String("FW ") + DISPLAY_FIRMWARE_VERSION + "  Seq " + String(runtime().lastSequence) + " Q " + String(quality) + "%";
     tft.drawString(firmwareLine, 14, 132);
     tft.setTextColor(DisplayConfig::Text, DisplayConfig::Panel);
     String sim = displayText("Simulation");
@@ -719,7 +719,7 @@ namespace DisplayUi {
       lastScreenRefresh = now;
       renderDirty = false;
 
-      if (Config::Debug::Serial && now - lastUiStatsLogMs >= 5000) {
+      if (LoggingConfig::SerialEnabled && now - lastUiStatsLogMs >= 5000) {
         DiagnosticLog::appendf("[display-ui] page=%u values=%u connected=%s",
                                static_cast<unsigned int>(currentPage),
                                static_cast<unsigned int>(valueCount),

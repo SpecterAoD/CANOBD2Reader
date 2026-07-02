@@ -1,7 +1,7 @@
 #include <cstring>
 #include <unity.h>
 
-#include "ProjectConfig.h"
+#include "config/ProjectConfig.h"
 #include "common_config.h"
 
 void setUp() {}

@@ -95,21 +95,14 @@ namespace DisplayData {
   uint8_t currentPage = 0;
   uint8_t lastRenderedPage = 255;
   uint32_t lastScreenRefresh = 0;
-  uint32_t lastReceivedAt = 0;
   uint32_t lastButtonAt = 0;
-  uint32_t receivedPackets = 0;
-  uint32_t droppedPackets = 0;
-  uint32_t crcErrors = 0;
-  uint32_t lastSequence = 0;
-  uint32_t lastHeartbeatAt = 0;
-  uint32_t lastHeartbeatSequence = 0;
-  uint32_t lastCanStatusAt = 0;
-  uint32_t lastObdStatusAt = 0;
-  String lastRawPayload = "";
-  String lastError = "Keine Daten";
   uint32_t lastInternalSimulationUpdate = 0;
   size_t internalSimulationIndex = 0;
   bool renderDirty = true;
+
+  Runtime::DisplayRuntimeState& runtime() {
+    return Runtime::DisplayRuntimeState::instance();
+  }
 
   void markDirty() {
     renderDirty = true;
@@ -134,8 +127,8 @@ namespace DisplayData {
 
     if (existing == nullptr) {
       if (valueCount >= (sizeof(values) / sizeof(values[0]))) {
-        droppedPackets++;
-        lastError = "Werteliste voll";
+        runtime().droppedPackets++;
+        runtime().lastError = "Werteliste voll";
         return nullptr;
       }
       existing = &values[valueCount++];
@@ -160,15 +153,15 @@ namespace DisplayData {
   }
 
   bool isEspNowConnected() {
-    return StatusLogic::packetLinkHealth(millis(), lastReceivedAt, DisplayConfig::EspNowTimeoutMs) == StatusLogic::Health::Ok;
+    return StatusLogic::packetLinkHealth(millis(), runtime().lastReceivedAt, DisplayConfig::EspNowTimeoutMs) == StatusLogic::Health::Ok;
   }
 
   bool isCanStatusRecent() {
-    return lastCanStatusAt > 0 && millis() - lastCanStatusAt <= DisplayConfig::CanTimeoutMs;
+    return runtime().lastCanStatusAt > 0 && millis() - runtime().lastCanStatusAt <= DisplayConfig::CanTimeoutMs;
   }
 
   bool isObdStatusRecent() {
-    return lastObdStatusAt > 0 && millis() - lastObdStatusAt <= DisplayConfig::ObdTimeoutMs;
+    return runtime().lastObdStatusAt > 0 && millis() - runtime().lastObdStatusAt <= DisplayConfig::ObdTimeoutMs;
   }
 
   bool isFresh(const DisplayTelemetryValue* value) {

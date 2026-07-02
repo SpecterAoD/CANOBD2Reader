@@ -149,8 +149,8 @@ upload_port = <ip-adresse>
 
 Runtime-Verhalten:
 
-- Sender startet OTA über `OTAHandler`. Wenn keine WLAN-Verbindung vorhanden ist, wird der zentrale Sender-SoftAP `Config::Network::SenderWebSsid` gestartet.
-- Display besitzt ein eigenes `DisplayOta`-Modul und startet bei aktiviertem Flag den zentralen Display-SoftAP `Config::Network::DisplayWebSsid`.
+- Sender startet OTA über `OTAHandler`. Wenn keine WLAN-Verbindung vorhanden ist, wird der zentrale Sender-SoftAP `NetworkConfig::SenderWebSsid` gestartet.
+- Display besitzt ein eigenes `DisplayOta`-Modul und startet bei aktiviertem Flag den zentralen Display-SoftAP `NetworkConfig::DisplayWebSsid`.
 - Beide Geräte verwenden `WIFI_AP_STA`, damit OTA/WebConsole und ESP-NOW parallel grundsätzlich möglich bleiben.
 - Der Sender startet im Auto-Betrieb standardmäßig automatisch. `SenderConfig::RequireWebStart` ist `false`; das Webinterface ist damit nicht mehr erforderlich, um CAN/OBD und ESP-NOW zu starten.
 - Der Sender sendet mindestens alle `SenderConfig::HeartbeatIntervalMs` ein Heartbeat-/Statuspaket per ESP-NOW, auch wenn noch keine OBD-Antwort oder kein CAN-Frame vorliegt.
@@ -176,7 +176,7 @@ Fehlersuche im Auto:
 1. Wenn ESP-NOW rot bleibt: MAC-Adressen, ESP-NOW-Kanal und AES-Key in `include/secrets.h` prüfen.
 2. Wenn ESP-NOW grün, aber OBD rot/orange ist: CAN-Verkabelung, OBD-Pins, Zündung und Fahrzeugunterstützung prüfen.
 3. Wenn CAN rot ist: TWAI-Initialisierung, Transceiver, CAN-H/L und Baudrate prüfen.
-4. Wenn Werte grau sind: Pakete kommen, aber einzelne Messwerte sind älter als `DisplayConfigValues::ValueTimeoutMs`.
+4. Wenn Werte grau sind: Pakete kommen, aber einzelne Messwerte sind älter als `DisplayConfig::ValueTimeoutMs`.
 5. Im Sender-Diagnose-Log prüfen:
    - `[ISOTP] Request sent ... pid=0x..`: OBD-Anfrage wurde wirklich auf CAN gesendet.
    - `[ISOTP] Response id=0x7E8...`: ECU hat geantwortet.
@@ -227,16 +227,16 @@ Die zentralen Build-Flags liegen in `platformio.ini` und `include/common_config.
 
 Bluetooth ist standardmäßig deaktiviert und wird bei `0` nicht mitkompiliert.
 
-Die Sender-WebConsole ist über den in `include/secrets.h` konfigurierten SoftAP erreichbar, wenn `CANOBD2_ENABLE_SENDER_WEBCONSOLE=1` und `Config::EnableWebConsole` aktiv sind.
+Die Sender-WebConsole ist über den in `include/secrets.h` konfigurierten SoftAP erreichbar, wenn `CANOBD2_ENABLE_SENDER_WEBCONSOLE=1` und `BuildConfig::SenderWebConsoleEnabled` aktiv sind.
 
 ## Zentrale Konfiguration
 
-Alle gemeinsamen Laufzeitwerte liegen in `include/Config.h`. Die wichtigsten Bereiche:
+Die statische Konfiguration ist in einzelne Header unter `include/config/` aufgeteilt. Runtime-Zust�nde liegen nicht in Config-Dateien. Die wichtigsten Bereiche:
 
-- `Config::Network`: SSIDs, Passwörter, Webserver-Port, OTA-Hostnamen, ESP-NOW-Kanal, ESP-NOW-AES-Key und feste Peer-MAC-Adressen.
-- `Config::Display`: Display-Power-Pin, Backlight-Pin, Button-Pin, Rotation, Seitenanzahl und UI-Timeouts.
-- `Config::Sender`: CAN-/OBD2-Pins, Polling-/Timeout-Werte und Power-Messung.
-- `Config::Feature`: Bluetooth, WebConsole, Display-Web-OTA und Simulation.
+- `NetworkConfig`: SSIDs, Passw�rter, Webserver-Port, OTA-Hostnamen, ESP-NOW-Kanal, ESP-NOW-AES-Key und feste Peer-MAC-Adressen.
+- `DisplayConfig`: Display-Power-Pin, Backlight-Pin, Button-Pin, Rotation, Seitenanzahl, UI-Timeouts, Farben und Grenzwerte.
+- `SenderConfig`: CAN-/OBD2-Pins, Polling-/Timeout-Werte, UDS-Timing, Heartbeat und Power-Messung.
+- `BuildConfig`, `SimulationConfig` und `SecurityConfig`: Build-Flags, Simulation, OTA/Web-Feature-Flags und Schutz der Web-Endpunkte.
 
 Aktuelle WLAN-/OTA-Werte werden nicht mehr fest im Repository gepflegt. Für echte Geräte `include/secrets.example.h` nach `include/secrets.h` kopieren und dort setzen:
 
@@ -245,21 +245,21 @@ Aktuelle WLAN-/OTA-Werte werden nicht mehr fest im Repository gepflegt. Für ech
 | Sender | `Secrets::SenderWebSsid` | `Secrets::SenderWebPassword` | WebConsole + Web-OTA |
 | Display | `Secrets::DisplayWebSsid` | `Secrets::DisplayWebPassword` | Display-Web-OTA |
 
-ESP-NOW nutzt zentral `Config::Network::EspNowChannel`. Wenn Web-OTA/AP und ESP-NOW parallel laufen, müssen beide Geräte auf demselben Kanal bleiben.
+ESP-NOW nutzt zentral `NetworkConfig::EspNowChannel`. Wenn Web-OTA/AP und ESP-NOW parallel laufen, müssen beide Geräte auf demselben Kanal bleiben.
 
 ### Hinweis: Display bleibt nach Upload schwarz
 
 Beim LilyGO T-Display S3 wird die Displayversorgung auf vielen Revisionen über GPIO 15 eingeschaltet. Dieser Wert ist jetzt zentral gesetzt:
 
 ```cpp
-Config::Display::PowerPin = 15
-Config::Display::BacklightPin = 38
+DisplayConfig::PowerPin = 15
+DisplayConfig::BacklightPin = 38
 ```
 
 Falls eine andere Board-Revision verwendet wird und das Display trotzdem dunkel bleibt, zuerst prüfen:
 
 1. Wurde wirklich `env:display` auf das LilyGO T-Display S3 geflasht?
-2. Passt der Power-Pin zur Board-Revision? Falls nicht, `PowerPin` in `include/Config.h` anpassen oder auf `-1` setzen.
+Die statische Konfiguration ist in einzelne Header unter `include/config/` aufgeteilt. Runtime-Zust�nde liegen nicht in Config-Dateien. Die wichtigsten Bereiche:
 3. Erscheint im seriellen Monitor ein Boot-Log?
 4. Ist die Display-Firmware unter `.pio/build/display/firmware.bin` verwendet worden, nicht die Sender-Firmware?
 
@@ -514,7 +514,7 @@ Aktuell abgedeckt:
 5. CAN-Rohdaten: letzter CAN-Frame, Frame-Zähler, einfache OBD/CAN-Hinweise
 6. Diagnose: ESP-NOW, CAN, OBD, Heartbeat, Datenqualität und Paketverlust
 7. Fehlercodes: DTC-Status und aktive Fehlercodes
-8. Drehzahl-Grafik: grosser RPM-Wert, Balken 0 bis `DisplayConfigValues::RpmMax`, Warn-/Kritisch-Marken und Max-RPM seit Start
+8. Drehzahl-Grafik: grosser RPM-Wert, Balken 0 bis `DisplayConfig::RpmMax`, Warn-/Kritisch-Marken und Max-RPM seit Start
 9. Ladedruck: fertiger `BoostPressureBar` in bar plus MAP und BARO als Zusatzwerte
 
 ### Ladedruck-Berechnung
@@ -685,5 +685,5 @@ platformio device monitor -e display
 6. Fehlerbild schnell einordnen:
 
 - Sender `ok` steigt, Display `text` bleibt 0: Funkpfad/MAC/Kanal pruefen.
-- Display `macdrop` steigt: Sender-MAC passt nicht zu `Config::Network::SenderAllowedMac`.
+- Display `macdrop` steigt: Sender-MAC passt nicht zu `NetworkConfig::SenderAllowedMac`.
 - Display `crc` steigt: AES-Key/Kanal oder Frame-Integritaet pruefen.

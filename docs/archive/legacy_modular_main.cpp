@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-#include "Config.h"
+// Legacy archive: Config.h was removed during config split.
 #include "Logger.h"
 #include "Utils.h"
 
@@ -18,7 +18,7 @@ void setup() {
     Logger::initDebug();
 
     // --------- Optional: WebConsole Mode ----------
-    if (Config::EnableWebConsole) {
+    if (BuildLegacyConfig::SenderWebConsoleEnabled) {
         Logger::debug("Starte WebConsole-Modus...");
         NetworkManager::startAccessPoint();      // Eigenes WLAN starten
         WebConsoleHandler::begin();              // Webserver starten
@@ -43,7 +43,7 @@ void loop() {
     OTAHandler::handleOTA();
 
     // --------- WebConsole aktualisieren ----------
-    if (Config::EnableWebConsole) {
+    if (BuildLegacyConfig::SenderWebConsoleEnabled) {
         WebConsoleHandler::handle();
     }
 
@@ -51,10 +51,10 @@ void loop() {
     CANHandler::processIncoming(); // Empfängt & sendet an ESP-NOW
 
     // --------- OBD2-PIDs regelmäßig abfragen ----------
-    if (millis() - Config::lastObdRequestTime > Config::ObdIntervalMs) {
-        Config::lastObdRequestTime = millis();
+    if (millis() - LegacyConfig::lastObdRequestTime > SenderLegacyConfig::ObdPollIntervalMs) {
+        LegacyConfig::lastObdRequestTime = millis();
 
-        for (uint8_t pid : Config::ObdRequestedPids) {
+        for (uint8_t pid : ObdLegacyConfig::RequestedPids) {
             OBD2Handler::requestAndSendPID(pid);
             delay(50); // leichte Entzerrung
         }

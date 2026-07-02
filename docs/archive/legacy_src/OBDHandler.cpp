@@ -38,23 +38,23 @@ bool OBD2Handler::receiveResponse(uint8_t mode, uint8_t pid, uint8_t* outData, u
 }
 
 void OBD2Handler::calcConsumption(uint8_t pid, float value) {
-    if (pid == VEHICLE_SPEED) Config::lastSpeed = value;
-    if (pid == ENGINE_FUEL_RATE) Config::lastFuelRate = value;
+    if (pid == VEHICLE_SPEED) LegacyConfig::lastSpeed = value;
+    if (pid == ENGINE_FUEL_RATE) LegacyConfig::lastFuelRate = value;
 
-    if (Config::lastSpeed < 1.0f || Config::lastFuelRate < 0.1f) return;
+    if (LegacyConfig::lastSpeed < 1.0f || LegacyConfig::lastFuelRate < 0.1f) return;
 
-    Config::consumption = (Config::lastFuelRate / Config::lastSpeed) * 100.0f;
-    Config::consumptionSum += Config::consumption;
-    Config::consumptionCount++;
+    LegacyConfig::consumption = (LegacyConfig::lastFuelRate / LegacyConfig::lastSpeed) * 100.0f;
+    LegacyConfig::consumptionSum += LegacyConfig::consumption;
+    LegacyConfig::consumptionCount++;
 
-    if (Config::consumptionCount >= 10) {
-        float avg = Config::consumptionSum / Config::consumptionCount;
+    if (LegacyConfig::consumptionCount >= 10) {
+        float avg = LegacyConfig::consumptionSum / LegacyConfig::consumptionCount;
         char avgText[16];
         snprintf(avgText, sizeof(avgText), "%.2f", avg);
         Utils::sendTelemetry("FUEL", "AVG", "AverageConsumption", avgText, "L/100km", "OK");
 
-        Config::consumptionSum = 0.0f;
-        Config::consumptionCount = 0;
+        LegacyConfig::consumptionSum = 0.0f;
+        LegacyConfig::consumptionCount = 0;
     }
 }
 
@@ -68,7 +68,7 @@ void OBD2Handler::requestAndSendPID(uint8_t pid) {
     uint8_t responseLen = 0;
 
     if (receiveResponse(read_LiveData, pid, responseData, responseLen)) {
-        if constexpr (Config::sendRawDataOnly) {
+        if constexpr (SenderLegacyConfig::SendRawDataOnly) {
             Utils::sendRawOBDData(pid, responseData, responseLen);
         } else {
             PIDResult result = convertPID(pid, responseData, responseLen);

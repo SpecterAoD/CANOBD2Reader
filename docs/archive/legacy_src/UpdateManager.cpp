@@ -6,10 +6,10 @@ namespace UpdateManager {
 
     // ============ OTA Initialisierung ============
     void initOTA() {
-        if (!Config::OtaEnable) return;
+        if (!SenderLegacyConfig::EnableSenderOta) return;
 
-        ArduinoOTA.setHostname(Config::OtaHostname);
-        ArduinoOTA.setPassword(Config::OtaPassword);
+        ArduinoOTA.setHostname(NetworkLegacyConfig::SenderOtaHostname);
+        ArduinoOTA.setPassword(NetworkLegacyConfig::SenderOtaPassword);
 
         ArduinoOTA
             .onStart([]() { Logger::alarm("[OTA] Update gestartet"); })
@@ -23,11 +23,11 @@ namespace UpdateManager {
 
         ArduinoOTA.begin();
         Logger::alarm("[OTA] Ready, Host: ");
-        Logger::debug(Config::OtaHostname);
+        Logger::debug(NetworkLegacyConfig::SenderOtaHostname);
     }
 
     void handleOTA() {
-        if (Config::OtaEnable) {
+        if (SenderLegacyConfig::EnableSenderOta) {
             ArduinoOTA.handle();
         }
     }
@@ -36,7 +36,7 @@ namespace UpdateManager {
     bool connectHotspot() {
         Logger::debug("[Update] Verbindung mit Hotspot...");
         WiFi.mode(WIFI_STA);
-        WiFi.begin(Config::WifiSsid, Config::WifiPassword);
+        WiFi.begin(NetworkLegacyConfig::WifiSsid, NetworkLegacyConfig::WifiPassword);
 
         unsigned long startAttemptTime = millis();
         while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
@@ -56,10 +56,10 @@ namespace UpdateManager {
 
     // ============ Prüfen auf neue Version ============
     bool checkForUpdate() {
-        if (!Config::OtaEnable) return false;
+        if (!SenderLegacyConfig::EnableSenderOta) return false;
 
         unsigned long now = millis();
-        if (now - lastUpdateCheck < Config::UpdateIntervalMs) {
+        if (now - lastUpdateCheck < LegacyConfig::UpdateIntervalMs) {
             return false; // Noch nicht Zeit
         }
         lastUpdateCheck = now;
@@ -67,7 +67,7 @@ namespace UpdateManager {
         if (!connectHotspot()) return false;
 
         HTTPClient http;
-        http.begin(Config::UpdateCheckUrl);
+        http.begin(LegacyConfig::UpdateCheckUrl);
 
         int httpCode = http.GET();
         if (httpCode != 200) {
@@ -82,11 +82,11 @@ namespace UpdateManager {
         http.end();
 
         Logger::debug("[Update] Aktuelle FW: ");
-        Logger::debug(Config::FirmwareVersion);
+        Logger::debug(ProjectLegacyConfig::FirmwareVersion);
         Logger::debug("[Update] Online FW: ");
         Logger::debug(newVersion.c_str());
 
-        if (newVersion != Config::FirmwareVersion) {
+        if (newVersion != ProjectLegacyConfig::FirmwareVersion) {
             Logger::alarm("[Update] Neue Version gefunden!");
             return downloadAndUpdate();
         } else {
@@ -100,7 +100,7 @@ namespace UpdateManager {
     // ============ Firmware herunterladen & aktualisieren ============
     bool downloadAndUpdate() {
         HTTPClient http;
-        http.begin(Config::FirmwareBinUrl);
+        http.begin(LegacyConfig::FirmwareBinUrl);
         int httpCode = http.GET();
 
         if (httpCode != 200) {
