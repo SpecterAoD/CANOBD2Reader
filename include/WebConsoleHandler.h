@@ -54,4 +54,7 @@ private:
     static void handleUpdateUpload();
     static String simulationJson();
     static String jsonEscape(const String& value);
+    static void appendLiveWebBuffer(String& report);
+    static String diagnosticSnapshotJson();
+    static String diagnosticTextReport();
 };

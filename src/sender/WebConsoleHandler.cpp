@@ -129,6 +129,106 @@ String WebConsoleHandler::jsonEscape(const String& value) {
     return WebRuntimeHandlers::jsonEscape(value);
 }
 
+void WebConsoleHandler::appendLiveWebBuffer(String& report) {
+    if (logBuffer.empty()) return;
+
+    report += "\n----- live web buffer -----\n";
+    for (auto& line : logBuffer) {
+        report += line;
+        report += "\n";
+    }
+}
+
+String WebConsoleHandler::diagnosticSnapshotJson() {
+    Runtime::WebRuntimeStatus s = runtimeStatus;
+    String json;
+    json.reserve(1800);
+    json += "{";
+    json += "\"firmware\":\"" + jsonEscape(ProjectConfig::FirmwareVersion) + "\",";
+    json += "\"target\":\"" + jsonEscape(ProjectConfig::TargetName) + "\",";
+    json += "\"protocol\":" + String(ProjectConfig::ProtocolVersion) + ",";
+    json += "\"uptimeMs\":" + String(s.uptimeMs) + ",";
+    json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
+    json += "\"can\":{\"active\":" + String(s.canActive ? "true" : "false") +
+            ",\"state\":\"" + jsonEscape(s.canState) +
+            "\",\"lastAgeMs\":" + String(s.lastCanAgeMs) + "},";
+    json += "\"espNow\":{\"state\":\"" + jsonEscape(s.espNowState) +
+            "\",\"txOk\":" + String(s.telemetrySendOk) +
+            ",\"txFail\":" + String(s.telemetrySendFail) +
+            ",\"sequence\":" + String(s.telemetrySequence) +
+            ",\"heartbeats\":" + String(s.heartbeatCount) + "},";
+    json += "\"obd\":{\"active\":" + String(s.obdActive ? "true" : "false") +
+            ",\"state\":\"" + jsonEscape(s.obdState) +
+            "\",\"lastAgeMs\":" + String(s.lastObdAgeMs) +
+            ",\"requestCanId\":\"" + hex32(s.obdRequestCanId, 3) +
+            "\",\"physicalFallbackActive\":" + String(s.obdPhysicalFallbackActive ? "true" : "false") +
+            ",\"requests\":" + String(s.obdRequestCount) +
+            ",\"sendFailures\":" + String(s.obdSendFailureCount) +
+            ",\"timeouts\":" + String(s.obdTimeoutCount) +
+            ",\"validResponses\":" + String(s.obdValidResponseCount) +
+            ",\"negativeResponses\":" + String(s.obdNegativeResponseCount) +
+            ",\"timeoutStreak\":" + String(s.obdTimeoutStreak) +
+            ",\"lastRequest\":\"" + jsonEscape(s.lastObdRequest) +
+            "\",\"lastEcuResponse\":\"" + jsonEscape(s.lastEcuResponse) +
+            "\",\"lastNegativeResponse\":\"" + jsonEscape(s.lastNegativeResponse) + "\"},";
+    json += "\"uds\":{\"available\":" + String(s.udsAvailable ? "true" : "false") +
+            ",\"requests\":" + String(s.udsRequestCount) +
+            ",\"sendFailures\":" + String(s.udsSendFailureCount) +
+            ",\"timeouts\":" + String(s.udsTimeoutCount) +
+            ",\"positiveResponses\":" + String(s.udsPositiveResponseCount) +
+            ",\"negativeResponses\":" + String(s.udsNegativeResponseCount) +
+            ",\"lastRequest\":\"" + jsonEscape(s.lastUdsRequest) +
+            "\",\"lastResponse\":\"" + jsonEscape(s.lastUdsResponse) +
+            "\",\"lastNegativeResponse\":\"" + jsonEscape(s.lastUdsNegativeResponse) +
+            "\",\"lastDid\":\"" + jsonEscape(s.lastUdsDid) +
+            "\",\"lastDtc\":\"" + jsonEscape(s.lastUdsDtc) + "\"},";
+    json += "\"supportedPids\":{\"ready\":" + String(s.pidSupportReady ? "true" : "false") +
+            ",\"01_20\":\"" + hex32(s.supportedPidMask01_20) +
+            "\",\"21_40\":\"" + hex32(s.supportedPidMask21_40) +
+            "\",\"41_60\":\"" + hex32(s.supportedPidMask41_60) + "\"},";
+    json += "\"vehicle\":{\"vin\":\"" + jsonEscape(s.lastVin) +
+            "\",\"dtc\":\"" + jsonEscape(s.lastDtc) +
+            "\",\"battery\":" + String(s.batteryVoltage, 2) + "},";
+    json += "\"simulation\":{\"active\":" + String(s.simulationActive ? "true" : "false") +
+            ",\"scenario\":\"" + jsonEscape(s.simulationScenario) + "\"},";
+    json += "\"lastTelemetry\":\"" + jsonEscape(s.lastTelemetry) + "\",";
+    json += "\"lastError\":\"" + jsonEscape(s.lastError) + "\",";
+    json += "\"lastSendError\":\"" + jsonEscape(s.lastSendError) + "\"";
+    json += "}";
+    return json;
+}
+
+String WebConsoleHandler::diagnosticTextReport() {
+    String report;
+    report.reserve(DiagnosticLog::size() + 4096);
+    report += "CANOBD2 sender diagnostic report\n";
+    report += "Firmware: ";
+    report += ProjectConfig::FirmwareVersion;
+    report += "\nTarget: ";
+    report += ProjectConfig::TargetName;
+    report += "\nProtocol: ";
+    report += String(ProjectConfig::ProtocolVersion);
+    report += "\nUptime: ";
+    report += String(millis());
+    report += " ms\n";
+    report += "Persistent log mounted: ";
+    report += DiagnosticLog::mounted() ? "yes" : "no";
+    report += "\nPersistent log size: ";
+    report += String(static_cast<unsigned long>(DiagnosticLog::size()));
+    report += " bytes\n\n";
+
+    report += "----- persistent diagnostic log -----\n";
+    report += DiagnosticLog::readAll();
+    if (!report.endsWith("\n")) report += "\n";
+
+    appendLiveWebBuffer(report);
+
+    report += "\n----- diagnostic snapshot json -----\n";
+    report += diagnosticSnapshotJson();
+    report += "\n";
+    return report;
+}
+
 void WebConsoleHandler::handleRoot() {
     if (!WebSecurity::requireAuthentication(server)) return;
     static const char html[] PROGMEM = R"rawliteral(
@@ -252,7 +352,7 @@ void WebConsoleHandler::handleLog() {
 
 void WebConsoleHandler::handlePersistentLog() {
     if (!WebSecurity::requireAuthentication(server)) return;
-    server.send(200, "text/plain; charset=utf-8", DiagnosticLog::readAll());
+    server.send(200, "text/plain; charset=utf-8", diagnosticTextReport());
 }
 
 void WebConsoleHandler::handleDownloadLog() {
@@ -261,7 +361,7 @@ void WebConsoleHandler::handleDownloadLog() {
     filename += ProjectConfig::FirmwareVersion;
     filename += "_diagnostic.log";
     server.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
-    server.send(200, "text/plain; charset=utf-8", DiagnosticLog::readAll());
+    server.send(200, "text/plain; charset=utf-8", diagnosticTextReport());
 }
 
 void WebConsoleHandler::handleClearLog() {
@@ -336,62 +436,7 @@ void WebConsoleHandler::handleStatus() {
 
 void WebConsoleHandler::handleDiagnosticSnapshot() {
     if (!WebSecurity::requireAuthentication(server)) return;
-    Runtime::WebRuntimeStatus s = runtimeStatus;
-    String json;
-    json.reserve(1800);
-    json += "{";
-    json += "\"firmware\":\"" + jsonEscape(ProjectConfig::FirmwareVersion) + "\",";
-    json += "\"target\":\"" + jsonEscape(ProjectConfig::TargetName) + "\",";
-    json += "\"protocol\":" + String(ProjectConfig::ProtocolVersion) + ",";
-    json += "\"uptimeMs\":" + String(s.uptimeMs) + ",";
-    json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
-    json += "\"can\":{\"active\":" + String(s.canActive ? "true" : "false") +
-            ",\"state\":\"" + jsonEscape(s.canState) +
-            "\",\"lastAgeMs\":" + String(s.lastCanAgeMs) + "},";
-    json += "\"espNow\":{\"state\":\"" + jsonEscape(s.espNowState) +
-            "\",\"txOk\":" + String(s.telemetrySendOk) +
-            ",\"txFail\":" + String(s.telemetrySendFail) +
-            ",\"sequence\":" + String(s.telemetrySequence) +
-            ",\"heartbeats\":" + String(s.heartbeatCount) + "},";
-    json += "\"obd\":{\"active\":" + String(s.obdActive ? "true" : "false") +
-            ",\"state\":\"" + jsonEscape(s.obdState) +
-            "\",\"lastAgeMs\":" + String(s.lastObdAgeMs) +
-            ",\"requestCanId\":\"" + hex32(s.obdRequestCanId, 3) +
-            "\",\"physicalFallbackActive\":" + String(s.obdPhysicalFallbackActive ? "true" : "false") +
-            ",\"requests\":" + String(s.obdRequestCount) +
-            ",\"sendFailures\":" + String(s.obdSendFailureCount) +
-            ",\"timeouts\":" + String(s.obdTimeoutCount) +
-            ",\"validResponses\":" + String(s.obdValidResponseCount) +
-            ",\"negativeResponses\":" + String(s.obdNegativeResponseCount) +
-            ",\"timeoutStreak\":" + String(s.obdTimeoutStreak) +
-            ",\"lastRequest\":\"" + jsonEscape(s.lastObdRequest) +
-            "\",\"lastEcuResponse\":\"" + jsonEscape(s.lastEcuResponse) +
-            "\",\"lastNegativeResponse\":\"" + jsonEscape(s.lastNegativeResponse) + "\"},";
-    json += "\"uds\":{\"available\":" + String(s.udsAvailable ? "true" : "false") +
-            ",\"requests\":" + String(s.udsRequestCount) +
-            ",\"sendFailures\":" + String(s.udsSendFailureCount) +
-            ",\"timeouts\":" + String(s.udsTimeoutCount) +
-            ",\"positiveResponses\":" + String(s.udsPositiveResponseCount) +
-            ",\"negativeResponses\":" + String(s.udsNegativeResponseCount) +
-            ",\"lastRequest\":\"" + jsonEscape(s.lastUdsRequest) +
-            "\",\"lastResponse\":\"" + jsonEscape(s.lastUdsResponse) +
-            "\",\"lastNegativeResponse\":\"" + jsonEscape(s.lastUdsNegativeResponse) +
-            "\",\"lastDid\":\"" + jsonEscape(s.lastUdsDid) +
-            "\",\"lastDtc\":\"" + jsonEscape(s.lastUdsDtc) + "\"},";
-    json += "\"supportedPids\":{\"ready\":" + String(s.pidSupportReady ? "true" : "false") +
-            ",\"01_20\":\"" + hex32(s.supportedPidMask01_20) +
-            "\",\"21_40\":\"" + hex32(s.supportedPidMask21_40) +
-            "\",\"41_60\":\"" + hex32(s.supportedPidMask41_60) + "\"},";
-    json += "\"vehicle\":{\"vin\":\"" + jsonEscape(s.lastVin) +
-            "\",\"dtc\":\"" + jsonEscape(s.lastDtc) +
-            "\",\"battery\":" + String(s.batteryVoltage, 2) + "},";
-    json += "\"simulation\":{\"active\":" + String(s.simulationActive ? "true" : "false") +
-            ",\"scenario\":\"" + jsonEscape(s.simulationScenario) + "\"},";
-    json += "\"lastTelemetry\":\"" + jsonEscape(s.lastTelemetry) + "\",";
-    json += "\"lastError\":\"" + jsonEscape(s.lastError) + "\",";
-    json += "\"lastSendError\":\"" + jsonEscape(s.lastSendError) + "\"";
-    json += "}";
-    server.send(200, "application/json", json);
+    server.send(200, "application/json", diagnosticSnapshotJson());
 }
 
 void WebConsoleHandler::handleDiagnosticDownload() {

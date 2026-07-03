@@ -30,6 +30,61 @@ namespace {
     DiagnosticLog::appendf("[DISPLAY] %s", message.c_str());
   }
 
+  String displayDiagnosticTextReport() {
+    auto& runtime = DisplayData::runtime();
+    String report;
+    report.reserve(DiagnosticLog::size() + 2048);
+    report += "CANOBD2 display diagnostic report\n";
+    report += "Firmware: ";
+    report += ProjectConfig::FirmwareVersion;
+    report += "\nTarget: ";
+    report += ProjectConfig::TargetName;
+    report += "\nProtocol: ";
+    report += String(ProjectConfig::ProtocolVersion);
+    report += "\nUptime: ";
+    report += String(millis());
+    report += " ms\n";
+    report += "Persistent log mounted: ";
+    report += DiagnosticLog::mounted() ? "yes" : "no";
+    report += "\nPersistent log size: ";
+    report += String(static_cast<unsigned long>(DiagnosticLog::size()));
+    report += " bytes\n\n";
+
+    report += "----- persistent diagnostic log -----\n";
+    report += DiagnosticLog::readAll();
+    if (!report.endsWith("\n")) report += "\n";
+
+    report += "\n----- display runtime snapshot -----\n";
+    report += "ESP-NOW connected: ";
+    report += DisplayData::isEspNowConnected() ? "yes" : "no";
+    report += "\nCAN status recent: ";
+    report += DisplayData::isCanStatusRecent() ? "yes" : "no";
+    report += "\nOBD status recent: ";
+    report += DisplayData::isObdStatusRecent() ? "yes" : "no";
+    report += "\nReceived packets: ";
+    report += String(static_cast<unsigned long>(runtime.receivedPackets));
+    report += "\nDropped packets: ";
+    report += String(static_cast<unsigned long>(runtime.droppedPackets));
+    report += "\nCRC errors: ";
+    report += String(static_cast<unsigned long>(runtime.crcErrors));
+    report += "\nLast sequence: ";
+    report += String(static_cast<unsigned long>(runtime.lastSequence));
+    report += "\nLast heartbeat sequence: ";
+    report += String(static_cast<unsigned long>(runtime.lastHeartbeatSequence));
+    report += "\nLast packet age: ";
+    report += runtime.lastReceivedAt == 0 ? String("--") : String(millis() - runtime.lastReceivedAt);
+    report += " ms\nLast heartbeat age: ";
+    report += runtime.lastHeartbeatAt == 0 ? String("--") : String(millis() - runtime.lastHeartbeatAt);
+    report += " ms\nLast error: ";
+    report += runtime.lastError;
+    report += "\nSimulation: ";
+    report += Simulation::RuntimeSimulation::enabled() ? "on" : "off";
+    report += "\nScenario: ";
+    report += Simulation::RuntimeSimulation::scenarioName();
+    report += "\n";
+    return report;
+  }
+
   void handleRoot() {
     if (!WebSecurity::requireAuthentication(server)) return;
     static const char html[] PROGMEM = R"rawliteral(
@@ -119,7 +174,7 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
 
   void handlePersistentLog() {
     if (!WebSecurity::requireAuthentication(server)) return;
-    server.send(200, "text/plain; charset=utf-8", DiagnosticLog::readAll());
+    server.send(200, "text/plain; charset=utf-8", displayDiagnosticTextReport());
   }
 
   void handleDownloadLog() {
@@ -128,7 +183,7 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     filename += ProjectConfig::FirmwareVersion;
     filename += "_diagnostic.log";
     server.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
-    server.send(200, "text/plain; charset=utf-8", DiagnosticLog::readAll());
+    server.send(200, "text/plain; charset=utf-8", displayDiagnosticTextReport());
   }
 
   void handleClearLog() {
