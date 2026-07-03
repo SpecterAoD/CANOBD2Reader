@@ -22,6 +22,7 @@
 #include "config/LoggingConfig.h"
 #include "RuntimeSimulation.h"
 #include "CANHandler.h"
+#include "CanRouterHub.h"
 #include "OTAHandler.h"
 #include "SenderPower.h"
 #include "WebConsoleHandler.h"
@@ -191,6 +192,7 @@ void SenderApp::begin() {
 
   const bool espNowReady = SenderEspNow::begin();
   const bool canDriverReady = Simulation::RuntimeSimulation::enabled() || CANHandler::init();
+  CanRouting::setFramePump(CANHandler::processIncoming);
   coordinator.resetForBoot(millis(), kCanIdleTimeoutMs, espNowReady, canDriverReady);
 
   WebConsoleHandler::begin();

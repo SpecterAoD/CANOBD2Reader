@@ -7,8 +7,6 @@ bool CANHandler::driverInstalled = false;
 bool CANHandler::driverStarted = false;
 
 namespace {
-CanRouting::CanRouter canRouter;
-
 CanRouting::CanFrame toRoutedFrame(const twai_message_t& message) {
     CanRouting::CanFrame frame{};
     frame.id = message.identifier;
@@ -98,7 +96,7 @@ void CANHandler::processIncoming() {
 
 void CANHandler::handleMessage(twai_message_t& message) {
     const CanRouting::CanFrame routedFrame = toRoutedFrame(message);
-    canRouter.route(routedFrame);
+    CanRouting::routeFrame(routedFrame);
 
     // Raw CAN traffic can be extremely busy on a real vehicle. Keep it behind
     // the explicit sender flag so OBD polling and heartbeat telemetry do not
@@ -112,11 +110,11 @@ void CANHandler::handleMessage(twai_message_t& message) {
 }
 
 bool CANHandler::registerListener(CanRouting::CanFrameListener& listener) {
-    return canRouter.registerListener(listener);
+    return CanRouting::registerListener(listener);
 }
 
 bool CANHandler::unregisterListener(CanRouting::CanFrameListener& listener) {
-    return canRouter.unregisterListener(listener);
+    return CanRouting::unregisterListener(listener);
 }
 
 void CANHandler::printStatus() {

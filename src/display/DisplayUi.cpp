@@ -2,6 +2,7 @@
 #include "DisplayData.h"
 #include "DiagnosticLog.h"
 #include "driver/ledc.h"
+#include <math.h>
 #include <cstring>
 
 namespace {
@@ -421,6 +422,52 @@ namespace {
     return raw.toFloat();
   }
 
+  int rpmToGaugeAngle(float rpm) {
+    const float clamped = constrain(rpm,
+                                    static_cast<float>(DisplayConfig::RpmMin),
+                                    static_cast<float>(DisplayConfig::RpmMax));
+    const float normalized = (clamped - DisplayConfig::RpmMin) /
+                             static_cast<float>(DisplayConfig::RpmMax - DisplayConfig::RpmMin);
+    constexpr int startAngleDeg = 200;
+    constexpr int endAngleDeg = 340;
+    return startAngleDeg + static_cast<int>((endAngleDeg - startAngleDeg) * normalized);
+  }
+
+  void polarPoint(int centerX, int centerY, int radius, int angleDeg, int& x, int& y) {
+    constexpr float degToRad = 0.01745329252f;
+    const float angle = angleDeg * degToRad;
+    x = centerX + static_cast<int>(cosf(angle) * radius);
+    y = centerY + static_cast<int>(sinf(angle) * radius);
+  }
+
+  void drawArcSegment(int centerX,
+                      int centerY,
+                      int radius,
+                      int startAngleDeg,
+                      int endAngleDeg,
+                      int thickness,
+                      uint16_t color) {
+    if (endAngleDeg < startAngleDeg) return;
+
+    for (int angle = startAngleDeg; angle <= endAngleDeg; angle += 2) {
+      int x = 0;
+      int y = 0;
+      polarPoint(centerX, centerY, radius, angle, x, y);
+      tft.fillCircle(x, y, thickness, color);
+    }
+  }
+
+  void drawGaugeTick(int centerX, int centerY, int angleDeg, int innerRadius, int outerRadius, uint16_t color) {
+    int x1 = 0;
+    int y1 = 0;
+    int x2 = 0;
+    int y2 = 0;
+    polarPoint(centerX, centerY, innerRadius, angleDeg, x1, y1);
+    polarPoint(centerX, centerY, outerRadius, angleDeg, x2, y2);
+    tft.drawLine(x1, y1, x2, y2, color);
+    tft.drawLine(x1 + 1, y1, x2 + 1, y2, color);
+  }
+
   void drawRpmGraphPage() {
     using namespace DisplayData;
     bool rpmFresh = false;
@@ -428,74 +475,66 @@ namespace {
     if (rpmFresh && rpm > maxRpmSinceStart) maxRpmSinceStart = rpm;
 
     const uint16_t color = valueColor("RPM");
-    const int barX = 16;
-    const int barY = 116;
-    const int barW = 288;
-    const int barH = 24;
-    const float normalized = rpmFresh
-      ? constrain((rpm - DisplayConfig::RpmMin) / static_cast<float>(DisplayConfig::RpmMax - DisplayConfig::RpmMin), 0.0f, 1.0f)
-      : 0.0f;
-    const int fillW = static_cast<int>(barW * normalized);
+    const int centerX = tft.width() / 2;
+    const int centerY = 122;
+    const int radius = 74;
+    const int startAngle = rpmToGaugeAngle(DisplayConfig::RpmMin);
+    const int warnAngle = rpmToGaugeAngle(DisplayConfig::RpmWarn);
+    const int criticalAngle = rpmToGaugeAngle(DisplayConfig::RpmCritical);
+    const int endAngle = rpmToGaugeAngle(DisplayConfig::RpmMax);
+    const int currentAngle = rpmFresh ? rpmToGaugeAngle(rpm) : startAngle;
+
+    // The RPM page is intentionally redrawn as one calm dashboard surface.
+    // This avoids ghosting when the needle moves backwards.
+    tft.fillRect(0, 21, tft.width(), tft.height() - 37, DisplayConfig::Background);
 
     tft.setTextDatum(MC_DATUM);
     tft.setTextSize(1);
     tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
-    tft.drawString("DREHZAHL", tft.width() / 2, 34);
+    tft.drawString("DREHZAHL", centerX, 34);
 
     String rpmText = rpmFresh ? String(static_cast<int>(rpm)) : "--";
-    drawBitmapText(70, 52, rpmText, 4, color, DisplayConfig::Background);
+    const int rpmScale = rpmText.length() > 4 ? 3 : 4;
+    const int rpmTextWidth = static_cast<int>(rpmText.length()) * 6 * rpmScale;
+    drawBitmapText(centerX - rpmTextWidth / 2, 56, rpmText, rpmScale, color, DisplayConfig::Background);
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
-    tft.drawString("rpm", 230, 76);
+    tft.drawString("rpm", centerX + 70, 82);
 
-    tft.drawRoundRect(barX, barY, barW, barH, 6, DisplayConfig::Muted);
-    tft.fillRoundRect(barX + 2, barY + 2, barW - 4, barH - 4, 5, DisplayConfig::Panel);
-    if (fillW > 4) {
-      tft.fillRoundRect(barX + 2, barY + 2, fillW - 4, barH - 4, 5, color);
+    drawArcSegment(centerX, centerY, radius, startAngle, warnAngle, 4, DisplayConfig::Ok);
+    drawArcSegment(centerX, centerY, radius, warnAngle, criticalAngle, 4, DisplayConfig::Warn);
+    drawArcSegment(centerX, centerY, radius, criticalAngle, endAngle, 4, DisplayConfig::Error);
+    if (!rpmFresh) {
+      drawArcSegment(centerX, centerY, radius, startAngle, endAngle, 5, DisplayConfig::Muted);
     }
 
-    const int warnX = barX + static_cast<int>(barW * (DisplayConfig::RpmWarn / static_cast<float>(DisplayConfig::RpmMax)));
-    const int critX = barX + static_cast<int>(barW * (DisplayConfig::RpmCritical / static_cast<float>(DisplayConfig::RpmMax)));
-    tft.drawFastVLine(warnX, barY - 4, barH + 8, DisplayConfig::Warn);
-    tft.drawFastVLine(critX, barY - 4, barH + 8, DisplayConfig::Error);
+    drawGaugeTick(centerX, centerY, startAngle, radius - 10, radius + 10, DisplayConfig::Muted);
+    drawGaugeTick(centerX, centerY, warnAngle, radius - 12, radius + 12, DisplayConfig::Warn);
+    drawGaugeTick(centerX, centerY, criticalAngle, radius - 12, radius + 12, DisplayConfig::Error);
+    drawGaugeTick(centerX, centerY, endAngle, radius - 10, radius + 10, DisplayConfig::Muted);
 
-    tft.setTextDatum(ML_DATUM);
+    if (rpmFresh) {
+      int needleX = 0;
+      int needleY = 0;
+      polarPoint(centerX, centerY, radius - 18, currentAngle, needleX, needleY);
+      tft.drawLine(centerX, centerY, needleX, needleY, color);
+      tft.drawLine(centerX + 1, centerY, needleX + 1, needleY, color);
+      tft.fillCircle(centerX, centerY, 5, color);
+    } else {
+      tft.fillCircle(centerX, centerY, 5, DisplayConfig::Muted);
+    }
+
+    tft.setTextDatum(MC_DATUM);
     tft.setTextSize(1);
     tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
-    tft.drawString("0", barX, barY + 34);
-    tft.setTextDatum(MR_DATUM);
-    tft.drawString(String(DisplayConfig::RpmMax), barX + barW, barY + 34);
+    tft.drawString(String(DisplayConfig::RpmMin), 48, 132);
+    tft.drawString(String(DisplayConfig::RpmWarn), 118, 44);
+    tft.drawString(String(DisplayConfig::RpmCritical), 212, 44);
+    tft.drawString(String(DisplayConfig::RpmMax), 272, 132);
 
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(DisplayConfig::Text, DisplayConfig::Background);
-    tft.drawString("Max seit Start: " + String(static_cast<int>(maxRpmSinceStart)) + " rpm", 16, 154);
-  }
-
-  void drawBoostPage() {
-    using namespace DisplayData;
-    const uint16_t boostColor = valueColor("BoostPressureBar");
-    const String boost = displayValue("BoostPressureBar", 2);
-    const String map = displayValue("ManifoldAbsolutePressure", 0);
-    const String baro = displayValue("BarometricPressure", 0);
-
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextSize(1);
-    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
-    tft.drawString("LADEDRUCK", tft.width() / 2, 34);
-
-    tft.fillRoundRect(20, 48, 280, 62, 10, DisplayConfig::Panel);
-    tft.drawRoundRect(20, 48, 280, 62, 10, boostColor);
-    String boostText = (boost == "--") ? "N/A" : boost;
-    boostText.toUpperCase();
-    drawBitmapText(54, 66, boostText, boostText.length() > 8 ? 2 : 3, boostColor, DisplayConfig::Panel);
-
-    drawMetricBox(20, 120, 132, 38, "MAP", map, valueColor("ManifoldAbsolutePressure"));
-    drawMetricBox(168, 120, 132, 38, "BARO", baro, valueColor("BarometricPressure"));
-
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextSize(1);
-    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
-    tft.drawString("Boost = MAP - BARO, vom Sender berechnet", 20, 164);
+    tft.drawString("Max seit Start: " + String(static_cast<int>(maxRpmSinceStart)) + " rpm", 16, 148);
   }
 
   void drawMainPage() {
@@ -590,31 +629,42 @@ namespace {
     tft.drawString(hint, 14, 140);
   }
 
-  void drawDTCPage() {
+  void drawUdsDtcPage() {
     using namespace DisplayData;
     DisplayTelemetryValue* dtc = findValue("DTC");
     const bool dtcFresh = dtc != nullptr && millis() - dtc->updatedAt <= DisplayConfig::ValueTimeoutMs;
     const bool hasFault = dtcFresh && dtc->status == "WARN" && dtc->value != "Keine";
 
-    drawMetricBox(6, 28, 308, 48, "Fehlercodes / DTC", dtcFresh ? (hasFault ? "AKTIV" : "Keine") : "--",
+    drawMetricBox(6, 28, 150, 42, "DTC", dtcFresh ? (hasFault ? "AKTIV" : "Keine") : "--",
                   hasFault ? DisplayConfig::Warn : (dtcFresh ? DisplayConfig::Ok : DisplayConfig::Muted));
+    DisplayTelemetryValue* udsStatus = findValue("UDS");
+    drawMetricBox(164, 28, 150, 42, "UDS", displayText("UDS"),
+                  isFresh(udsStatus) ? DisplayConfig::Ok : DisplayConfig::Warn);
 
-    tft.fillRoundRect(6, 88, 308, 64, 6, DisplayConfig::Panel);
+    tft.fillRoundRect(6, 78, 308, 74, 6, DisplayConfig::Panel);
     tft.setTextDatum(TL_DATUM);
     tft.setTextSize(1);
     tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
-    tft.drawString("Codes:", 14, 96);
+    tft.drawString("Fehlercodes:", 14, 86);
 
-    tft.setTextSize(2);
+    tft.setTextSize(1);
     tft.setTextColor(hasFault ? DisplayConfig::Warn : DisplayConfig::Text, DisplayConfig::Panel);
     String codes = displayText("DTC");
-    if (codes.length() > 24) codes = codes.substring(0, 24);
-    tft.drawString(codes, 14, 116);
+    if (codes.length() > 42) codes = codes.substring(0, 42) + "...";
+    tft.drawString(codes, 14, 102);
+
+    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
+    tft.drawString("VIN / UDS VIN:", 14, 122);
+    tft.setTextColor(DisplayConfig::Text, DisplayConfig::Panel);
+    String vin = displayText("VIN");
+    if (vin == "--") vin = displayText("UDS_VIN");
+    if (vin.length() > 30) vin = vin.substring(0, 30);
+    tft.drawString(vin, 14, 138);
 
     tft.setTextSize(1);
     tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
-    String age = dtcFresh ? "Letzte DTC-Abfrage: " + String((millis() - dtc->updatedAt) / 1000) + "s" : "Keine aktuelle DTC-Abfrage";
-    tft.drawString(age, 14, 142);
+    String age = dtcFresh ? "DTC vor " + String((millis() - dtc->updatedAt) / 1000) + "s" : "Keine aktuelle DTC-Abfrage";
+    tft.drawString(age, 14, 146);
   }
 
   void renderCurrentPage() {
@@ -629,14 +679,13 @@ namespace {
 
     switch (currentPage) {
       case 0: drawMainPage(); break;
-      case 1: drawEnginePage(); break;
-      case 2: drawConsumptionPage(); break;
-      case 3: drawAdditionalPage(); break;
-      case 4: drawCANPage(); break;
-      case 5: drawDiagnosticsPage(); break;
-      case 6: drawDTCPage(); break;
-      case 7: drawRpmGraphPage(); break;
-      case 8: drawBoostPage(); break;
+      case 1: drawRpmGraphPage(); break;
+      case 2: drawEnginePage(); break;
+      case 3: drawConsumptionPage(); break;
+      case 4: drawDiagnosticsPage(); break;
+      case 5: drawUdsDtcPage(); break;
+      case 6: drawCANPage(); break;
+      case 7: drawAdditionalPage(); break;
     }
 
     drawFooter();

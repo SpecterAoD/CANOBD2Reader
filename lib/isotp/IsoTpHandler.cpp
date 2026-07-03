@@ -62,22 +62,28 @@ bool IsoTpHandler::sendRequest(uint8_t mode, const uint8_t* payload, std::size_t
 bool IsoTpHandler::receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Payload& out, uint32_t timeoutMs) {
 #if defined(ARDUINO)
     reassembler_.reset();
+    clearRoutedFrames();
     lastStatus_ = Status::Idle;
     lastResponseId_ = 0;
     lastNegativeService_ = 0;
     lastNegativeCode_ = 0;
     lastResponseWasNegative_ = false;
     const uint32_t start = millis();
+    const bool registered = CanRouting::registerListener(*this);
+    if (!registered) {
+        Logger::warn("[ISOTP] Failed to register CAN router listener");
+        lastStatus_ = Status::Aborted;
+        return false;
+    }
 
     while (millis() - start < timeoutMs) {
-        twai_message_t message = {};
-        if (twai_receive(&message, pdMS_TO_TICKS(10)) != ESP_OK) continue;
-        if (message.identifier < FirstResponseId || message.identifier > LastResponseId) continue;
+        CanRouting::pumpFrames();
 
         CanFrame frame{};
-        frame.id = message.identifier;
-        frame.dlc = message.data_length_code;
-        memcpy(frame.data, message.data, sizeof(frame.data));
+        if (!popRoutedFrame(frame)) {
+            delay(2);
+            continue;
+        }
 
         const auto status = reassembler_.processFrame(frame);
         if (status == Status::InProgress) {
@@ -95,6 +101,7 @@ bool IsoTpHandler::receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Pa
         if (status != Status::Complete) {
             lastStatus_ = status;
             Logger::warn("[ISOTP] Reassembly error");
+            CanRouting::unregisterListener(*this);
             return false;
         }
 
@@ -118,6 +125,7 @@ bool IsoTpHandler::receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Pa
                      lastNegativeService_,
                      lastNegativeCode_);
             Logger::warn(negativeLine);
+            CanRouting::unregisterListener(*this);
             return false;
         }
         if (out.length >= 1 && out.bytes[0] != static_cast<uint8_t>(expectedMode | 0x40U)) {
@@ -127,8 +135,10 @@ bool IsoTpHandler::receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Pa
             continue;
         }
         Logger::debug("[ISOTP] Reassembly complete");
+        CanRouting::unregisterListener(*this);
         return true;
     }
+    CanRouting::unregisterListener(*this);
     lastStatus_ = Status::Timeout;
     Logger::warn("[ISOTP] Timeout waiting for response");
     return false;
@@ -139,6 +149,40 @@ bool IsoTpHandler::receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Pa
     (void)timeoutMs;
     return false;
 #endif
+}
+
+void IsoTpHandler::onCanFrame(const CanRouting::CanFrame& frame) {
+    if (frame.id < FirstResponseId || frame.id > LastResponseId) return;
+    if (frame.length == 0 || frame.length > 8) return;
+    if (routedCount_ >= RoutedFrameQueueSize) {
+        lastStatus_ = Status::BufferOverflow;
+        return;
+    }
+
+    CanFrame& target = routedFrames_[routedWriteIndex_];
+    target = CanFrame{};
+    target.id = frame.id;
+    target.dlc = frame.length;
+    for (uint8_t index = 0; index < target.dlc; ++index) {
+        target.data[index] = frame.data[index];
+    }
+    routedWriteIndex_ = (routedWriteIndex_ + 1U) % RoutedFrameQueueSize;
+    ++routedCount_;
+}
+
+bool IsoTpHandler::popRoutedFrame(CanFrame& frame) {
+    if (routedCount_ == 0) return false;
+    frame = routedFrames_[routedReadIndex_];
+    routedReadIndex_ = (routedReadIndex_ + 1U) % RoutedFrameQueueSize;
+    --routedCount_;
+    return true;
+}
+
+void IsoTpHandler::clearRoutedFrames() {
+    routedReadIndex_ = 0;
+    routedWriteIndex_ = 0;
+    routedCount_ = 0;
+    for (auto& frame : routedFrames_) frame = CanFrame{};
 }
 
 bool IsoTpHandler::processSingleFrame(const CanFrame& frame) {

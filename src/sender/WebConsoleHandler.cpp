@@ -88,6 +88,7 @@ void WebConsoleHandler::begin() {
     server.on("/api/capabilities/obd/start", HTTP_POST, handleCapabilitiesObdStart);
     server.on("/api/capabilities/uds/start", HTTP_POST, handleCapabilitiesUdsStart);
     server.on("/api/capabilities/can/start", HTTP_POST, handleCapabilitiesCanStart);
+    server.on("/api/capabilities/can/baseline", HTTP_POST, handleCapabilitiesCanBaseline);
     server.on("/api/capabilities/stop", HTTP_POST, handleCapabilitiesStop);
     server.on("/update", HTTP_GET, handleUpdatePage);
     server.on("/update", HTTP_POST, handleUpdateFinished, handleUpdateUpload);
@@ -306,7 +307,7 @@ Timeouts: <span id="udsTimeouts">--</span> · Negative: <span id="udsNeg">--</sp
 <div class="card wide"><div class="label">Fehlerstatus</div><div id="err" class="small">--</div></div>
 </div></section>
 <section id="cap" class="page"><div class="grid">
-<div class="card wide"><div class="label">Capabilities</div><div id="capState" class="value">--</div><div class="small" id="capMsg">--</div><div class="actions"><button id="capObd" class="primary">OBD PID Scan starten</button><button id="capUds" class="primary">UDS Scan starten</button><button id="capCan">CAN Sniffer starten</button><button id="capStop" class="danger">Scan stoppen</button><a class="btn primary" href="/api/capabilities/export.json">Export JSON</a></div></div>
+<div class="card wide"><div class="label">Capabilities</div><div id="capState" class="value">--</div><div class="small" id="capMsg">--</div><div class="actions"><button id="capObd" class="primary">OBD PID Scan starten</button><button id="capUds" class="primary">UDS Scan starten</button><button id="capCan">CAN Sniffer starten</button><button id="capCanBase">CAN Baseline neu</button><button id="capStop" class="danger">Scan stoppen</button><a class="btn primary" href="/api/capabilities/export.json">Export JSON</a></div></div>
 <div class="card wide"><div class="label">OBD PID Ergebnis</div><div class="small">Unterstuetzte PIDs werden testweise abgefragt. Nicht unterstuetzte PIDs bleiben grau, Timeouts orange/rot.</div><div style="overflow:auto"><table><thead><tr><th>PID</th><th>Name</th><th>Support</th><th>Antwort</th><th>Wert</th><th>Einheit</th><th>ms</th><th>Status</th></tr></thead><tbody id="capObdRows"></tbody></table></div></div>
 <div class="card wide"><div class="label">UDS ECUs</div><div style="overflow:auto"><table><thead><tr><th>ECU</th><th>Antwort</th><th>Erreichbar</th><th>UDS</th><th>Name</th></tr></thead><tbody id="capEcuRows"></tbody></table></div></div>
 <div class="card wide"><div class="label">UDS DID / ECU Infos</div><div style="overflow:auto"><table><thead><tr><th>ECU</th><th>DID</th><th>Name</th><th>Wert</th><th>Status</th></tr></thead><tbody id="capDidRows"></tbody></table></div></div>
@@ -350,6 +351,7 @@ $('loadSnapshot').onclick=loadSnapshot
 $('capObd').onclick=async()=>{await fetch('/api/capabilities/obd/start',{method:'POST'});refreshCapabilities()}
 $('capUds').onclick=async()=>{await fetch('/api/capabilities/uds/start',{method:'POST'});refreshCapabilities()}
 $('capCan').onclick=async()=>{await fetch('/api/capabilities/can/start',{method:'POST'});refreshCapabilities()}
+$('capCanBase').onclick=async()=>{await fetch('/api/capabilities/can/baseline',{method:'POST'});refreshCapabilities()}
 $('capStop').onclick=async()=>{await fetch('/api/capabilities/stop',{method:'POST'});refreshCapabilities()}
 $('clearLog').onclick=async()=>{if(confirm('Diagnose-Log wirklich löschen?')){await fetch('/api/log/clear',{method:'POST'});refreshLog();refresh()}}
 setInterval(refresh,1000);setInterval(refreshLog,1500);setInterval(refreshSimulation,1000);setInterval(refreshCapabilities,1500);refresh();refreshLog();refreshSimulation();refreshCapabilities();
@@ -569,6 +571,12 @@ void WebConsoleHandler::handleCapabilitiesUdsStart() {
 void WebConsoleHandler::handleCapabilitiesCanStart() {
     if (!WebSecurity::requireAuthentication(server)) return;
     SenderCapabilityScanner::startCanSniffer();
+    server.send(200, "application/json", SenderCapabilityScanner::statusJson());
+}
+
+void WebConsoleHandler::handleCapabilitiesCanBaseline() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    SenderCapabilityScanner::resetCanSnifferBaseline();
     server.send(200, "application/json", SenderCapabilityScanner::statusJson());
 }
 

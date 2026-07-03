@@ -4,7 +4,7 @@
 #include <cstring>
 
 #include "CANHandler.h"
-#include "CanRouter.h"
+#include "CanRouterHub.h"
 #include "CanSignalDiff.h"
 #include "OBDHandler.h"
 #include "ObdCapability.h"
@@ -54,6 +54,7 @@ std::size_t ecuStepIndex = 0;
 UdsDidCapability didResults[kDidCapacity]{};
 std::size_t didResultCount = 0;
 std::size_t didStepIndex = 0;
+bool didResultsInitialized = false;
 Uds::Client udsClient;
 
 uint32_t canSnifferFrames = 0;
@@ -216,6 +217,7 @@ void initializeUdsResults() {
     ecuStepIndex = 0;
     didResultCount = 0;
     didStepIndex = 0;
+    didResultsInitialized = false;
 
     for (uint32_t requestId = Capabilities::UdsFirstRequestId;
          requestId <= Capabilities::UdsLastRequestId && ecuResultCount < kEcuCapacity;
@@ -225,6 +227,29 @@ void initializeUdsResults() {
         ecu.requestId = requestId;
         ecu.responseId = Capabilities::udsResponseIdForRequestId(requestId);
         std::snprintf(ecu.ecuName, sizeof(ecu.ecuName), "ECU 0x%03lX", static_cast<unsigned long>(requestId));
+    }
+}
+
+void initializeDidResultsForReachableEcus() {
+    didResultCount = 0;
+    didStepIndex = 0;
+    didResultsInitialized = true;
+
+    uint8_t didProbeCount = 0;
+    const auto* dids = Capabilities::udsDidProbes(didProbeCount);
+    for (std::size_t ecuIndex = 0; ecuIndex < ecuResultCount; ++ecuIndex) {
+        const EcuCapability& ecu = ecuResults[ecuIndex];
+        if (!ecu.reachable && !ecu.supportsUds) continue;
+
+        for (uint8_t didIndex = 0; didIndex < didProbeCount && didResultCount < kDidCapacity; ++didIndex) {
+            UdsDidCapability& did = didResults[didResultCount++];
+            did = UdsDidCapability{};
+            did.requestId = ecu.requestId;
+            did.responseId = ecu.responseId;
+            did.did = dids[didIndex].did;
+            std::snprintf(did.name, sizeof(did.name), "%s", dids[didIndex].name);
+            std::snprintf(did.status, sizeof(did.status), "%s", "PENDING");
+        }
     }
 }
 
@@ -240,7 +265,7 @@ void complete(Capabilities::ScanState finalState, const String& message) {
         WebConsoleHandler::log("[Capabilities] Scan stopped: " + message);
     }
     if (canSnifferRegistered) {
-        CANHandler::unregisterListener(canListener);
+        CanRouting::unregisterListener(canListener);
         canSnifferRegistered = false;
     }
     scan = SenderCapabilityScanner::ActiveScan::Idle;
@@ -347,18 +372,11 @@ void runUdsStep() {
         return;
     }
 
-    if (didStepIndex == 0) {
-        uint8_t didProbeCount = 0;
-        const auto* dids = Capabilities::udsDidProbes(didProbeCount);
-        didResultCount = didProbeCount;
-        if (didResultCount > kDidCapacity) didResultCount = kDidCapacity;
-        for (std::size_t i = 0; i < didResultCount; ++i) {
-            didResults[i] = UdsDidCapability{};
-            didResults[i].requestId = Capabilities::UdsFirstRequestId;
-            didResults[i].responseId = Capabilities::udsResponseIdForRequestId(Capabilities::UdsFirstRequestId);
-            didResults[i].did = dids[i].did;
-            std::snprintf(didResults[i].name, sizeof(didResults[i].name), "%s", dids[i].name);
-            std::snprintf(didResults[i].status, sizeof(didResults[i].status), "%s", "PENDING");
+    if (!didResultsInitialized) {
+        initializeDidResultsForReachableEcus();
+        if (didResultCount == 0) {
+            complete(Capabilities::ScanState::Complete, "UDS Scan abgeschlossen, keine erreichbare ECU");
+            return;
         }
     }
 
@@ -480,7 +498,7 @@ namespace SenderCapabilityScanner {
 
 void reset() {
     if (canSnifferRegistered) {
-        CANHandler::unregisterListener(canListener);
+        CanRouting::unregisterListener(canListener);
         canSnifferRegistered = false;
     }
     scan = ActiveScan::Idle;
@@ -497,6 +515,7 @@ void reset() {
     ecuStepIndex = 0;
     didResultCount = 0;
     didStepIndex = 0;
+    didResultsInitialized = false;
     canSnifferFrames = 0;
     canSnifferDroppedFrames = 0;
     snifferFrameCount = 0;
@@ -538,7 +557,7 @@ void startCanSniffer() {
     scan = ActiveScan::CanSniffer;
     state = Capabilities::ScanState::Running;
     startedAt = millis();
-    canSnifferRegistered = CANHandler::registerListener(canListener);
+    canSnifferRegistered = CanRouting::registerListener(canListener);
     lastMessage = canSnifferRegistered
         ? "CAN Sniffer aktiv (CanRouter Listener)"
         : "CAN Sniffer konnte nicht registriert werden";
@@ -548,6 +567,19 @@ void startCanSniffer() {
     if (!canSnifferRegistered) {
         complete(Capabilities::ScanState::Error, lastMessage);
     }
+}
+
+void resetCanSnifferBaseline() {
+    canSnifferFrames = 0;
+    canSnifferDroppedFrames = 0;
+    snifferFrameCount = 0;
+    snifferCandidateCount = 0;
+    for (auto& frame : snifferFrames) frame = Capabilities::CanFrameSample{};
+    for (auto& candidate : snifferCandidates) candidate = Capabilities::CanSignalCandidate{};
+    lastMessage = activeScan() == ActiveScan::CanSniffer
+        ? "CAN Sniffer Baseline neu gesetzt"
+        : "CAN Sniffer Baseline geloescht";
+    WebConsoleHandler::log("[Capabilities] CAN sniffer baseline reset");
 }
 
 void stop() {

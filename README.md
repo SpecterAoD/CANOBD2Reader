@@ -329,6 +329,7 @@ Verfuegbare Aktionen:
 | `POST` | `/api/capabilities/obd/start` | OBD Mode-01 PID-Scan starten |
 | `POST` | `/api/capabilities/uds/start` | UDS ECU-/DID-Scan starten |
 | `POST` | `/api/capabilities/can/start` | passiven CAN-Sniffer vormerken |
+| `POST` | `/api/capabilities/can/baseline` | CAN-Sniffer-Baseline und Kandidaten neu setzen |
 | `POST` | `/api/capabilities/stop` | laufenden Scan stoppen |
 | `GET` | `/api/capabilities/export.json` | Scan-Ergebnis als JSON herunterladen |
 
@@ -345,18 +346,27 @@ und Kraftstoffrate. Die Webtabelle unterscheidet:
 - `NEGATIVE_RESPONSE`: ECU hat die Anfrage aktiv abgelehnt.
 
 Der UDS-Scan prueft aktuell Request-IDs `0x7E0` bis `0x7E7` und lesende
-Dienste wie `0x3E TesterPresent` und `0x22 ReadDataByIdentifier`. Gepruefte
-DIDs sind unter anderem `0xF180` bis `0xF190` inklusive VIN. NRC `0x78`
+Dienste wie `0x3E TesterPresent` und `0x22 ReadDataByIdentifier`. DIDs werden
+fuer alle erreichbaren ECUs vorbereitet, nicht nur fuer `0x7E0`. Gepruefte DIDs
+sind unter anderem `0xF180` bis `0xF190` inklusive VIN. NRC `0x78`
 (`ResponsePending`) wird als Zwischenstatus behandelt: der Client wartet bis
 zum konfigurierten Gesamtfenster `SenderConfig::UdsResponsePendingTimeoutMs`
 weiter. Erst danach wird der Test als Timeout bewertet.
 
-Der CAN-Sniffer ist passiv an den `CanRouter` angebunden. Er sendet keine
+Der CAN-Sniffer ist passiv an den `CanRouterHub` angebunden. Er sendet keine
 Frames und beeinflusst keine Steuergeraete. Gelesene Roh-CAN-Frames werden von
 `CANHandler::processIncoming()` an registrierte Listener verteilt; der Sniffer
 sammelt daraus geaenderte Bytes und Bitmasken als Kandidaten. Damit lassen sich
 Ereignisse wie Blinker, Gangwechsel oder Schalterzustaende eingrenzen, ohne
 einen zweiten TWAI-Leser zu starten.
+
+Fuer die Suche nach Ereignissen empfiehlt sich:
+
+1. CAN-Sniffer starten.
+2. Ruhigen Ausgangszustand herstellen.
+3. `CAN Baseline neu` druecken.
+4. Genau ein Ereignis ausloesen, z. B. Blinker links.
+5. Kandidatenliste und Export-JSON sichern.
 
 ### Sender-Diagnose-Log am OBD2-Anschluss
 
@@ -610,7 +620,6 @@ Aktuell abgedeckt:
 6. Diagnose: ESP-NOW, CAN, OBD, Heartbeat, Datenqualität und Paketverlust
 7. Fehlercodes: DTC-Status und aktive Fehlercodes
 8. Drehzahl-Grafik: grosser RPM-Wert, Balken 0 bis `DisplayConfig::RpmMax`, Warn-/Kritisch-Marken und Max-RPM seit Start
-9. Ladedruck: fertiger `BoostPressureBar` in bar plus MAP und BARO als Zusatzwerte
 
 ### Ladedruck-Berechnung
 

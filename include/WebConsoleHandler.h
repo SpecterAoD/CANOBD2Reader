@@ -54,6 +54,7 @@ private:
     static void handleCapabilitiesObdStart();
     static void handleCapabilitiesUdsStart();
     static void handleCapabilitiesCanStart();
+    static void handleCapabilitiesCanBaseline();
     static void handleCapabilitiesStop();
     static void handleUpdatePage();
     static void handleUpdateFinished();

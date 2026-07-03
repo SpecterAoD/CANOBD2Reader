@@ -1,5 +1,14 @@
 #include <unity.h>
 #include "CanRouter.h"
+#include "CanRouterHub.h"
+
+namespace {
+int pumpCalls = 0;
+
+void testPump() {
+    ++pumpCalls;
+}
+}
 
 class CountingListener final : public CanRouting::CanFrameListener {
 public:
@@ -63,10 +72,32 @@ void test_router_unregisters_listener() {
     TEST_ASSERT_EQUAL_INT(1, second.count);
 }
 
+void test_shared_router_and_pump() {
+    CanRouting::clearListeners();
+    pumpCalls = 0;
+    CountingListener listener;
+    TEST_ASSERT_TRUE(CanRouting::registerListener(listener));
+
+    CanRouting::CanFrame frame{};
+    frame.id = 0x321;
+    frame.length = 2;
+    CanRouting::routeFrame(frame);
+    TEST_ASSERT_EQUAL_INT(1, listener.count);
+    TEST_ASSERT_EQUAL_UINT32(0x321, listener.lastId);
+
+    CanRouting::setFramePump(testPump);
+    CanRouting::pumpFrames();
+    TEST_ASSERT_EQUAL_INT(1, pumpCalls);
+
+    TEST_ASSERT_TRUE(CanRouting::unregisterListener(listener));
+    CanRouting::setFramePump(nullptr);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_router_routes_to_all_registered_listeners);
     RUN_TEST(test_router_ignores_duplicate_registration);
     RUN_TEST(test_router_unregisters_listener);
+    RUN_TEST(test_shared_router_and_pump);
     return UNITY_END();
 }

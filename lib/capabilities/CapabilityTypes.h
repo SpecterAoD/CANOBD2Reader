@@ -8,7 +8,7 @@ namespace Capabilities {
 constexpr std::size_t MaxObdPid = 0x80;
 constexpr std::size_t MaxObdPidResults = MaxObdPid + 1;
 constexpr std::size_t MaxEcuResults = 8;
-constexpr std::size_t MaxDidResults = 10;
+constexpr std::size_t MaxDidResults = MaxEcuResults * 10;
 constexpr std::size_t MaxCanSignalCandidates = 32;
 
 enum class ScanState : uint8_t {

@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include <driver/twai.h>
 
-#include "CanRouter.h"
+#include "CanRouterHub.h"
 #include "Logger.h"
 
 class CANHandler {
