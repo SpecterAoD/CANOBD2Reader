@@ -7,6 +7,7 @@
 #include "DiagnosticLog.h"
 #include "WebAssets.h"
 #include "WebRuntimeHandlers.h"
+#include "SenderCapabilityScanner.h"
 #include "config/BuildConfig.h"
 #include "config/ProjectConfig.h"
 #include "config/SenderConfig.h"
@@ -82,6 +83,12 @@ void WebConsoleHandler::begin() {
     server.on("/api/simulation/toggle", HTTP_POST, handleSimulationToggle);
     server.on("/api/simulation/scenario", HTTP_GET, handleSimulationStatus);
     server.on("/api/simulation/scenario", HTTP_POST, handleSimulationScenario);
+    server.on("/api/capabilities/status", HTTP_GET, handleCapabilitiesStatus);
+    server.on("/api/capabilities/export.json", HTTP_GET, handleCapabilitiesExport);
+    server.on("/api/capabilities/obd/start", HTTP_POST, handleCapabilitiesObdStart);
+    server.on("/api/capabilities/uds/start", HTTP_POST, handleCapabilitiesUdsStart);
+    server.on("/api/capabilities/can/start", HTTP_POST, handleCapabilitiesCanStart);
+    server.on("/api/capabilities/stop", HTTP_POST, handleCapabilitiesStop);
     server.on("/update", HTTP_GET, handleUpdatePage);
     server.on("/update", HTTP_POST, handleUpdateFinished, handleUpdateUpload);
     server.begin();
@@ -244,9 +251,10 @@ void WebConsoleHandler::handleRoot() {
 .wrap{width:100%;max-width:430px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 14px)}
 header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.title{font-size:20px;font-weight:800}.sub{font-size:12px;color:var(--muted)}
 .pill{padding:6px 10px;border-radius:999px;background:#263244;color:var(--muted);font-size:12px}.pill.ok{color:#052e16;background:var(--ok)}.pill.warn{color:#431407;background:var(--warn)}.pill.err{color:#450a0a;background:var(--err)}
-.nav{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;position:sticky;top:0;background:rgba(7,11,18,.92);backdrop-filter:blur(10px);padding:8px 0;z-index:2}
+.nav{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;position:sticky;top:0;background:rgba(7,11,18,.92);backdrop-filter:blur(10px);padding:8px 0;z-index:2}
 button,.btn{border:0;border-radius:14px;padding:11px 8px;background:#1f2937;color:var(--text);font-weight:700;font-size:13px;text-decoration:none;text-align:center}
 button.active{background:var(--accent);color:#042f3d}.page{display:none}.page.active{display:block}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.card{background:var(--card);border:1px solid #263244;border-radius:18px;padding:12px;min-height:78px}.wide{grid-column:1/-1}.label{font-size:12px;color:var(--muted);margin-bottom:8px}.value{font-size:24px;font-weight:800;word-break:break-word}.small{font-size:13px;color:var(--muted);line-height:1.35}.okText{color:var(--ok)}.warnText{color:var(--warn)}.errText{color:var(--err)}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:7px 4px;border-bottom:1px solid #263244;text-align:left}th{color:var(--muted);font-weight:700}.status-OK{color:var(--ok)}.status-TIMEOUT,.status-PENDING{color:var(--warn)}.status-UNSUPPORTED{color:var(--muted)}.status-NEGATIVE_RESPONSE,.status-DECODE_ERROR,.status-SEND_FAILED{color:var(--err)}
 pre{white-space:pre-wrap;word-break:break-word;background:#020617;color:#86efac;border-radius:16px;padding:12px;min-height:250px;max-height:58vh;overflow:auto;font-size:12px}
 input[type=file]{width:100%;padding:12px;border-radius:14px;background:#0f172a;color:var(--text);border:1px solid #263244}.actions{display:grid;gap:9px;margin-top:10px}.danger{background:#7f1d1d}.primary{background:#075985}
 </style>
@@ -257,6 +265,7 @@ input[type=file]{width:100%;padding:12px;border-radius:14px;background:#0f172a;c
 <nav class="nav">
 <button data-page="dash" class="active">Status</button>
 <button data-page="diag">Diag</button>
+<button data-page="cap">Cap</button>
 <button data-page="log">Log</button>
 <button data-page="ota">OTA</button>
 </nav>
@@ -296,6 +305,14 @@ Timeouts: <span id="udsTimeouts">--</span> · Negative: <span id="udsNeg">--</sp
 <div class="card wide"><div class="label">Diagnose-Snapshot</div><div class="actions"><a class="btn primary" href="/api/diagnostic/download">JSON herunterladen</a><button id="loadSnapshot">Snapshot anzeigen</button></div><pre id="snapshot">Noch kein Snapshot geladen.</pre></div>
 <div class="card wide"><div class="label">Fehlerstatus</div><div id="err" class="small">--</div></div>
 </div></section>
+<section id="cap" class="page"><div class="grid">
+<div class="card wide"><div class="label">Capabilities</div><div id="capState" class="value">--</div><div class="small" id="capMsg">--</div><div class="actions"><button id="capObd" class="primary">OBD PID Scan starten</button><button id="capUds" class="primary">UDS Scan starten</button><button id="capCan">CAN Sniffer starten</button><button id="capStop" class="danger">Scan stoppen</button><a class="btn primary" href="/api/capabilities/export.json">Export JSON</a></div></div>
+<div class="card wide"><div class="label">OBD PID Ergebnis</div><div class="small">Unterstuetzte PIDs werden testweise abgefragt. Nicht unterstuetzte PIDs bleiben grau, Timeouts orange/rot.</div><div style="overflow:auto"><table><thead><tr><th>PID</th><th>Name</th><th>Support</th><th>Antwort</th><th>Wert</th><th>Einheit</th><th>ms</th><th>Status</th></tr></thead><tbody id="capObdRows"></tbody></table></div></div>
+<div class="card wide"><div class="label">UDS ECUs</div><div style="overflow:auto"><table><thead><tr><th>ECU</th><th>Antwort</th><th>Erreichbar</th><th>UDS</th><th>Name</th></tr></thead><tbody id="capEcuRows"></tbody></table></div></div>
+<div class="card wide"><div class="label">UDS DID / ECU Infos</div><div style="overflow:auto"><table><thead><tr><th>ECU</th><th>DID</th><th>Name</th><th>Wert</th><th>Status</th></tr></thead><tbody id="capDidRows"></tbody></table></div></div>
+<div class="card wide"><div class="label">CAN Sniffer Kandidaten</div><div class="small">Passiv ueber CanRouter gesammelt. Zum Finden von Ereignissen: Zustand A starten, Ereignis ausloesen, geaenderte Bytes/Bits vergleichen.</div><div style="overflow:auto"><table><thead><tr><th>ID</th><th>Byte</th><th>Vorher</th><th>Nachher</th><th>Maske</th><th>Wechsel</th></tr></thead><tbody id="capCanRows"></tbody></table></div></div>
+<div class="card wide"><div class="label">Rohdaten</div><pre id="capRaw">Noch kein Scan geladen.</pre></div>
+</div></section>
 <section id="log" class="page"><div class="grid">
 <div class="card wide"><div class="label">Diagnose-Log</div><div class="small">Persistent: <span id="diaglog">--</span></div><div class="actions"><button id="loadFileLog" class="primary">Persistenten Log laden</button><a class="btn primary" href="/log/download">Log herunterladen</a><button id="clearLog" class="danger">Log löschen</button></div></div>
 <div class="card wide"><div class="label">Live-Log</div><pre id="logs">Lade Log...</pre></div>
@@ -316,6 +333,12 @@ async function refreshLog(){try{$('logs').textContent=await fetch('/log',{cache:
 async function loadPersistentLog(){try{$('logs').textContent=await fetch('/log/file',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
 async function refreshSimulation(){try{let s=await fetch('/api/simulation',{cache:'no-store'}).then(r=>r.json());$('sim').textContent=s.simulation?'aktiv':'inaktiv';$('sim').className='value '+(s.simulation?'okText':'warnText');$('scenario').textContent=s.scenario||'--';$('scenarioSelect').value=s.scenario||'NormalSingleFrame'}catch(e){}}
 async function loadSnapshot(){try{$('snapshot').textContent=JSON.stringify(await fetch('/api/diagnostic/snapshot',{cache:'no-store'}).then(r=>r.json()),null,2)}catch(e){$('snapshot').textContent='Snapshot konnte nicht geladen werden'}}
+function cell(v,c=''){return '<td class="'+c+'">'+String(v??'--')+'</td>'}
+function rowsObd(pids){return (pids||[]).map(p=>'<tr>'+cell(p.pid)+cell(p.name)+cell(p.supportedByMask?'ja':'nein')+cell(p.responded?'ja':'nein')+cell(p.exampleValue)+cell(p.unit)+cell(p.responseTimeMs)+cell(p.status,'status-'+p.status)+'</tr>').join('')||'<tr><td colspan="8">Noch keine OBD Ergebnisse</td></tr>'}
+function rowsEcu(ecus){return (ecus||[]).map(e=>'<tr>'+cell(e.requestId)+cell(e.responseId)+cell(e.reachable?'ja':'nein')+cell(e.supportsUds?'ja':'nein')+cell(e.ecuName)+'</tr>').join('')||'<tr><td colspan="5">Noch keine UDS Ergebnisse</td></tr>'}
+function rowsDid(dids){return (dids||[]).map(d=>'<tr>'+cell(d.ecu)+cell(d.did)+cell(d.name)+cell(d.value)+cell(d.status,'status-'+d.status)+'</tr>').join('')||'<tr><td colspan="5">Noch keine DID Ergebnisse</td></tr>'}
+function rowsCan(cands){return (cands||[]).map(c=>'<tr>'+cell(c.canId)+cell(c.byteIndex)+cell(c.before)+cell(c.after)+cell(c.changedBitMask)+cell(c.changeCount)+'</tr>').join('')||'<tr><td colspan="6">Noch keine CAN Kandidaten</td></tr>'}
+async function refreshCapabilities(){try{let c=await fetch('/api/capabilities/status',{cache:'no-store'}).then(r=>r.json());$('capState').textContent=c.scan+' / '+c.state;$('capState').className='value '+(c.active?'warnText':(c.state==='COMPLETED'?'okText':''));$('capMsg').textContent=(c.message||'--')+(c.canSniffer?' · CAN Frames: '+c.canSniffer.frames+' · Kandidaten: '+c.canSniffer.candidateCount:'');$('capObdRows').innerHTML=rowsObd(c.obd&&c.obd.pids);$('capEcuRows').innerHTML=rowsEcu(c.uds&&c.uds.ecus);$('capDidRows').innerHTML=rowsDid(c.uds&&c.uds.dids);$('capCanRows').innerHTML=rowsCan(c.canSniffer&&c.canSniffer.candidates);$('capRaw').textContent=JSON.stringify(c,null,2)}catch(e){$('capState').textContent='offline';$('capState').className='value errText'}}
 $('start').onclick=async()=>{await fetch('/start',{method:'POST'});refresh()}
 $('restart').onclick=async()=>{if(confirm('Sender wirklich neu starten?'))await fetch('/api/restart',{method:'POST'})}
 $('simToggle').onclick=async()=>{await fetch('/api/simulation/toggle',{method:'POST'});refreshSimulation()}
@@ -324,8 +347,12 @@ $('simOff').onclick=async()=>{await fetch('/api/simulation/off',{method:'POST'})
 $('scenarioSelect').onchange=async()=>{await fetch('/api/simulation/scenario?scenario='+encodeURIComponent($('scenarioSelect').value),{method:'POST'});refreshSimulation()}
 $('loadFileLog').onclick=loadPersistentLog
 $('loadSnapshot').onclick=loadSnapshot
+$('capObd').onclick=async()=>{await fetch('/api/capabilities/obd/start',{method:'POST'});refreshCapabilities()}
+$('capUds').onclick=async()=>{await fetch('/api/capabilities/uds/start',{method:'POST'});refreshCapabilities()}
+$('capCan').onclick=async()=>{await fetch('/api/capabilities/can/start',{method:'POST'});refreshCapabilities()}
+$('capStop').onclick=async()=>{await fetch('/api/capabilities/stop',{method:'POST'});refreshCapabilities()}
 $('clearLog').onclick=async()=>{if(confirm('Diagnose-Log wirklich löschen?')){await fetch('/api/log/clear',{method:'POST'});refreshLog();refresh()}}
-setInterval(refresh,1000);setInterval(refreshLog,1500);setInterval(refreshSimulation,1000);refresh();refreshLog();refreshSimulation();
+setInterval(refresh,1000);setInterval(refreshLog,1500);setInterval(refreshSimulation,1000);setInterval(refreshCapabilities,1500);refresh();refreshLog();refreshSimulation();refreshCapabilities();
 </script>
 </body></html>
 )rawliteral";
@@ -511,6 +538,44 @@ void WebConsoleHandler::handleSimulationScenario() {
     Simulation::RuntimeSimulation::setScenario(scenario);
     log("[Simulation] Szenario: " + String(Simulation::RuntimeSimulation::scenarioName()));
     server.send(200, "application/json", simulationJson());
+}
+
+void WebConsoleHandler::handleCapabilitiesStatus() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    server.send(200, "application/json", SenderCapabilityScanner::statusJson());
+}
+
+void WebConsoleHandler::handleCapabilitiesExport() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    String filename = "CANOBD2_sender_";
+    filename += ProjectConfig::FirmwareVersion;
+    filename += "_capabilities.json";
+    server.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+    server.send(200, "application/json", SenderCapabilityScanner::exportJson());
+}
+
+void WebConsoleHandler::handleCapabilitiesObdStart() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    SenderCapabilityScanner::startObdPidScan();
+    server.send(200, "application/json", SenderCapabilityScanner::statusJson());
+}
+
+void WebConsoleHandler::handleCapabilitiesUdsStart() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    SenderCapabilityScanner::startUdsScan();
+    server.send(200, "application/json", SenderCapabilityScanner::statusJson());
+}
+
+void WebConsoleHandler::handleCapabilitiesCanStart() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    SenderCapabilityScanner::startCanSniffer();
+    server.send(200, "application/json", SenderCapabilityScanner::statusJson());
+}
+
+void WebConsoleHandler::handleCapabilitiesStop() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    SenderCapabilityScanner::stop();
+    server.send(200, "application/json", SenderCapabilityScanner::statusJson());
 }
 
 void WebConsoleHandler::handleUpdatePage() {

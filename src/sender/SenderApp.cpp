@@ -32,6 +32,7 @@
 #include "SenderLedButton.h"
 #include "SenderHeartbeat.h"
 #include "SenderCanAlerts.h"
+#include "SenderCapabilityScanner.h"
 #include "SenderObdScheduler.h"
 #include "SenderPowerScheduler.h"
 #include "SenderSimulationScheduler.h"
@@ -109,6 +110,7 @@ Runtime::SenderRuntimeCoordinator::CanAlertResult processCanAlerts(uint32_t wait
 }
 
 void tickObd(Runtime::SenderLoopState& runtimeState) {
+  if (SenderCapabilityScanner::active()) return;
   SenderObdScheduler::tick(runtimeState.currentMillis,
                            runtimeState.lastCanMessageAt,
                            SenderTelemetry::lastObdResponseAtRef(),
@@ -118,6 +120,7 @@ void tickObd(Runtime::SenderLoopState& runtimeState) {
 }
 
 void tickUds(Runtime::SenderLoopState& runtimeState) {
+  if (SenderCapabilityScanner::active()) return;
   SenderUdsScheduler::tick(runtimeState.currentMillis,
                            runtimeState.lastCanMessageAt,
                            SenderTelemetry::lastObdResponseAtRef(),
@@ -170,6 +173,7 @@ void SenderApp::begin() {
   Obd::Diagnostics::reset();
   Uds::Diagnostics::reset();
   SenderObdScheduler::reset();
+  SenderCapabilityScanner::reset();
   SenderPowerScheduler::reset();
   SenderSimulationScheduler::reset();
   SenderTelemetry::reset();
@@ -227,5 +231,6 @@ void SenderApp::begin() {
 // region ================================== loop ==================================
 void SenderApp::tick() {
   coordinator.tick(millis());
+  SenderCapabilityScanner::tick(millis());
 }
 // End region ================================== loop ==================================

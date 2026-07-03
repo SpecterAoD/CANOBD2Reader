@@ -314,6 +314,50 @@ Standardmäßig wartet der Sender nicht mehr auf die WebConsole. Nur wenn
 `Sender starten` als manuelle Freigabe. OTA, WebConsole und Heartbeat bleiben
 auch in diesem manuellen Modus aktiv.
 
+### Sender-Capability-Scanner
+
+Der neue Tab `Cap` in der Sender-WebConsole ist fuer gezielte Fahrzeugtests
+gedacht und startet nie automatisch. Waehrend ein Capability-Scan aktiv ist,
+pausiert der Sender die normalen OBD-/UDS-Liveabfragen, damit sich die
+ISO-TP-Antworten nicht gegenseitig stoeren.
+
+Verfuegbare Aktionen:
+
+| Methode | Pfad | Zweck |
+| --- | --- | --- |
+| `GET` | `/api/capabilities/status` | aktueller Scanstatus mit Tabellen-Daten |
+| `POST` | `/api/capabilities/obd/start` | OBD Mode-01 PID-Scan starten |
+| `POST` | `/api/capabilities/uds/start` | UDS ECU-/DID-Scan starten |
+| `POST` | `/api/capabilities/can/start` | passiven CAN-Sniffer vormerken |
+| `POST` | `/api/capabilities/stop` | laufenden Scan stoppen |
+| `GET` | `/api/capabilities/export.json` | Scan-Ergebnis als JSON herunterladen |
+
+Der OBD-Scan fragt zuerst die Supported-PID-Masken `0x00`, `0x20`, `0x40`
+und bei Bedarf `0x60` ab. Danach werden die wichtigen Live-PIDs testweise
+angefragt, darunter Drehzahl, Geschwindigkeit, Kuehlmitteltemperatur, MAP,
+Baro, MAF, Tankfuellstand, ECU-Spannung, Umgebungstemperatur, Oeltemperatur
+und Kraftstoffrate. Die Webtabelle unterscheidet:
+
+- `OK`: PID wird unterstuetzt, antwortet und laesst sich dekodieren.
+- `UNSUPPORTED`: PID ist laut Supported-Mask nicht verfuegbar.
+- `TIMEOUT`: PID ist gemeldet oder angefragt, aber es kam keine Antwort.
+- `DECODE_ERROR`: Antwort kam, passt aber nicht zum bekannten Datenformat.
+- `NEGATIVE_RESPONSE`: ECU hat die Anfrage aktiv abgelehnt.
+
+Der UDS-Scan prueft aktuell Request-IDs `0x7E0` bis `0x7E7` und lesende
+Dienste wie `0x3E TesterPresent` und `0x22 ReadDataByIdentifier`. Gepruefte
+DIDs sind unter anderem `0xF180` bis `0xF190` inklusive VIN. NRC `0x78`
+(`ResponsePending`) wird als Zwischenstatus behandelt: der Client wartet bis
+zum konfigurierten Gesamtfenster `SenderConfig::UdsResponsePendingTimeoutMs`
+weiter. Erst danach wird der Test als Timeout bewertet.
+
+Der CAN-Sniffer ist passiv an den `CanRouter` angebunden. Er sendet keine
+Frames und beeinflusst keine Steuergeraete. Gelesene Roh-CAN-Frames werden von
+`CANHandler::processIncoming()` an registrierte Listener verteilt; der Sniffer
+sammelt daraus geaenderte Bytes und Bitmasken als Kandidaten. Damit lassen sich
+Ereignisse wie Blinker, Gangwechsel oder Schalterzustaende eingrenzen, ohne
+einen zweiten TWAI-Leser zu starten.
+
 ### Sender-Diagnose-Log am OBD2-Anschluss
 
 Der Sender schreibt zusätzlich zum seriellen Monitor einen persistenten

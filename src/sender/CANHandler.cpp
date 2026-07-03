@@ -6,6 +6,21 @@
 bool CANHandler::driverInstalled = false;
 bool CANHandler::driverStarted = false;
 
+namespace {
+CanRouting::CanRouter canRouter;
+
+CanRouting::CanFrame toRoutedFrame(const twai_message_t& message) {
+    CanRouting::CanFrame frame{};
+    frame.id = message.identifier;
+    frame.length = message.data_length_code > 8 ? 8 : message.data_length_code;
+    frame.timestampMs = millis();
+    for (uint8_t index = 0; index < frame.length; ++index) {
+        frame.data[index] = message.data[index];
+    }
+    return frame;
+}
+} // namespace
+
 bool CANHandler::init() {
     Logger::debug(" CAN...............INIT");
     Logger::debug(" TWAI Modus: ");
@@ -82,6 +97,9 @@ void CANHandler::processIncoming() {
 }
 
 void CANHandler::handleMessage(twai_message_t& message) {
+    const CanRouting::CanFrame routedFrame = toRoutedFrame(message);
+    canRouter.route(routedFrame);
+
     // Raw CAN traffic can be extremely busy on a real vehicle. Keep it behind
     // the explicit sender flag so OBD polling and heartbeat telemetry do not
     // get starved by unrelated bus frames.
@@ -91,6 +109,14 @@ void CANHandler::handleMessage(twai_message_t& message) {
         Utils::sendTelemetry("CAN", "HINT", "CANHint", decoded.hint, "", "OK");
         Logger::canFrame(message);
     }
+}
+
+bool CANHandler::registerListener(CanRouting::CanFrameListener& listener) {
+    return canRouter.registerListener(listener);
+}
+
+bool CANHandler::unregisterListener(CanRouting::CanFrameListener& listener) {
+    return canRouter.unregisterListener(listener);
 }
 
 void CANHandler::printStatus() {

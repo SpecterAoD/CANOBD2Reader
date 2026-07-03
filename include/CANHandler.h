@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <driver/twai.h>
 
+#include "CanRouter.h"
 #include "Logger.h"
 
 class CANHandler {
@@ -18,6 +19,10 @@ public:
 
     /// Prints the current TWAI state for diagnostics.
     static void printStatus();
+
+    /// Registers a passive listener for frames read by processIncoming().
+    static bool registerListener(CanRouting::CanFrameListener& listener);
+    static bool unregisterListener(CanRouting::CanFrameListener& listener);
 
     /// Stops and uninstalls the TWAI driver if it was started.
     static void shutdown();

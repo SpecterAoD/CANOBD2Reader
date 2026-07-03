@@ -49,6 +49,12 @@ private:
     static void handleSimulationOff();
     static void handleSimulationToggle();
     static void handleSimulationScenario();
+    static void handleCapabilitiesStatus();
+    static void handleCapabilitiesExport();
+    static void handleCapabilitiesObdStart();
+    static void handleCapabilitiesUdsStart();
+    static void handleCapabilitiesCanStart();
+    static void handleCapabilitiesStop();
     static void handleUpdatePage();
     static void handleUpdateFinished();
     static void handleUpdateUpload();

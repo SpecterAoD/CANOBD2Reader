@@ -1,6 +1,7 @@
 #include "UdsClient.h"
 
 #if defined(ARDUINO)
+#include <Arduino.h>
 #include "Logger.h"
 #include "config/SenderConfig.h"
 #endif
@@ -68,17 +69,41 @@ bool Client::request(Service service,
         return false;
     }
 
-    IsoTp::Payload payloadResponse{};
 #if defined(ARDUINO)
     const uint32_t timeoutMs = SenderConfig::UdsResponseTimeoutMs;
+    const uint32_t totalTimeoutMs = SenderConfig::UdsResponsePendingTimeoutMs;
 #else
     const uint32_t timeoutMs = 250;
+    const uint32_t totalTimeoutMs = 3000;
 #endif
-    if (!isoTp_.receiveResponse(serviceId(service), 0xFF, payloadResponse, timeoutMs)) {
+    IsoTp::Payload payloadResponse{};
+    uint32_t pendingCount = 0;
+#if defined(ARDUINO)
+    const uint32_t startedAt = millis();
+#else
+    const uint32_t startedAt = 0;
+    uint32_t nativeElapsed = 0;
+#endif
+
+    while (!isoTp_.receiveResponse(serviceId(service), 0xFF, payloadResponse, timeoutMs)) {
         if (isoTp_.lastResponseWasNegative()) {
             response.negative = true;
             response.negativeService = isoTp_.lastNegativeService();
             response.negativeCode = isoTp_.lastNegativeCode();
+            if (response.negativeCode == static_cast<uint8_t>(NegativeResponseCode::ResponsePending)) {
+                ++pendingCount;
+                Diagnostics::recordNegativeResponse(response.negativeService, response.negativeCode);
+#if defined(ARDUINO)
+                if (millis() - startedAt < totalTimeoutMs) {
+                    Logger::debug("[UDS] ResponsePending, waiting for final response");
+                    delay(50);
+                    continue;
+                }
+#else
+                nativeElapsed += timeoutMs;
+                if (nativeElapsed < totalTimeoutMs) continue;
+#endif
+            }
             Diagnostics::recordNegativeResponse(response.negativeService, response.negativeCode);
         } else {
             Diagnostics::recordTimeout();

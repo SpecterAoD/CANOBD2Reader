@@ -36,6 +36,7 @@ constexpr uint32_t DtcQueryIntervalMs = 30000;
 constexpr uint32_t VinQueryIntervalMs = 120000;
 constexpr uint32_t UdsQueryIntervalMs = 60000;
 constexpr uint32_t UdsResponseTimeoutMs = 350;
+constexpr uint32_t UdsResponsePendingTimeoutMs = 4000;
 constexpr bool EnablePhysicalObdFallback = true;
 constexpr uint8_t FunctionalTimeoutsBeforePhysicalFallback = 3;
 constexpr uint32_t StartStopDelayMs = 300000;
