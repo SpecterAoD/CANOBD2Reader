@@ -5,6 +5,7 @@
 #include "ObdDiagnostics.h"
 #include "SenderObdScheduler.h"
 #include "SenderPower.h"
+#include "SenderLedButton.h"
 #include "SenderTelemetry.h"
 #include "SenderUdsScheduler.h"
 #include "RuntimeSimulation.h"
@@ -37,6 +38,20 @@ Runtime::WebRuntimeStatus build(const Input& input) {
     status.canState = input.canDriverReady ? (input.canBusActive ? "ACTIVE" : "IDLE") : "INIT_FAIL";
     status.obdState = SenderConfig::EnableOBD2 ? (status.obdActive ? "ACTIVE" : "NO_RESPONSE") : "DISABLED";
     status.espNowState = input.espNowReady ? "READY" : "INIT_FAIL";
+    status.ledState = SenderLedButton::stateName();
+    status.ledTestActive = SenderLedButton::ledTestActive();
+    status.vehicleOff = SenderLedButton::vehicleOff();
+    status.ledLastStateChangeAt = SenderLedButton::lastStateChangeAt();
+    const Power::ActivitySnapshot& power = SenderPower::activitySnapshot();
+    status.vehicleState = SenderPower::vehicleStateName();
+    status.powerCommand = SenderPower::powerCommandName();
+    status.activityScore = power.activityScore;
+    status.startStopDetected = power.startStopDetected;
+    status.parkedDetected = power.parkedDetected;
+    status.parkedStartedAtMs = power.parkedStartedAtMs;
+    status.displaySleepDueAtMs = power.displaySleepDueAtMs;
+    status.lastWakeupAtMs = power.lastWakeupAtMs;
+    status.lastSleepAtMs = power.lastSleepAtMs;
     status.lastSendError = SenderTelemetry::lastSendError();
     status.lastDtc = SenderObdScheduler::lastDtcText();
     status.lastVin = SenderObdScheduler::lastVinText();

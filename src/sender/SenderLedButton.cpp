@@ -3,13 +3,24 @@
 #include <Arduino.h>
 
 #include "WebConsoleHandler.h"
+#include "SenderLedController.h"
+#include "config/DisplayConfig.h"
 #include "config/SenderConfig.h"
 
 namespace {
-uint32_t lastErrorLedOnAt = 0;
 uint32_t lastLedTestChangeAt = 0;
 bool ledTestActiveState = false;
-constexpr uint32_t ErrorLedPulseMs = 1000;
+Status::SenderLedController ledController;
+
+void applyOutput(const Status::SenderLedOutput& output) {
+    digitalWrite(SenderConfig::LedPin1, output.greenOn ? HIGH : LOW);
+    digitalWrite(SenderConfig::LedPin2, output.errorOn ? HIGH : LOW);
+}
+
+void logStateChange(Status::SenderLedState previousState, Status::SenderLedState currentState) {
+    if (previousState == currentState) return;
+    WebConsoleHandler::log(String("[LED] state=") + Status::SenderLedController::stateName(currentState));
+}
 } // namespace
 
 namespace SenderLedButton {
@@ -18,8 +29,9 @@ void begin() {
     pinMode(SenderConfig::LedPin1, OUTPUT);
     pinMode(SenderConfig::LedPin2, OUTPUT);
     pinMode(SenderConfig::ButtonPin, INPUT_PULLUP);
-    digitalWrite(SenderConfig::LedPin1, LOW);
-    digitalWrite(SenderConfig::LedPin2, LOW);
+    ledController.reset(millis());
+    applyOutput(ledController.update({millis()}));
+    WebConsoleHandler::log(String("[LED] state=") + ledController.stateName());
 }
 
 bool updateLedTestButton() {
@@ -33,28 +45,54 @@ bool updateLedTestButton() {
 
     ledTestActiveState = pressed;
     lastLedTestChangeAt = now;
-    digitalWrite(SenderConfig::LedPin1, pressed ? HIGH : LOW);
-    digitalWrite(SenderConfig::LedPin2, pressed ? HIGH : LOW);
-    WebConsoleHandler::log(pressed ? "[Sender] LED-Test aktiv" : "[Sender] LED-Test beendet");
+    WebConsoleHandler::log(pressed ? "[LED] state=LedTest" : "[LED] LED test released");
     return ledTestActiveState;
 }
 
 void pulseError(uint32_t nowMs) {
-    if (ledTestActiveState) return;
-    digitalWrite(SenderConfig::LedPin1, HIGH);
-    lastErrorLedOnAt = nowMs;
+    ledController.requestErrorPulse(nowMs);
 }
 
-void update(uint32_t nowMs) {
-    if (ledTestActiveState || lastErrorLedOnAt == 0) return;
-    if (nowMs - lastErrorLedOnAt < ErrorLedPulseMs) return;
+void update(const Runtime::SenderLoopState& state, uint32_t lastObdResponseAt) {
+    const bool canRecent = state.canRecent(state.currentMillis, DisplayConfig::CanTimeoutMs);
+    const bool obdRecent = lastObdResponseAt > 0 &&
+                           state.currentMillis - lastObdResponseAt <= DisplayConfig::ObdTimeoutMs;
+    const bool obdTimedOut = SenderConfig::EnableOBD2 &&
+                             canRecent &&
+                             lastObdResponseAt > 0 &&
+                             !obdRecent;
 
-    digitalWrite(SenderConfig::LedPin1, LOW);
-    lastErrorLedOnAt = 0;
+    Status::SenderLedInput input{};
+    input.nowMs = state.currentMillis;
+    input.senderRunning = true;
+    input.canDriverReady = state.canDriverReady;
+    input.canActive = state.canBusActive || canRecent;
+    input.obdActive = obdRecent;
+    input.espNowReady = state.espNowReady;
+    input.canError = !state.canDriverReady;
+    input.obdTimeout = obdTimedOut;
+    input.ledTestActive = ledTestActiveState;
+
+    const Status::SenderLedState previousState = ledController.state();
+    const Status::SenderLedOutput output = ledController.update(input);
+    applyOutput(output);
+    logStateChange(previousState, output.state);
 }
 
 bool ledTestActive() {
     return ledTestActiveState;
+}
+
+bool vehicleOff() {
+    return ledController.vehicleOff();
+}
+
+const char* stateName() {
+    return ledController.stateName();
+}
+
+uint32_t lastStateChangeAt() {
+    return ledController.lastStateChangeAt();
 }
 
 } // namespace SenderLedButton

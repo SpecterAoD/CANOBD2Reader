@@ -32,11 +32,11 @@ public:
         CanAlertResult (*processCanAlerts)(uint32_t waitMs) = nullptr;
         void (*setLastError)(const char* errorText) = nullptr;
         void (*pulseErrorLed)(uint32_t nowMs) = nullptr;
-        void (*updateLed)(uint32_t nowMs) = nullptr;
+        void (*updateLed)(const SenderLoopState& state) = nullptr;
         void (*tickObd)(SenderLoopState& state) = nullptr;
         void (*tickUds)(SenderLoopState& state) = nullptr;
         void (*logTwaiStatus)() = nullptr;
-        void (*tickPower)(uint32_t nowMs) = nullptr;
+        void (*tickPower)(const SenderLoopState& state) = nullptr;
     };
 
     SenderRuntimeCoordinator(const Config& config, const Services& services);

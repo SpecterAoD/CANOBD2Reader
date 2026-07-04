@@ -68,6 +68,7 @@ namespace {
     if (n == "EngineLoad") return findAlias("EngineLoad", "Load", "04");
     if (n == "IntakeTemp") return findAlias("IntakeTemp", "IntakeAirTemp", "0F");
     if (n == "AverageConsumption") return findAlias("AverageConsumption", "AVG");
+    if (n == "InstantConsumption") return findAlias("InstantConsumption", "INST", "Consumption");
     if (n == "FuelRate") return findAlias("FuelRate", "EngineFuelRate", "5E");
     if (n == "Throttle") return findAlias("Throttle", "ThrottlePosition", "11");
     if (n == "MAF") return findAlias("MAF", "MassAirFlow", "10");
@@ -77,6 +78,18 @@ namespace {
     if (n == "ManifoldAbsolutePressure") return findAlias("ManifoldAbsolutePressure", "MAP", "0B");
     if (n == "BarometricPressure") return findAlias("BarometricPressure", "Baro", "33");
     if (n == "BoostPressureBar") return findAlias("BoostPressureBar", "Boost", "BOOST");
+    if (n == "UDS_DTC") return findAlias("UDS_DTC", "UDS");
+    if (n == "UDS_NRC") return findAlias("UDS_NRC", "UDS_NEGATIVE", "UDS");
+    if (n == "ReachableEcus") return findAlias("ReachableEcus", "ECU_COUNT");
+    if (n == "UdsPending") return findAlias("UdsPending", "UDS_PENDING");
+    if (n == "UdsBackoff") return findAlias("UdsBackoff", "UDS_BACKOFF");
+    if (n == "CanSniffer") return findAlias("CanSniffer", "CAN_SNIFFER");
+    if (n == "CanBaseline") return findAlias("CanBaseline", "CAN_BASELINE");
+    if (n == "CanCandidates") return findAlias("CanCandidates", "CAN_CANDIDATES");
+    if (n == "CanCandidateId") return findAlias("CanCandidateId", "CAN_CANDIDATE_ID");
+    if (n == "PowerState") return findAlias("PowerState", "POWER_STATE");
+    if (n == "PowerCommand") return findAlias("PowerCommand", "POWER_COMMAND");
+    if (n == "ActivityScore") return findAlias("ActivityScore", "ACTIVITY_SCORE");
     return findAlias(name);
   }
 

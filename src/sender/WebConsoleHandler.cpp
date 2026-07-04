@@ -199,6 +199,19 @@ String WebConsoleHandler::diagnosticSnapshotJson() {
             "\",\"battery\":" + String(s.batteryVoltage, 2) + "},";
     json += "\"simulation\":{\"active\":" + String(s.simulationActive ? "true" : "false") +
             ",\"scenario\":\"" + jsonEscape(s.simulationScenario) + "\"},";
+    json += "\"led\":{\"state\":\"" + jsonEscape(s.ledState) +
+            "\",\"testActive\":" + String(s.ledTestActive ? "true" : "false") +
+            ",\"vehicleOff\":" + String(s.vehicleOff ? "true" : "false") +
+            ",\"lastStateChangeAt\":" + String(s.ledLastStateChangeAt) + "},";
+    json += "\"power\":{\"vehicleState\":\"" + jsonEscape(s.vehicleState) +
+            "\",\"activityScore\":" + String(s.activityScore) +
+            ",\"command\":\"" + jsonEscape(s.powerCommand) +
+            "\",\"startStopDetected\":" + String(s.startStopDetected ? "true" : "false") +
+            ",\"parkedDetected\":" + String(s.parkedDetected ? "true" : "false") +
+            ",\"parkedStartedAtMs\":" + String(s.parkedStartedAtMs) +
+            ",\"displaySleepDueAtMs\":" + String(s.displaySleepDueAtMs) +
+            ",\"lastWakeupAtMs\":" + String(s.lastWakeupAtMs) +
+            ",\"lastSleepAtMs\":" + String(s.lastSleepAtMs) + "},";
     json += "\"lastTelemetry\":\"" + jsonEscape(s.lastTelemetry) + "\",";
     json += "\"lastError\":\"" + jsonEscape(s.lastError) + "\",";
     json += "\"lastSendError\":\"" + jsonEscape(s.lastSendError) + "\"";
@@ -275,6 +288,8 @@ input[type=file]{width:100%;padding:12px;border-radius:14px;background:#0f172a;c
 <div class="card"><div class="label">CAN</div><div id="can" class="value">--</div></div>
 <div class="card"><div class="label">OBD2</div><div id="obd" class="value">--</div></div>
 <div class="card"><div class="label">ESP-NOW</div><div id="espnow" class="value">--</div></div>
+<div class="card"><div class="label">LED</div><div id="ledstate" class="value">--</div><div class="small">Test: <span id="ledtest">--</span><br>VehicleOff: <span id="vehicleoff">--</span><br>Wechsel: <span id="ledchange">--</span></div></div>
+<div class="card wide"><div class="label">Power Manager</div><div id="vehiclestate" class="value">--</div><div class="small">Score: <span id="activityscore">--</span> · Command: <span id="powercmd">--</span><br>StartStop: <span id="startstop">--</span> · Parked: <span id="parked">--</span><br>Sleep Timer: <span id="sleeptimer">--</span></div></div>
 <div class="card"><div class="label">Heartbeat</div><div id="heartbeat" class="value">--</div></div>
 <div class="card"><div class="label">Batterie</div><div id="bat" class="value">--</div></div>
 <div class="card"><div class="label">Telemetrie</div><div id="seq" class="value">--</div></div>
@@ -329,7 +344,10 @@ const scenarios=%%SIMULATION_SCENARIOS%%;
 scenarios.forEach(x=>{let o=document.createElement('option');o.value=x;o.textContent=x;$('scenarioSelect').appendChild(o)});
 document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active')});
 function yn(v){return v?'aktiv':'aus'}function cls(el,state){el.className='value '+(state?'okText':'warnText')}function bytes(v){return Math.round((v||0)/1024)+' KB'}
-async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('otastatus').textContent=s.otaStatus;$('freeota').textContent=bytes(s.freeSketchSpace);$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('diaglog').textContent=(s.diagnosticLogMounted?'bereit':'nicht gemountet')+' · '+bytes(s.diagnosticLogSize)+' / '+bytes(s.diagnosticLogMaxSize);$('run').textContent=s.started?'läuft':'gestoppt';$('run').className='pill '+(s.started?(s.securityReady?'ok':'warn'):'warn');$('can').textContent=s.canState;cls($('can'),s.canActive);$('obd').textContent=s.obdState||yn(s.obdActive);cls($('obd'),s.obdActive);$('espnow').textContent=s.espNowState;cls($('espnow'),s.espNowState==='READY');$('heartbeat').textContent=s.heartbeats;$('bat').textContent=s.battery.toFixed(2)+' V';$('seq').textContent=s.seq;$('tel').textContent=s.lastTelemetry;$('pid').textContent=s.pidSupport?'bereit':'unbekannt';cls($('pid'),s.pidSupport);$('canage').textContent=(s.lastCanAge/1000).toFixed(1)+'s';$('dtc').textContent=s.lastDtc||'--';$('vin').textContent=s.lastVin||'--';$('obdReq').textContent=s.obdRequestCount;$('obdOk').textContent=s.obdValidResponseCount;$('obdTimeouts').textContent=s.obdTimeoutCount;$('obdNeg').textContent=s.obdNegativeResponseCount;$('obdSendFail').textContent=s.obdSendFailureCount;$('obdStreak').textContent=s.obdTimeoutStreak;$('obdReqId').textContent=s.obdRequestCanId;$('obdFallback').textContent=s.obdPhysicalFallbackActive?'0x7E0 aktiv':'0x7DF';$('lastObdReq').textContent=s.lastObdRequest||'--';$('lastEcuResp').textContent=s.lastEcuResponse||'--';$('lastNrc').textContent=s.lastNegativeResponse||'--';$('pidMask1').textContent=s.supportedPidMask01_20;$('pidMask2').textContent=s.supportedPidMask21_40;$('pidMask3').textContent=s.supportedPidMask41_60;$('udsAvail').textContent=s.udsAvailable?'ja':'nein';$('udsReq').textContent=s.udsRequestCount;$('udsOk').textContent=s.udsPositiveResponseCount;$('udsTimeouts').textContent=s.udsTimeoutCount;$('udsNeg').textContent=s.udsNegativeResponseCount;$('udsSendFail').textContent=s.udsSendFailureCount;$('lastUdsReq').textContent=s.lastUdsRequest||'--';$('lastUdsResp').textContent=s.lastUdsResponse||'--';$('udsDid').textContent=s.lastUdsDid||'--';$('udsDtc').textContent=s.lastUdsDtc||'--';$('udsNrc').textContent=s.lastUdsNegativeResponse||'--';$('err').textContent=s.securityWarning||s.lastSendError||s.lastError||'OK';}catch(e){$('run').textContent='offline';$('run').className='pill err'}}
+async function apiGet(url){let r=await fetch(url,{cache:'no-store',credentials:'same-origin'});if(!r.ok)throw new Error(url+' HTTP '+r.status);return r}
+async function apiPost(url){let r=await fetch(url,{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error(url+' HTTP '+r.status);return r}
+function bind(id,fn){let el=$(id);if(el)el.onclick=fn}
+async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('otastatus').textContent=s.otaStatus;$('freeota').textContent=bytes(s.freeSketchSpace);$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('diaglog').textContent=(s.diagnosticLogMounted?'bereit':'nicht gemountet')+' · '+bytes(s.diagnosticLogSize)+' / '+bytes(s.diagnosticLogMaxSize);$('run').textContent=s.started?'läuft':'gestoppt';$('run').className='pill '+(s.started?(s.securityReady?'ok':'warn'):'warn');$('can').textContent=s.canState;cls($('can'),s.canActive);$('obd').textContent=s.obdState||yn(s.obdActive);cls($('obd'),s.obdActive);$('espnow').textContent=s.espNowState;cls($('espnow'),s.espNowState==='READY');$('ledstate').textContent=s.ledState||'--';$('ledstate').className='value '+((s.ledState==='CanError'||s.ledState==='EspNowError')?'errText':(s.ledState==='VehicleOff'||s.ledState==='ObdTimeout'?'warnText':'okText'));$('ledtest').textContent=s.ledTestActive?'aktiv':'inaktiv';$('vehicleoff').textContent=s.vehicleOff?'ja':'nein';$('ledchange').textContent=s.ledLastStateChangeAt?((Math.max(0,s.uptime-s.ledLastStateChangeAt)/1000).toFixed(1)+'s'):'--';$('vehiclestate').textContent=s.vehicleState||'--';$('vehiclestate').className='value '+((s.vehicleState==='Parked'||s.vehicleState==='DisplaySleep')?'warnText':(s.vehicleState==='StartStop'?'warnText':'okText'));$('activityscore').textContent=s.activityScore;$('powercmd').textContent=s.powerCommand||'None';$('startstop').textContent=s.startStopDetected?'ja':'nein';$('parked').textContent=s.parkedDetected?'ja':'nein';$('sleeptimer').textContent=s.displaySleepDueAtMs?((Math.max(0,s.displaySleepDueAtMs-s.uptime)/1000).toFixed(0)+'s'):'--';$('heartbeat').textContent=s.heartbeats;$('bat').textContent=s.battery.toFixed(2)+' V';$('seq').textContent=s.seq;$('tel').textContent=s.lastTelemetry;$('pid').textContent=s.pidSupport?'bereit':'unbekannt';cls($('pid'),s.pidSupport);$('canage').textContent=(s.lastCanAge/1000).toFixed(1)+'s';$('dtc').textContent=s.lastDtc||'--';$('vin').textContent=s.lastVin||'--';$('obdReq').textContent=s.obdRequestCount;$('obdOk').textContent=s.obdValidResponseCount;$('obdTimeouts').textContent=s.obdTimeoutCount;$('obdNeg').textContent=s.obdNegativeResponseCount;$('obdSendFail').textContent=s.obdSendFailureCount;$('obdStreak').textContent=s.obdTimeoutStreak;$('obdReqId').textContent=s.obdRequestCanId;$('obdFallback').textContent=s.obdPhysicalFallbackActive?'0x7E0 aktiv':'0x7DF';$('lastObdReq').textContent=s.lastObdRequest||'--';$('lastEcuResp').textContent=s.lastEcuResponse||'--';$('lastNrc').textContent=s.lastNegativeResponse||'--';$('pidMask1').textContent=s.supportedPidMask01_20;$('pidMask2').textContent=s.supportedPidMask21_40;$('pidMask3').textContent=s.supportedPidMask41_60;$('udsAvail').textContent=s.udsAvailable?'ja':'nein';$('udsReq').textContent=s.udsRequestCount;$('udsOk').textContent=s.udsPositiveResponseCount;$('udsTimeouts').textContent=s.udsTimeoutCount;$('udsNeg').textContent=s.udsNegativeResponseCount;$('udsSendFail').textContent=s.udsSendFailureCount;$('lastUdsReq').textContent=s.lastUdsRequest||'--';$('lastUdsResp').textContent=s.lastUdsResponse||'--';$('udsDid').textContent=s.lastUdsDid||'--';$('udsDtc').textContent=s.lastUdsDtc||'--';$('udsNrc').textContent=s.lastUdsNegativeResponse||'--';$('err').textContent=s.securityWarning||s.lastSendError||s.lastError||'OK';}catch(e){$('run').textContent='offline';$('run').className='pill err'}}
 async function refreshLog(){try{$('logs').textContent=await fetch('/log',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
 async function loadPersistentLog(){try{$('logs').textContent=await fetch('/log/file',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
 async function refreshSimulation(){try{let s=await fetch('/api/simulation',{cache:'no-store'}).then(r=>r.json());$('sim').textContent=s.simulation?'aktiv':'inaktiv';$('sim').className='value '+(s.simulation?'okText':'warnText');$('scenario').textContent=s.scenario||'--';$('scenarioSelect').value=s.scenario||'NormalSingleFrame'}catch(e){}}
@@ -348,11 +366,12 @@ $('simOff').onclick=async()=>{await fetch('/api/simulation/off',{method:'POST'})
 $('scenarioSelect').onchange=async()=>{await fetch('/api/simulation/scenario?scenario='+encodeURIComponent($('scenarioSelect').value),{method:'POST'});refreshSimulation()}
 $('loadFileLog').onclick=loadPersistentLog
 $('loadSnapshot').onclick=loadSnapshot
-$('capObd').onclick=async()=>{await fetch('/api/capabilities/obd/start',{method:'POST'});refreshCapabilities()}
-$('capUds').onclick=async()=>{await fetch('/api/capabilities/uds/start',{method:'POST'});refreshCapabilities()}
-$('capCan').onclick=async()=>{await fetch('/api/capabilities/can/start',{method:'POST'});refreshCapabilities()}
-$('capCanBase').onclick=async()=>{await fetch('/api/capabilities/can/baseline',{method:'POST'});refreshCapabilities()}
-$('capStop').onclick=async()=>{await fetch('/api/capabilities/stop',{method:'POST'});refreshCapabilities()}
+async function runCapabilityAction(url,label){$('capMsg').textContent=label+'...';try{await apiPost(url);await refreshCapabilities()}catch(e){$('capState').textContent='Fehler';$('capState').className='value errText';$('capMsg').textContent=e.message||'Aktion fehlgeschlagen'}}
+bind('capObd',()=>runCapabilityAction('/api/capabilities/obd/start','OBD PID Scan startet'))
+bind('capUds',()=>runCapabilityAction('/api/capabilities/uds/start','UDS Scan startet'))
+bind('capCan',()=>runCapabilityAction('/api/capabilities/can/start','CAN Sniffer startet'))
+bind('capCanBase',()=>runCapabilityAction('/api/capabilities/can/baseline','CAN Baseline wird gesetzt'))
+bind('capStop',()=>runCapabilityAction('/api/capabilities/stop','Scan wird gestoppt'))
 $('clearLog').onclick=async()=>{if(confirm('Diagnose-Log wirklich löschen?')){await fetch('/api/log/clear',{method:'POST'});refreshLog();refresh()}}
 setInterval(refresh,1000);setInterval(refreshLog,1500);setInterval(refreshSimulation,1000);setInterval(refreshCapabilities,1500);refresh();refreshLog();refreshSimulation();refreshCapabilities();
 </script>
@@ -418,6 +437,19 @@ void WebConsoleHandler::handleStatus() {
     json += "\"obdActive\":" + String(s.obdActive ? "true" : "false") + ",";
     json += "\"espNowState\":\"" + jsonEscape(s.espNowState) + "\",";
     json += "\"obdState\":\"" + jsonEscape(s.obdState) + "\",";
+    json += "\"ledState\":\"" + jsonEscape(s.ledState) + "\",";
+    json += "\"ledTestActive\":" + String(s.ledTestActive ? "true" : "false") + ",";
+    json += "\"vehicleOff\":" + String(s.vehicleOff ? "true" : "false") + ",";
+    json += "\"ledLastStateChangeAt\":" + String(s.ledLastStateChangeAt) + ",";
+    json += "\"vehicleState\":\"" + jsonEscape(s.vehicleState) + "\",";
+    json += "\"activityScore\":" + String(s.activityScore) + ",";
+    json += "\"powerCommand\":\"" + jsonEscape(s.powerCommand) + "\",";
+    json += "\"startStopDetected\":" + String(s.startStopDetected ? "true" : "false") + ",";
+    json += "\"parkedDetected\":" + String(s.parkedDetected ? "true" : "false") + ",";
+    json += "\"parkedStartedAtMs\":" + String(s.parkedStartedAtMs) + ",";
+    json += "\"displaySleepDueAtMs\":" + String(s.displaySleepDueAtMs) + ",";
+    json += "\"lastWakeupAtMs\":" + String(s.lastWakeupAtMs) + ",";
+    json += "\"lastSleepAtMs\":" + String(s.lastSleepAtMs) + ",";
     json += "\"txOk\":" + String(s.telemetrySendOk) + ",";
     json += "\"txFail\":" + String(s.telemetrySendFail) + ",";
     json += "\"heartbeats\":" + String(s.heartbeatCount) + ",";

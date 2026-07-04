@@ -73,6 +73,12 @@ IsoTpSimulationSequence buildIsoTpSequence(Scenario scenario) {
         case Scenario::DisplayCriticalValues:
         case Scenario::DisplayTimeoutValues:
         case Scenario::DisplayMixedValues:
+        case Scenario::PowerRunning:
+        case Scenario::PowerStartStop:
+        case Scenario::PowerIdle:
+        case Scenario::PowerParked:
+        case Scenario::PowerDisplaySleep:
+        case Scenario::PowerWakeup:
             sequence.frames[0] = frame(0x7E8, 4, {0x03, 0x41, 0x0D, 0x64});
             sequence.frameCount = 1;
             sequence.timeoutExpected = scenario == Scenario::DisplayTimeoutValues;

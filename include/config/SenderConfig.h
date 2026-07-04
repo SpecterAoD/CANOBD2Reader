@@ -23,8 +23,8 @@ constexpr int VoltageDividerPin = 32;
 constexpr uint32_t CanBitrate = 500000;
 constexpr int PollingRateMs = 20;
 constexpr int CanIdleTimeoutMs = 500;
-constexpr int SleepPeriodSec = 6;
-constexpr uint32_t ObdPollIntervalMs = 200;
+constexpr uint32_t ObdPollIntervalMs = 100;
+constexpr std::size_t MaxObdPidsPerTick = 1;
 constexpr uint32_t ObdResponseTimeoutMs = 250;
 constexpr uint32_t ObdTxTimeoutMs = 50;
 constexpr uint32_t BatterySendIntervalMs = 3000;
@@ -39,7 +39,6 @@ constexpr uint32_t UdsResponseTimeoutMs = 350;
 constexpr uint32_t UdsResponsePendingTimeoutMs = 4000;
 constexpr bool EnablePhysicalObdFallback = true;
 constexpr uint8_t FunctionalTimeoutsBeforePhysicalFallback = 3;
-constexpr uint32_t StartStopDelayMs = 300000;
 constexpr int CpuFrequency = 80;
 
 // Persistent sender diagnostic log. This is intentionally runtime-only data
@@ -53,7 +52,6 @@ constexpr uint32_t TwaiStatusLogIntervalMs = LoggingConfig::TwaiStatusLogInterva
 constexpr std::size_t MaxCanFramesPerTick = 16;
 
 constexpr float VoltageCalcFactor = 4.81f;
-constexpr float VoltageChangeThreshold = 0.2f;
 constexpr float DefaultBarometricPressureKpa = 101.3f;
 
 constexpr std::size_t CanRxQueueLength = 32;

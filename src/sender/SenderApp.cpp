@@ -134,6 +134,14 @@ void setLastTelemetryError(const char* errorText) {
   SenderTelemetry::setLastError(String(errorText == nullptr ? "" : errorText));
 }
 
+void updateSenderLed(const Runtime::SenderLoopState& runtimeState) {
+  SenderLedButton::update(runtimeState, SenderTelemetry::lastObdResponseAt());
+}
+
+void tickPower(const Runtime::SenderLoopState& runtimeState) {
+  SenderPowerScheduler::tick(runtimeState, SenderTelemetry::lastObdResponseAt());
+}
+
 Runtime::SenderRuntimeCoordinator::Services makeCoordinatorServices() {
   Runtime::SenderRuntimeCoordinator::Services services{};
   services.handleOta = OTAHandler::handleOTA;
@@ -147,11 +155,11 @@ Runtime::SenderRuntimeCoordinator::Services makeCoordinatorServices() {
   services.processCanAlerts = processCanAlerts;
   services.setLastError = setLastTelemetryError;
   services.pulseErrorLed = SenderLedButton::pulseError;
-  services.updateLed = SenderLedButton::update;
+  services.updateLed = updateSenderLed;
   services.tickObd = tickObd;
   services.tickUds = tickUds;
   services.logTwaiStatus = CANHandler::printStatus;
-  services.tickPower = SenderPowerScheduler::tick;
+  services.tickPower = tickPower;
   return services;
 }
 

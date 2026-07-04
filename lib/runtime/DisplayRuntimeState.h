@@ -20,6 +20,11 @@ struct DisplayRuntimeState {
     uint32_t lastHeartbeatSequence = 0;
     uint32_t lastCanStatusAt = 0;
     uint32_t lastObdStatusAt = 0;
+    String vehicleState = "Booting";
+    String powerCommand = "None";
+    uint8_t activityScore = 0;
+    bool displaySleepRequested = false;
+    uint32_t lastPowerStatusAt = 0;
     String lastRawPayload = "";
     String lastError = "Keine Daten";
 

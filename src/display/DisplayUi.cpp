@@ -12,6 +12,7 @@ namespace {
   bool longPressHandled = false;
   uint32_t lastUiStatsLogMs = 0;
   bool fullPageRedraw = true;
+  bool displaySleeping = false;
   float maxRpmSinceStart = 0.0f;
   bool lastEspNowConnected = false;
 
@@ -407,6 +408,43 @@ namespace {
     drawBitmapText(valueTextX, valueTextY, normalized, valueScale, valueTextColor, DisplayConfig::Background);
   }
 
+  void drawSmallStatusCell(int x, int y, int w, const char* label, const String& value, uint16_t color) {
+    tft.fillRoundRect(x, y, w, 18, 5, DisplayConfig::Panel);
+    tft.drawRoundRect(x, y, w, 18, 5, color);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextSize(1);
+    tft.setTextColor(color, DisplayConfig::Panel);
+    String text = String(label == nullptr ? "" : label) + " " + value;
+    if (text.length() > 12) text = text.substring(0, 12);
+    tft.drawString(text, x + w / 2, y + 9);
+  }
+
+  void drawInfoLine(int y, const char* label, const String& value, uint16_t color = DisplayConfig::Text) {
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextSize(1);
+    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
+    tft.drawString(label == nullptr ? "" : label, 14, y);
+    tft.setTextColor(color, DisplayConfig::Panel);
+    String text = value;
+    if (text.length() > 31) text = text.substring(0, 31) + "...";
+    tft.drawString(text, 112, y);
+  }
+
+  String ageText(uint32_t timestampMs) {
+    if (timestampMs == 0) return "--";
+    return String((millis() - timestampMs) / 1000) + "s";
+  }
+
+  uint16_t statusColorForValue(DisplayTelemetryValue* value) {
+    if (value == nullptr) return DisplayConfig::Muted;
+    if (!DisplayData::isFresh(value)) return DisplayConfig::Warn;
+    String status = value->status;
+    status.toUpperCase();
+    if (status == "ERROR" || status == "TIMEOUT" || status == "SEND_FAIL") return DisplayConfig::Error;
+    if (status == "WARN" || status == "UNSUPPORTED") return DisplayConfig::Warn;
+    return DisplayConfig::Ok;
+  }
+
   float numericMetricValue(const char* name, bool& fresh) {
     using namespace DisplayData;
     DisplayTelemetryValue* value = findValue(String(name));
@@ -537,7 +575,7 @@ namespace {
     tft.drawString("Max seit Start: " + String(static_cast<int>(maxRpmSinceStart)) + " rpm", 16, 148);
   }
 
-  void drawMainPage() {
+  [[maybe_unused]] void drawMainPage() {
     using namespace DisplayData;
     drawMetricBox(6, 28, 150, 58, "Geschwindigkeit", displayValue("Speed", 0), valueColor("Speed"));
     drawMetricBox(164, 28, 150, 58, "Drehzahl", displayValue("RPM", 0), valueColor("RPM"));
@@ -545,7 +583,7 @@ namespace {
     drawMetricBox(164, 94, 150, 58, "Bordspannung", displayValue("BatteryVoltage", 1), valueColor("BatteryVoltage"));
   }
 
-  void drawEnginePage() {
+  [[maybe_unused]] void drawEnginePage() {
     using namespace DisplayData;
     drawMetricBox(6, 28, 150, 58, "Öltemperatur", displayValue("OilTemp", 0), valueColor("OilTemp"));
     drawMetricBox(164, 28, 150, 58, "Kühlmittel", displayValue("CoolantTemp", 0), valueColor("CoolantTemp"));
@@ -553,7 +591,7 @@ namespace {
     drawMetricBox(164, 94, 150, 58, "Ansaugluft", displayValue("IntakeTemp", 0), valueColor("IntakeTemp"));
   }
 
-  void drawConsumptionPage() {
+  [[maybe_unused]] void drawConsumptionPage() {
     using namespace DisplayData;
     drawMetricBox(6, 28, 150, 58, "Ø Verbrauch", displayValue("AverageConsumption", 1), valueColor("AverageConsumption"));
     drawMetricBox(164, 28, 150, 58, "Kraftstoffrate", displayValue("FuelRate", 1), valueColor("FuelRate"));
@@ -561,7 +599,7 @@ namespace {
     drawMetricBox(164, 94, 150, 58, "Drosselklappe", displayValue("Throttle", 0), valueColor("Throttle"));
   }
 
-  void drawAdditionalPage() {
+  [[maybe_unused]] void drawAdditionalPage() {
     using namespace DisplayData;
     drawMetricBox(6, 28, 150, 58, "MAF", displayValue("MAF", 1), valueColor("MAF"));
     drawMetricBox(164, 28, 150, 58, "Tankfüllstand", displayValue("FuelLevel", 0), valueColor("FuelLevel"));
@@ -569,7 +607,7 @@ namespace {
     drawMetricBox(164, 94, 150, 58, "Außentemp.", displayValue("AmbientTemp", 0), valueColor("AmbientTemp"));
   }
 
-  void drawDiagnosticsPage() {
+  [[maybe_unused]] void drawDiagnosticsPage() {
     using namespace DisplayData;
     uint32_t totalPackets = runtime().receivedPackets + runtime().droppedPackets;
     uint8_t quality = totalPackets == 0 ? 0 : (runtime().receivedPackets * 100UL) / totalPackets;
@@ -604,7 +642,7 @@ namespace {
     tft.drawString(line, 14, 144);
   }
 
-  void drawCANPage() {
+  [[maybe_unused]] void drawCANPage() {
     using namespace DisplayData;
     drawMetricBox(6, 28, 150, 42, "CAN Frames", displayValue("CANCount", 0), valueColor("CANCount"));
     DisplayTelemetryValue* canStatus = findValue("CAN");
@@ -629,7 +667,7 @@ namespace {
     tft.drawString(hint, 14, 140);
   }
 
-  void drawUdsDtcPage() {
+  [[maybe_unused]] void drawUdsDtcPage() {
     using namespace DisplayData;
     DisplayTelemetryValue* dtc = findValue("DTC");
     const bool dtcFresh = dtc != nullptr && millis() - dtc->updatedAt <= DisplayConfig::ValueTimeoutMs;
@@ -667,6 +705,135 @@ namespace {
     tft.drawString(age, 14, 146);
   }
 
+  void drawMainPageV2() {
+    using namespace DisplayData;
+    drawMetricBox(6, 24, 150, 52, "Geschwindigkeit", displayValue("Speed", 0), valueColor("Speed"));
+    drawMetricBox(164, 24, 150, 52, "Drehzahl", displayValue("RPM", 0), valueColor("RPM"));
+    drawMetricBox(6, 82, 150, 52, "Kuehlmittel", displayValue("CoolantTemp", 0), valueColor("CoolantTemp"));
+    drawMetricBox(164, 82, 150, 52, "Bordspannung", displayValue("BatteryVoltage", 1), valueColor("BatteryVoltage"));
+
+    DisplayTelemetryValue* canStatus = findValue("CAN");
+    DisplayTelemetryValue* obdStatus = findValue("OBD");
+    DisplayTelemetryValue* dtc = findValue("DTC");
+    const bool hasFault = dtc != nullptr && isFresh(dtc) && dtc->status == "WARN" && dtc->value != "Keine";
+    drawSmallStatusCell(6, 140, 74, "ESP", isEspNowConnected() ? "OK" : "ERR",
+                        isEspNowConnected() ? DisplayConfig::Ok : DisplayConfig::Error);
+    drawSmallStatusCell(84, 140, 74, "CAN", isCanStatusRecent() ? displayText("CAN") : "--",
+                        statusColorForValue(canStatus));
+    drawSmallStatusCell(162, 140, 74, "OBD", isObdStatusRecent() ? displayText("OBD") : "--",
+                        statusColorForValue(obdStatus));
+    drawSmallStatusCell(240, 140, 74, "DTC", hasFault ? "AKT" : (isFresh(dtc) ? "OK" : "--"),
+                        hasFault ? DisplayConfig::Warn : (isFresh(dtc) ? DisplayConfig::Ok : DisplayConfig::Muted));
+  }
+
+  void drawEnginePageV2() {
+    using namespace DisplayData;
+    drawMetricBox(6, 24, 150, 48, "Oeltemp.", displayValue("OilTemp", 0), valueColor("OilTemp"));
+    drawMetricBox(164, 24, 150, 48, "Kuehlmittel", displayValue("CoolantTemp", 0), valueColor("CoolantTemp"));
+    drawMetricBox(6, 78, 150, 48, "Motorlast", displayValue("EngineLoad", 0), valueColor("EngineLoad"));
+    drawMetricBox(164, 78, 150, 48, "Ansaugluft", displayValue("IntakeTemp", 0), valueColor("IntakeTemp"));
+    drawSmallStatusCell(6, 134, 100, "MAP", displayValue("ManifoldAbsolutePressure", 0), valueColor("ManifoldAbsolutePressure"));
+    drawSmallStatusCell(110, 134, 100, "MAF", displayValue("MAF", 1), valueColor("MAF"));
+    drawSmallStatusCell(214, 134, 100, "DK", displayValue("Throttle", 0), valueColor("Throttle"));
+  }
+
+  void drawConsumptionPageV2() {
+    using namespace DisplayData;
+    drawMetricBox(6, 24, 150, 48, "Momentan", displayValue("InstantConsumption", 1), valueColor("InstantConsumption"));
+    drawMetricBox(164, 24, 150, 48, "Durchschnitt", displayValue("AverageConsumption", 1), valueColor("AverageConsumption"));
+    drawMetricBox(6, 78, 150, 48, "Kraftstoff", displayValue("FuelRate", 1), valueColor("FuelRate"));
+    drawMetricBox(164, 78, 150, 48, "Tempo", displayValue("Speed", 0), valueColor("Speed"));
+    drawSmallStatusCell(6, 134, 150, "Laufzeit", displayValue("RunTime", 0), valueColor("RunTime"));
+    drawSmallStatusCell(164, 134, 150, "Tank", displayValue("FuelLevel", 0), valueColor("FuelLevel"));
+  }
+
+  void drawDiagnosticsPageV2() {
+    using namespace DisplayData;
+    const uint32_t totalPackets = runtime().receivedPackets + runtime().droppedPackets;
+    const uint8_t quality = totalPackets == 0 ? 0 : (runtime().receivedPackets * 100UL) / totalPackets;
+    DisplayTelemetryValue* canStatus = findValue("CAN");
+    DisplayTelemetryValue* obdStatus = findValue("OBD");
+    DisplayTelemetryValue* heartbeat = findValue("HEARTBEAT");
+
+    drawMetricBox(6, 24, 100, 38, "ESP-NOW", isEspNowConnected() ? "OK" : "ERR",
+                  isEspNowConnected() ? DisplayConfig::Ok : DisplayConfig::Error);
+    drawMetricBox(110, 24, 100, 38, "CAN", isCanStatusRecent() ? displayText("CAN") : "--",
+                  statusColorForValue(canStatus));
+    drawMetricBox(214, 24, 100, 38, "OBD", isObdStatusRecent() ? displayText("OBD") : "--",
+                  statusColorForValue(obdStatus));
+    drawMetricBox(6, 68, 150, 38, "Update", ageText(runtime().lastReceivedAt),
+                  isEspNowConnected() ? DisplayConfig::Ok : DisplayConfig::Error);
+    drawMetricBox(164, 68, 150, 38, "Heartbeat", heartbeat != nullptr ? heartbeat->value : "--",
+                  isFresh(heartbeat) ? DisplayConfig::Ok : DisplayConfig::Warn);
+
+    tft.fillRoundRect(6, 112, 308, 42, 6, DisplayConfig::Panel);
+    drawInfoLine(122, "Pakete", String(runtime().receivedPackets) + "/" + String(runtime().droppedPackets) +
+                           " Q " + String(quality) + "%");
+    drawInfoLine(140, "Firmware", String(DISPLAY_FIRMWARE_VERSION) + " Seq " + String(runtime().lastSequence));
+  }
+
+  void drawUdsDtcPageV2() {
+    using namespace DisplayData;
+    DisplayTelemetryValue* dtc = findValue("DTC");
+    DisplayTelemetryValue* udsStatus = findValue("UDS");
+    DisplayTelemetryValue* udsDtc = findValue("UDS_DTC");
+    const bool dtcFresh = isFresh(dtc);
+    const bool hasFault = dtcFresh && dtc->status == "WARN" && dtc->value != "Keine";
+
+    drawMetricBox(6, 24, 100, 38, "UDS", displayText("UDS"), statusColorForValue(udsStatus));
+    drawMetricBox(110, 24, 100, 38, "ECUs", displayText("ReachableEcus"), valueColor("ReachableEcus"));
+    drawMetricBox(214, 24, 100, 38, "Pending", displayText("UdsPending"), valueColor("UdsPending"));
+
+    tft.fillRoundRect(6, 68, 308, 86, 6, DisplayConfig::Panel);
+    String vin = displayText("VIN");
+    if (vin == "--") vin = displayText("UDS_VIN");
+    String dtcText = displayText("DTC");
+    String udsDtcText = displayText("UDS_DTC");
+    String nrc = displayText("UDS_NRC");
+    if (nrc == "--") nrc = udsStatus != nullptr ? udsStatus->value : "--";
+    drawInfoLine(78, "VIN", vin);
+    drawInfoLine(96, "OBD-DTC", dtcText, hasFault ? DisplayConfig::Warn : (dtcFresh ? DisplayConfig::Ok : DisplayConfig::Muted));
+    drawInfoLine(114, "UDS-DTC", udsDtcText, statusColorForValue(udsDtc));
+    drawInfoLine(132, "NRC/Backoff", nrc + " / " + displayText("UdsBackoff"),
+                 nrc.indexOf("0x78") >= 0 ? DisplayConfig::Warn : DisplayConfig::Text);
+  }
+
+  void drawCanSnifferPageV2() {
+    using namespace DisplayData;
+    drawMetricBox(6, 24, 100, 38, "Sniffer", displayText("CanSniffer"), valueColor("CanSniffer"));
+    drawMetricBox(110, 24, 100, 38, "Baseline", displayText("CanBaseline"), valueColor("CanBaseline"));
+    drawMetricBox(214, 24, 100, 38, "Frames", displayValue("CANCount", 0), valueColor("CANCount"));
+
+    tft.fillRoundRect(6, 68, 308, 86, 6, DisplayConfig::Panel);
+    drawInfoLine(78, "Kandidaten", displayText("CanCandidates"));
+    drawInfoLine(96, "CAN-ID", displayText("CanCandidateId"));
+    String raw = displayText("LastCAN");
+    String hint = displayText("CANHint");
+    drawInfoLine(114, "Letzter", raw);
+    drawInfoLine(132, "Hinweis", hint, DisplayConfig::Accent);
+  }
+
+  void drawAdditionalPageV2() {
+    using namespace DisplayData;
+    drawMetricBox(6, 24, 150, 48, "MAF", displayValue("MAF", 1), valueColor("MAF"));
+    drawMetricBox(164, 24, 150, 48, "MAP", displayValue("ManifoldAbsolutePressure", 0), valueColor("ManifoldAbsolutePressure"));
+    drawMetricBox(6, 78, 150, 48, "BARO", displayValue("BarometricPressure", 0), valueColor("BarometricPressure"));
+    drawMetricBox(164, 78, 150, 48, "Aussentemp.", displayValue("AmbientTemp", 0), valueColor("AmbientTemp"));
+    drawSmallStatusCell(6, 134, 150, "Steuer V", displayValue("BatteryVoltage", 1), valueColor("BatteryVoltage"));
+    drawSmallStatusCell(164, 134, 150, "Runtime", displayValue("RunTime", 0), valueColor("RunTime"));
+  }
+
+  void drawPowerPageV2() {
+    using namespace DisplayData;
+    const Runtime::DisplayRuntimeState& state = runtime();
+    drawMetricBox(6, 24, 150, 48, "Vehicle", state.vehicleState, state.displaySleepRequested ? DisplayConfig::Warn : DisplayConfig::Ok);
+    drawMetricBox(164, 24, 150, 48, "Score", String(state.activityScore), state.activityScore >= 10 ? DisplayConfig::Ok : (state.activityScore > 0 ? DisplayConfig::Warn : DisplayConfig::Muted));
+    drawMetricBox(6, 78, 150, 48, "Command", state.powerCommand, state.powerCommand == "Sleep" ? DisplayConfig::Warn : DisplayConfig::Ok);
+    drawMetricBox(164, 78, 150, 48, "Display", displaySleeping ? "Sleep" : "Running", displaySleeping ? DisplayConfig::Muted : DisplayConfig::Ok);
+    drawSmallStatusCell(6, 134, 150, "Last CAN", ageText(state.lastCanStatusAt), isCanStatusRecent() ? DisplayConfig::Ok : DisplayConfig::Warn);
+    drawSmallStatusCell(164, 134, 150, "Last OBD", ageText(state.lastObdStatusAt), isObdStatusRecent() ? DisplayConfig::Ok : DisplayConfig::Warn);
+  }
+
   void renderCurrentPage() {
     using namespace DisplayData;
     const bool pageChanged = (lastRenderedPage != currentPage);
@@ -678,14 +845,15 @@ namespace {
     drawStatusBar();
 
     switch (currentPage) {
-      case 0: drawMainPage(); break;
-      case 1: drawRpmGraphPage(); break;
-      case 2: drawEnginePage(); break;
-      case 3: drawConsumptionPage(); break;
-      case 4: drawDiagnosticsPage(); break;
-      case 5: drawUdsDtcPage(); break;
-      case 6: drawCANPage(); break;
-      case 7: drawAdditionalPage(); break;
+      case 0: drawMainPageV2(); break;
+      case 1: drawEnginePageV2(); break;
+      case 2: drawConsumptionPageV2(); break;
+      case 3: drawDiagnosticsPageV2(); break;
+      case 4: drawUdsDtcPageV2(); break;
+      case 5: drawCanSnifferPageV2(); break;
+      case 6: drawRpmGraphPage(); break;
+      case 7: drawAdditionalPageV2(); break;
+      case 8: drawPowerPageV2(); break;
     }
 
     drawFooter();
@@ -732,6 +900,7 @@ namespace DisplayUi {
       lastButtonPressed = pressed;
 
       if (pressed) {
+        runtime().displaySleepRequested = false;
         buttonPressedAt = now;
         longPressHandled = false;
       } else if (!longPressHandled && now - buttonPressedAt >= DisplayConfig::ButtonDebounceMs) {
@@ -759,6 +928,24 @@ namespace DisplayUi {
   void renderIfDue() {
     using namespace DisplayData;
     const uint32_t now = millis();
+
+    if (runtime().displaySleepRequested) {
+      if (!displaySleeping) {
+        setBacklight(DisplayConfig::BacklightSleep);
+        displaySleeping = true;
+        DiagnosticLog::appendf("[display-ui] power command sleep");
+      }
+      return;
+    }
+
+    if (displaySleeping) {
+      setBacklight(DisplayConfig::BacklightOn);
+      displaySleeping = false;
+      lastRenderedPage = 255;
+      markDirty();
+      DiagnosticLog::appendf("[display-ui] power command wakeup");
+    }
+
     const bool periodicRender = (now - lastScreenRefresh) >= DisplayConfig::ForceFullRenderMs;
     if ((renderDirty && now - lastScreenRefresh >= DisplayConfig::ScreenRefreshMs) ||
         lastRenderedPage != currentPage ||

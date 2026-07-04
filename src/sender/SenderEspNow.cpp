@@ -40,8 +40,10 @@ bool begin() {
         return false;
     }
 
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
+    // Keep the management SoftAP alive while ESP-NOW is active. Switching back
+    // to WIFI_STA here can make the sender web network disappear after boot.
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.disconnect(false, false);
 
     if (esp_now_init() != ESP_OK) {
         Logger::alarm("[ESP-NOW] Init fehlgeschlagen");

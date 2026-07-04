@@ -13,12 +13,13 @@ void reset() {
     lastBatterySendAt = 0;
 }
 
-void tick(uint32_t nowMs) {
-    SenderPower::updateCarStatus();
-    SenderPower::handleSleep();
+void tick(const Runtime::SenderLoopState& state, uint32_t lastObdResponseAt) {
+    const uint32_t nowMs = state.currentMillis;
+    SenderPower::updateActivity(state, lastObdResponseAt);
 
     if (nowMs - lastBatterySendAt > SenderConfig::BatterySendIntervalMs) {
         SenderPower::sendBatteryVoltage();
+        SenderPower::publishPowerTelemetry();
         lastBatterySendAt = nowMs;
     }
 }

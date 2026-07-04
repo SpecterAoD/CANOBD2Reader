@@ -53,13 +53,13 @@ void setLastError(const char* errorText) {
     g_coordinatorFixture.lastErrorText = errorText;
 }
 void pulseErrorLed(uint32_t) { ++g_coordinatorFixture.pulseErrorCalls; }
-void updateLed(uint32_t) { ++g_coordinatorFixture.updateLedCalls; }
+void updateLed(const Runtime::SenderLoopState&) { ++g_coordinatorFixture.updateLedCalls; }
 void tickObd(Runtime::SenderLoopState&) { ++g_coordinatorFixture.obdCalls; }
 void tickUds(Runtime::SenderLoopState&) { ++g_coordinatorFixture.udsCalls; }
 void logTwaiStatus() { ++g_coordinatorFixture.twaiLogCalls; }
-void tickPower(uint32_t nowMs) {
+void tickPower(const Runtime::SenderLoopState& state) {
     ++g_coordinatorFixture.powerCalls;
-    g_coordinatorFixture.lastPowerTickAt = nowMs;
+    g_coordinatorFixture.lastPowerTickAt = state.currentMillis;
 }
 
 Runtime::SenderRuntimeCoordinator makeCoordinator() {

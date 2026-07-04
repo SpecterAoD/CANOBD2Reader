@@ -20,7 +20,12 @@ constexpr const char* ApiToken = Secrets::ApiToken;
 constexpr bool RequireOtaAuthentication = true;
 constexpr bool RequireSimulationAuthentication = true;
 constexpr bool RequireRestartAuthentication = true;
-constexpr bool BlockNetworkFeaturesOnPlaceholderSecrets = true;
+// Temporary commissioning mode:
+// false allows sender/display WLAN and ESP-NOW to start even when the build
+// falls back to include/secrets.example.h. This is useful while debugging
+// first-boot connectivity, but it exposes the web UI with documented example
+// credentials. Set this back to true for normal use with real include/secrets.h.
+constexpr bool BlockNetworkFeaturesOnPlaceholderSecrets = false;
 constexpr bool RejectOtaWhenSketchSpaceUnknown = true;
 // Web-OTA cannot safely infer the PlatformIO environment from a raw ESP32 image.
 // Requiring a target-specific filename catches accidental sender/display swaps

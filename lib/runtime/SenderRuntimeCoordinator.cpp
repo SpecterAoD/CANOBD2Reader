@@ -19,9 +19,10 @@ void SenderRuntimeCoordinator::tick(uint32_t nowMs) {
 
     if (services_.handleOta != nullptr) services_.handleOta();
     if (services_.handleWeb != nullptr) services_.handleWeb();
-    if (services_.updateWebStatus != nullptr) services_.updateWebStatus(state_);
     if (services_.updateLedTestButton != nullptr) services_.updateLedTestButton();
     if (services_.sendHeartbeat != nullptr) services_.sendHeartbeat(state_);
+    if (services_.updateLed != nullptr) services_.updateLed(state_);
+    if (services_.updateWebStatus != nullptr) services_.updateWebStatus(state_);
 
     if (services_.simulationEnabled != nullptr && services_.simulationEnabled()) {
         if (services_.tickSimulation != nullptr) services_.tickSimulation(state_.currentMillis);
@@ -50,7 +51,8 @@ void SenderRuntimeCoordinator::tick(uint32_t nowMs) {
         }
     }
 
-    if (services_.updateLed != nullptr) services_.updateLed(state_.currentMillis);
+    if (services_.tickPower != nullptr) services_.tickPower(state_);
+
     if (services_.tickObd != nullptr) services_.tickObd(state_);
     if (services_.tickUds != nullptr) services_.tickUds(state_);
 
@@ -59,8 +61,6 @@ void SenderRuntimeCoordinator::tick(uint32_t nowMs) {
         if (services_.logTwaiStatus != nullptr) services_.logTwaiStatus();
         state_.lastTwaiStatusLogAt = state_.currentMillis;
     }
-
-    if (services_.tickPower != nullptr) services_.tickPower(state_.currentMillis);
 }
 
 } // namespace Runtime

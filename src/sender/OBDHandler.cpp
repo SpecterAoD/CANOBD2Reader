@@ -111,6 +111,16 @@ void OBD2Handler::calcConsumption(uint8_t pid, float value) {
     }
 }
 
+namespace {
+void updateActivityMetrics(uint8_t pid, float value) {
+    if (pid == ENGINE_RPM) Runtime::SenderRuntimeState::updateRpm(value);
+    if (pid == VEHICLE_SPEED) Runtime::SenderRuntimeState::updateSpeed(value);
+    if (pid == ENGINE_LOAD) Runtime::SenderRuntimeState::updateEngineLoad(value);
+    if (pid == THROTTLE_POSITION) Runtime::SenderRuntimeState::updateThrottle(value);
+    if (pid == ENGINE_FUEL_RATE) Runtime::SenderRuntimeState::updateFuelRate(value);
+}
+}
+
 void OBD2Handler::updateBoostPressure(uint8_t pid, float value) {
     if (pid == INTAKE_MANIFOLD_ABS_PRESSURE) {
         lastMapKpa = value;
@@ -144,6 +154,7 @@ bool OBD2Handler::requestAndSendPID(uint8_t pid) {
             Utils::sendRawOBDData(pid, responseData, responseLen);
         } else {
             PIDResult result = convertPID(pid, responseData, responseLen);
+            updateActivityMetrics(pid, result.value);
 
             if (pid == VEHICLE_SPEED || pid == ENGINE_FUEL_RATE) {
                 calcConsumption(pid, result.value);

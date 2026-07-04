@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "SenderLoopState.h"
+
 namespace SenderPowerScheduler {
 
 void reset();
@@ -10,6 +12,6 @@ void reset();
 /// - updates vehicle/running state from battery voltage
 /// - evaluates deep-sleep conditions
 /// - publishes the periodic battery voltage telemetry
-void tick(uint32_t nowMs);
+void tick(const Runtime::SenderLoopState& state, uint32_t lastObdResponseAt);
 
 } // namespace SenderPowerScheduler

@@ -31,13 +31,14 @@ void test_api_token_config_is_present_and_checked() {
     TEST_ASSERT_FALSE(WebSecurity::isConfiguredToken(nullptr));
 }
 
-void test_placeholder_secret_guards_are_reported() {
-    TEST_ASSERT_TRUE(WebSecurity::senderManagementSecurityWarning().length() > 0);
-    TEST_ASSERT_TRUE(WebSecurity::displayManagementSecurityWarning().length() > 0);
-    TEST_ASSERT_TRUE(WebSecurity::espNowSecurityWarning().length() > 0);
-    TEST_ASSERT_FALSE(WebSecurity::senderManagementConfigurationSafe());
-    TEST_ASSERT_FALSE(WebSecurity::displayManagementConfigurationSafe());
-    TEST_ASSERT_FALSE(WebSecurity::espNowConfigurationSafe());
+void test_placeholder_secret_guard_mode_is_explicit() {
+    TEST_ASSERT_FALSE(SecurityConfig::BlockNetworkFeaturesOnPlaceholderSecrets);
+    TEST_ASSERT_EQUAL(0, WebSecurity::senderManagementSecurityWarning().length());
+    TEST_ASSERT_EQUAL(0, WebSecurity::displayManagementSecurityWarning().length());
+    TEST_ASSERT_EQUAL(0, WebSecurity::espNowSecurityWarning().length());
+    TEST_ASSERT_TRUE(WebSecurity::senderManagementConfigurationSafe());
+    TEST_ASSERT_TRUE(WebSecurity::displayManagementConfigurationSafe());
+    TEST_ASSERT_TRUE(WebSecurity::espNowConfigurationSafe());
 }
 
 void test_ota_target_filename_guard() {
@@ -75,7 +76,7 @@ int main(int, char**) {
     RUN_TEST(test_constant_time_equals);
     RUN_TEST(test_authentication_config_is_present);
     RUN_TEST(test_api_token_config_is_present_and_checked);
-    RUN_TEST(test_placeholder_secret_guards_are_reported);
+    RUN_TEST(test_placeholder_secret_guard_mode_is_explicit);
     RUN_TEST(test_ota_target_filename_guard);
     RUN_TEST(test_ota_metadata_markers_can_be_found_in_binary_data);
     return UNITY_END();

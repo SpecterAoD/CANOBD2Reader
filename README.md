@@ -275,6 +275,29 @@ Aktuelle WLAN-/OTA-Werte werden nicht mehr fest im Repository gepflegt. Für ech
 
 ESP-NOW nutzt zentral `NetworkConfig::EspNowChannel`. Wenn Web-OTA/AP und ESP-NOW parallel laufen, müssen beide Geräte auf demselben Kanal bleiben.
 
+### Vorlaeufiger Debug-Modus mit `secrets.example.h`
+
+Fuer die aktuelle Inbetriebnahme ist in `include/config/SecurityConfig.h`
+vorlaeufig gesetzt:
+
+```cpp
+SecurityConfig::BlockNetworkFeaturesOnPlaceholderSecrets = false
+```
+
+Damit starten Sender- und Display-WLAN sowie ESP-NOW auch dann, wenn noch keine
+lokale `include/secrets.h` existiert und der Build auf `include/secrets.example.h`
+zurueckfaellt. Das ist nuetzlich, um nach dem Flashen die Weboberflaechen und
+ESP-NOW-Verbindung ueberhaupt testen zu koennen.
+
+Wichtig: Dieser Modus ist nur fuer Debug/Inbetriebnahme gedacht. Die Beispiel-
+Passwoerter aus `secrets.example.h` sind bekannt und duerfen im normalen Betrieb
+nicht verwendet werden. Fuer reale Nutzung:
+
+1. `include/secrets.example.h` nach `include/secrets.h` kopieren.
+2. AP-Passwoerter, Web-Passwort, API-Token und ESP-NOW-Key aendern.
+3. Sender-/Display-MAC-Adressen pruefen.
+4. `BlockNetworkFeaturesOnPlaceholderSecrets` wieder auf `true` setzen.
+
 ### Hinweis: Display bleibt nach Upload schwarz
 
 Beim LilyGO T-Display S3 wird die Displayversorgung auf vielen Revisionen über GPIO 15 eingeschaltet. Dieser Wert ist jetzt zentral gesetzt:
@@ -612,6 +635,17 @@ Aktuell abgedeckt:
 
 ## Display-Seiten
 
+Aktuelle Firmware-Reihenfolge:
+
+1. Hauptanzeige
+2. Motorwerte
+3. Verbrauch / Trip
+4. Diagnose kompakt
+5. UDS / Fehlercodes
+6. CAN-Sniffer
+7. RPM-Bogen
+8. Zusatzwerte
+
 1. Hauptanzeige: Geschwindigkeit, Drehzahl, Kühlmitteltemperatur, Batteriespannung
 2. Motorwerte: Öltemperatur, Kühlmitteltemperatur, Motorlast, Ansauglufttemperatur
 3. Verbrauch: Durchschnittsverbrauch, Kraftstoffrate, Geschwindigkeit, Drosselklappe
@@ -686,6 +720,12 @@ Unterstuetzte ISO-TP-/OBD-Szenarien:
 - `DisplayCriticalValues`
 - `DisplayTimeoutValues`
 - `DisplayMixedValues`
+- `PowerRunning`
+- `PowerStartStop`
+- `PowerIdle`
+- `PowerParked`
+- `PowerDisplaySleep`
+- `PowerWakeup`
 
 Die Display-Farben werden zentral ueber eine Severity-Logik abgeleitet:
 
@@ -721,6 +761,74 @@ Sender-Button:
 - losgelassen: normaler LED-Modus
 - entprellt und ohne blockierende Delays
 
+Sender-LEDs:
+
+- `LedPin1` ist die grüne Betriebs-LED. Sie bedeutet primär: Sender-Firmware lebt.
+- `LedPin2` ist die Fehler-/Status-LED.
+- Die LED-Statusmaschine liegt zentral in `lib/status/SenderLedController.*`; direkte LED-Pin-Schreibzugriffe sollen nur im Sender-LED-Hardwarewrapper erfolgen.
+- Nach echtem CAN-Verkehr und anschließendem CAN-Idle wechselt der Status auf `VehicleOff`. Sobald wieder CAN-Verkehr oder OBD-Antworten eintreffen, schaltet der Controller zurück auf `CanActive`/`ObdActive` und die grüne LED geht wieder an.
+- Die Sender-WebConsole zeigt den aktuellen LED-Zustand, LED-Test aktiv/inaktiv, `VehicleOff` und den letzten LED-Zustandswechsel im Statusbereich und in `/status`.
+
+## Power Management / Start-Stopp
+
+Der Sender entscheidet zentral ueber den Fahrzeug-Energiezustand. Moderne Start-Stopp-Fahrzeuge werden nicht nur ueber Drehzahl oder Bordspannung bewertet, sondern ueber einen Activity Score aus CAN, OBD, RPM, Geschwindigkeit, Batteriespannung, Motorlast, Drosselklappe, Benutzeraktivitaet und Simulation.
+
+Zustaende:
+
+- `Booting`: Firmware startet.
+- `Running`: Motor laeuft oder Fahrzeug bewegt sich.
+- `StartStop`: RPM = 0 und Geschwindigkeit = 0, aber CAN, OBD und Bordnetz sind aktiv.
+- `Idle`: Fahrzeug steht, Bus/OBD/Bordnetz sind noch aktiv; Display bleibt wach.
+- `Parked`: CAN und OBD sind laenger als `PowerConfig::ParkDetectionTimeoutMs` inaktiv.
+- `DisplaySleep`: erst nach `Parked` plus `PowerConfig::DisplaySleepAfterMs`.
+
+Wichtig fuer Fahrzeuge mit Start-Stopp: `StartStop` startet keinen Display-Sleep-Timer. OBD-Abfragen und ESP-NOW-Heartbeat laufen weiter.
+
+Konfiguration:
+
+- `include/config/PowerConfig.h`
+- aktives Profil aktuell: `PowerConfig::VehiclePowerProfile::VolkswagenMQBEvo`
+- `ParkDetectionTimeoutMs = 5 Minuten`
+- `DisplaySleepAfterMs = 10 Minuten`
+
+Datenfluss:
+
+```text
+CAN / OBD / Werte / Benutzeraktivitaet
+              |
+              v
+        ActivityMonitor
+              |
+              v
+         VehicleState
+              |
+              v
+       PowerCommand via ESP-NOW
+              |
+              v
+        Display Power Page
+```
+
+Sender-WebConsole:
+
+- Statuskarte `Power Manager`
+- `/status` Felder: `vehicleState`, `activityScore`, `powerCommand`, `startStopDetected`, `parkedDetected`, `displaySleepDueAtMs`
+
+Display:
+
+- Seite `Power Management`
+- zeigt VehicleState, Activity Score, PowerCommand, Display-Zustand sowie letzte CAN-/OBD-Aktivitaet.
+- Bei `POWER_COMMAND=Sleep` wird das Backlight ausgeschaltet und die UI pausiert.
+- Bei `POWER_COMMAND=Wakeup` oder Display-Tastendruck wird das Display wieder aktiviert.
+
+Power-Simulationsszenarien:
+
+- `PowerRunning`
+- `PowerStartStop`
+- `PowerIdle`
+- `PowerParked`
+- `PowerDisplaySleep`
+- `PowerWakeup`
 ## Sicherheit und lokale Secrets
 
 Sensible Werte liegen nicht mehr direkt in `Config.h`. Das Repository enthält

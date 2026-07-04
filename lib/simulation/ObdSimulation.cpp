@@ -11,9 +11,13 @@ float displayScenarioValue(const SimulationData::Sample& sample, Scenario scenar
     const bool warning = scenario == Scenario::DisplayWarningValues;
     const bool critical = scenario == Scenario::DisplayCriticalValues;
     const bool mixed = scenario == Scenario::DisplayMixedValues;
+    const bool powerStartStop = scenario == Scenario::PowerStartStop;
+    const bool powerIdle = scenario == Scenario::PowerIdle || scenario == Scenario::PowerParked || scenario == Scenario::PowerDisplaySleep;
 
-    if (std::strcmp(sample.name, "Speed") == 0) return mixed ? 72.0f : 88.0f;
+    if (std::strcmp(sample.name, "Speed") == 0) return (powerStartStop || powerIdle) ? 0.0f : (mixed ? 72.0f : 88.0f);
     if (std::strcmp(sample.name, "RPM") == 0) {
+        if (powerStartStop || powerIdle) return 0.0f;
+        if (scenario == Scenario::PowerRunning || scenario == Scenario::PowerWakeup) return 1800.0f;
         if (critical) return 5100.0f;
         if (warning || mixed) return 4300.0f;
         return normal ? 2500.0f : 2200.0f;
@@ -24,6 +28,7 @@ float displayScenarioValue(const SimulationData::Sample& sample, Scenario scenar
         return 85.0f;
     }
     if (std::strcmp(sample.name, "BatteryVoltage") == 0) {
+        if (powerStartStop || powerIdle) return 12.4f;
         if (critical) return 11.0f;
         if (warning) return 11.7f;
         if (mixed) return 13.8f;
@@ -110,6 +115,12 @@ const char* scenarioDiagnosticText(Scenario scenario) {
         case Scenario::DisplayCriticalValues: return "Display color test: critical values";
         case Scenario::DisplayTimeoutValues: return "Display color test: timeout values";
         case Scenario::DisplayMixedValues: return "Display color test: mixed severities";
+        case Scenario::PowerRunning: return "Power test: vehicle running";
+        case Scenario::PowerStartStop: return "Power test: start-stop active";
+        case Scenario::PowerIdle: return "Power test: idle without sleep";
+        case Scenario::PowerParked: return "Power test: parked";
+        case Scenario::PowerDisplaySleep: return "Power test: display sleep command";
+        case Scenario::PowerWakeup: return "Power test: wakeup command";
     }
     return "Unknown";
 }

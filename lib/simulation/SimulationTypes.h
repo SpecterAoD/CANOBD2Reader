@@ -18,7 +18,13 @@ enum class Scenario : uint8_t {
     DisplayWarningValues,
     DisplayCriticalValues,
     DisplayTimeoutValues,
-    DisplayMixedValues
+    DisplayMixedValues,
+    PowerRunning,
+    PowerStartStop,
+    PowerIdle,
+    PowerParked,
+    PowerDisplaySleep,
+    PowerWakeup
 };
 
 constexpr const char* scenarioName(Scenario scenario) {
@@ -37,6 +43,12 @@ constexpr const char* scenarioName(Scenario scenario) {
         case Scenario::DisplayCriticalValues: return "DisplayCriticalValues";
         case Scenario::DisplayTimeoutValues: return "DisplayTimeoutValues";
         case Scenario::DisplayMixedValues: return "DisplayMixedValues";
+        case Scenario::PowerRunning: return "PowerRunning";
+        case Scenario::PowerStartStop: return "PowerStartStop";
+        case Scenario::PowerIdle: return "PowerIdle";
+        case Scenario::PowerParked: return "PowerParked";
+        case Scenario::PowerDisplaySleep: return "PowerDisplaySleep";
+        case Scenario::PowerWakeup: return "PowerWakeup";
     }
     return "NormalSingleFrame";
 }

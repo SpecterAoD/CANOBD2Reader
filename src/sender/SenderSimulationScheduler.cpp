@@ -17,6 +17,36 @@
 namespace {
 uint32_t lastSimulationSendAt = 0;
 size_t simulationSampleIndex = 0;
+
+const char* simulatedPowerState(Simulation::Scenario scenario) {
+    switch (scenario) {
+        case Simulation::Scenario::PowerRunning: return "Running";
+        case Simulation::Scenario::PowerStartStop: return "StartStop";
+        case Simulation::Scenario::PowerIdle: return "Idle";
+        case Simulation::Scenario::PowerParked: return "Parked";
+        case Simulation::Scenario::PowerDisplaySleep: return "DisplaySleep";
+        case Simulation::Scenario::PowerWakeup: return "Running";
+        default: return "Running";
+    }
+}
+
+const char* simulatedPowerCommand(Simulation::Scenario scenario) {
+    if (scenario == Simulation::Scenario::PowerDisplaySleep) return "Sleep";
+    if (scenario == Simulation::Scenario::PowerWakeup) return "Wakeup";
+    return "None";
+}
+
+const char* simulatedActivityScore(Simulation::Scenario scenario) {
+    switch (scenario) {
+        case Simulation::Scenario::PowerRunning: return "17";
+        case Simulation::Scenario::PowerStartStop: return "12";
+        case Simulation::Scenario::PowerIdle: return "6";
+        case Simulation::Scenario::PowerParked: return "0";
+        case Simulation::Scenario::PowerDisplaySleep: return "0";
+        case Simulation::Scenario::PowerWakeup: return "17";
+        default: return "12";
+    }
+}
 }
 
 namespace SenderSimulationScheduler {
@@ -57,6 +87,9 @@ void tick(uint32_t nowMs) {
                                 isoTp.timeoutExpected ? "TIMEOUT" : "SIMULATED",
                                 isoTp.timeoutExpected ? "TIMEOUT" : "OK");
     SenderTelemetry::sendStatus("SIM", Simulation::RuntimeSimulation::enabled() ? "ACTIVE" : "INACTIVE", "OK");
+    SenderTelemetry::sendStatus("POWER_STATE", simulatedPowerState(scenario), "OK");
+    SenderTelemetry::sendStatus("ACTIVITY_SCORE", simulatedActivityScore(scenario), "OK");
+    SenderTelemetry::sendStatus("POWER_COMMAND", simulatedPowerCommand(scenario), "OK");
     SenderTelemetry::send("STATUS", "SIM_SCENARIO", "SimScenario",
                           Simulation::RuntimeSimulation::scenarioName(), "", "OK");
     SenderTelemetry::send("STATUS", "SIM_DETAIL", "SimDetail",

@@ -18,6 +18,7 @@ uint32_t lastSupportedPidRefreshAt = 0;
 uint32_t lastDtcQueryAt = 0;
 uint32_t lastVinQueryAt = 0;
 bool supportedInitialized = false;
+std::size_t nextPidIndex = 0;
 uint32_t supportedPids01_20 = 0;
 uint32_t supportedPids21_40 = 0;
 uint32_t supportedPids41_60 = 0;
@@ -200,6 +201,7 @@ void reset() {
     lastDtcQueryAt = 0;
     lastVinQueryAt = 0;
     supportedInitialized = false;
+    nextPidIndex = 0;
     supportedPids01_20 = 0;
     supportedPids21_40 = 0;
     supportedPids41_60 = 0;
@@ -216,6 +218,7 @@ void tick(uint32_t nowMs,
           SenderCallbacks::SendStatus sendStatus) {
     if (!SenderConfig::EnableOBD2) return;
     if (nowMs - lastObdPollAt < SenderConfig::ObdPollIntervalMs) return;
+    lastObdPollAt = nowMs;
 
     canBusActive = (nowMs - lastCanMessageAt) <= SenderConfig::CanIdleTimeoutMs;
     if (sendStatus != nullptr) {
@@ -229,14 +232,21 @@ void tick(uint32_t nowMs,
     }
 
     if (supportedInitialized) {
-        for (size_t i = 0; i < ObdConfig::ObdPidCount; ++i) {
-            const byte pid = ObdConfig::RequestedPids[i];
+        std::size_t queriedPids = 0;
+        std::size_t inspectedPids = 0;
+        while (inspectedPids < ObdConfig::ObdPidCount &&
+               queriedPids < SenderConfig::MaxObdPidsPerTick) {
+            const std::size_t pidIndex = nextPidIndex;
+            nextPidIndex = (nextPidIndex + 1) % ObdConfig::ObdPidCount;
+            ++inspectedPids;
+
+            const byte pid = ObdConfig::RequestedPids[pidIndex];
             if (!isPidSupported(pid)) {
-                if (!unsupportedPidReported[i] && sendTelemetry != nullptr) {
+                if (!unsupportedPidReported[pidIndex] && sendTelemetry != nullptr) {
                     char pidHex[4];
                     snprintf(pidHex, sizeof(pidHex), "%02X", pid);
                     sendTelemetry("OBD", pidHex, getPIDName(pid), "N/A", "", "UNSUPPORTED");
-                    unsupportedPidReported[i] = true;
+                    unsupportedPidReported[pidIndex] = true;
                 }
                 continue;
             }
@@ -246,6 +256,7 @@ void tick(uint32_t nowMs,
                 lastCanMessageAt = nowMs;
                 canBusActive = true;
             }
+            ++queriedPids;
         }
     } else if (sendStatus != nullptr) {
         sendStatus("OBD", "PID_SUPPORT_TIMEOUT", "WARN");
@@ -260,8 +271,6 @@ void tick(uint32_t nowMs,
         queryAndSendVin(nowMs, lastCanMessageAt, lastObdResponseAt, canBusActive, sendTelemetry);
         lastVinQueryAt = nowMs;
     }
-
-    lastObdPollAt = nowMs;
 }
 
 bool supportedPidsInitialized() {

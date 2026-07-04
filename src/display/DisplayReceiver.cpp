@@ -131,6 +131,17 @@ void parseTelemetryPayload(const char* payload, uint32_t sequence) {
       runtime().lastCanStatusAt = millis();
     } else if (key == "OBD") {
       runtime().lastObdStatusAt = millis();
+    } else if (key == "POWER_STATE") {
+      runtime().vehicleState = value;
+      runtime().lastPowerStatusAt = millis();
+    } else if (key == "ACTIVITY_SCORE") {
+      runtime().activityScore = static_cast<uint8_t>(value.toInt());
+      runtime().lastPowerStatusAt = millis();
+    } else if (key == "POWER_COMMAND") {
+      runtime().powerCommand = value;
+      runtime().displaySleepRequested = value == "Sleep";
+      if (value == "Wakeup") runtime().displaySleepRequested = false;
+      runtime().lastPowerStatusAt = millis();
     }
   }
   runtime().lastRawPayload = raw;
@@ -208,6 +219,9 @@ void begin() {
     return;
   }
 
+  // Keep Display Web-OTA SoftAP visible while the ESP-NOW receiver is active.
+  // The station side is disconnected only from infrastructure WiFi; SoftAP
+  // remains up on NetworkConfig::EspNowChannel.
   WiFi.mode(CANOBD2_ENABLE_DISPLAY_OTA ? WIFI_AP_STA : WIFI_STA);
   WiFi.disconnect(false, false);
 
