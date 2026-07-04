@@ -89,6 +89,8 @@ void WebConsoleHandler::begin() {
     server.on("/api/capabilities/uds/start", HTTP_POST, handleCapabilitiesUdsStart);
     server.on("/api/capabilities/can/start", HTTP_POST, handleCapabilitiesCanStart);
     server.on("/api/capabilities/can/baseline", HTTP_POST, handleCapabilitiesCanBaseline);
+    server.on("/api/capabilities/can/action/start", HTTP_POST, handleCapabilitiesCanActionStart);
+    server.on("/api/capabilities/can/action/finish", HTTP_POST, handleCapabilitiesCanActionFinish);
     server.on("/api/capabilities/stop", HTTP_POST, handleCapabilitiesStop);
     server.on("/update", HTTP_GET, handleUpdatePage);
     server.on("/update", HTTP_POST, handleUpdateFinished, handleUpdateUpload);
@@ -322,11 +324,11 @@ Timeouts: <span id="udsTimeouts">--</span> · Negative: <span id="udsNeg">--</sp
 <div class="card wide"><div class="label">Fehlerstatus</div><div id="err" class="small">--</div></div>
 </div></section>
 <section id="cap" class="page"><div class="grid">
-<div class="card wide"><div class="label">Capabilities</div><div id="capState" class="value">--</div><div class="small" id="capMsg">--</div><div class="actions"><button id="capObd" class="primary">OBD PID Scan starten</button><button id="capUds" class="primary">UDS Scan starten</button><button id="capCan">CAN Sniffer starten</button><button id="capCanBase">CAN Baseline neu</button><button id="capStop" class="danger">Scan stoppen</button><a class="btn primary" href="/api/capabilities/export.json">Export JSON</a></div></div>
+<div class="card wide"><div class="label">Capabilities</div><div id="capState" class="value">--</div><div class="small" id="capMsg">--</div><div class="actions"><button id="capObd" class="primary">OBD PID Scan starten</button><button id="capUds" class="primary">UDS Scan starten</button><button id="capCan">CAN Signal-Finder starten</button><button id="capCanBase">Baseline aufnehmen</button><button id="capCanAction">Aktion starten</button><button id="capCanFinish">Aktion stoppen / analysieren</button><button id="capStop" class="danger">Scan stoppen</button><a class="btn primary" href="/api/capabilities/export.json">Export JSON</a></div></div>
 <div class="card wide"><div class="label">OBD PID Ergebnis</div><div class="small">Unterstuetzte PIDs werden testweise abgefragt. Nicht unterstuetzte PIDs bleiben grau, Timeouts orange/rot.</div><div style="overflow:auto"><table><thead><tr><th>PID</th><th>Name</th><th>Support</th><th>Antwort</th><th>Wert</th><th>Einheit</th><th>ms</th><th>Status</th></tr></thead><tbody id="capObdRows"></tbody></table></div></div>
 <div class="card wide"><div class="label">UDS ECUs</div><div style="overflow:auto"><table><thead><tr><th>ECU</th><th>Antwort</th><th>Erreichbar</th><th>UDS</th><th>Name</th></tr></thead><tbody id="capEcuRows"></tbody></table></div></div>
 <div class="card wide"><div class="label">UDS DID / ECU Infos</div><div style="overflow:auto"><table><thead><tr><th>ECU</th><th>DID</th><th>Name</th><th>Wert</th><th>Status</th></tr></thead><tbody id="capDidRows"></tbody></table></div></div>
-<div class="card wide"><div class="label">CAN Sniffer Kandidaten</div><div class="small">Passiv ueber CanRouter gesammelt. Zum Finden von Ereignissen: Zustand A starten, Ereignis ausloesen, geaenderte Bytes/Bits vergleichen.</div><div style="overflow:auto"><table><thead><tr><th>ID</th><th>Byte</th><th>Vorher</th><th>Nachher</th><th>Maske</th><th>Wechsel</th></tr></thead><tbody id="capCanRows"></tbody></table></div></div>
+<div class="card wide"><div class="label">CAN Signal-Finder Kandidaten</div><div class="small">Passiv ueber CanRouter: erst Baseline aufnehmen, dann Aktion starten, Ereignis im Fahrzeug ausloesen und danach analysieren.</div><div style="overflow:auto"><table><thead><tr><th>ID</th><th>Byte</th><th>Vorher</th><th>Nachher</th><th>Maske</th><th>Wechsel</th><th>%</th></tr></thead><tbody id="capCanRows"></tbody></table></div></div>
 <div class="card wide"><div class="label">Rohdaten</div><pre id="capRaw">Noch kein Scan geladen.</pre></div>
 </div></section>
 <section id="log" class="page"><div class="grid">
@@ -356,8 +358,8 @@ function cell(v,c=''){return '<td class="'+c+'">'+String(v??'--')+'</td>'}
 function rowsObd(pids){return (pids||[]).map(p=>'<tr>'+cell(p.pid)+cell(p.name)+cell(p.supportedByMask?'ja':'nein')+cell(p.responded?'ja':'nein')+cell(p.exampleValue)+cell(p.unit)+cell(p.responseTimeMs)+cell(p.status,'status-'+p.status)+'</tr>').join('')||'<tr><td colspan="8">Noch keine OBD Ergebnisse</td></tr>'}
 function rowsEcu(ecus){return (ecus||[]).map(e=>'<tr>'+cell(e.requestId)+cell(e.responseId)+cell(e.reachable?'ja':'nein')+cell(e.supportsUds?'ja':'nein')+cell(e.ecuName)+'</tr>').join('')||'<tr><td colspan="5">Noch keine UDS Ergebnisse</td></tr>'}
 function rowsDid(dids){return (dids||[]).map(d=>'<tr>'+cell(d.ecu)+cell(d.did)+cell(d.name)+cell(d.value)+cell(d.status,'status-'+d.status)+'</tr>').join('')||'<tr><td colspan="5">Noch keine DID Ergebnisse</td></tr>'}
-function rowsCan(cands){return (cands||[]).map(c=>'<tr>'+cell(c.canId)+cell(c.byteIndex)+cell(c.before)+cell(c.after)+cell(c.changedBitMask)+cell(c.changeCount)+'</tr>').join('')||'<tr><td colspan="6">Noch keine CAN Kandidaten</td></tr>'}
-async function refreshCapabilities(){try{let c=await fetch('/api/capabilities/status',{cache:'no-store'}).then(r=>r.json());$('capState').textContent=c.scan+' / '+c.state;$('capState').className='value '+(c.active?'warnText':(c.state==='COMPLETED'?'okText':''));$('capMsg').textContent=(c.message||'--')+(c.canSniffer?' · CAN Frames: '+c.canSniffer.frames+' · Kandidaten: '+c.canSniffer.candidateCount:'');$('capObdRows').innerHTML=rowsObd(c.obd&&c.obd.pids);$('capEcuRows').innerHTML=rowsEcu(c.uds&&c.uds.ecus);$('capDidRows').innerHTML=rowsDid(c.uds&&c.uds.dids);$('capCanRows').innerHTML=rowsCan(c.canSniffer&&c.canSniffer.candidates);$('capRaw').textContent=JSON.stringify(c,null,2)}catch(e){$('capState').textContent='offline';$('capState').className='value errText'}}
+function rowsCan(cands){return (cands||[]).map(c=>'<tr>'+cell(c.canId)+cell(c.byteIndex)+cell(c.before)+cell(c.after)+cell(c.changedBitMask)+cell(c.changeCount)+cell(c.confidence)+'</tr>').join('')||'<tr><td colspan="7">Noch keine CAN Kandidaten</td></tr>'}
+async function refreshCapabilities(){try{let c=await fetch('/api/capabilities/status',{cache:'no-store'}).then(r=>r.json());$('capState').textContent=c.scan+' / '+c.state;$('capState').className='value '+(c.active?'warnText':(c.state==='COMPLETED'?'okText':''));$('capMsg').textContent=(c.message||'--')+(c.canSniffer?' · Phase: '+c.canSniffer.phase+' · CAN Frames: '+c.canSniffer.frames+' · Kandidaten: '+c.canSniffer.candidateCount:'');$('capObdRows').innerHTML=rowsObd(c.obd&&c.obd.pids);$('capEcuRows').innerHTML=rowsEcu(c.uds&&c.uds.ecus);$('capDidRows').innerHTML=rowsDid(c.uds&&c.uds.dids);$('capCanRows').innerHTML=rowsCan(c.canSniffer&&c.canSniffer.candidates);$('capRaw').textContent=JSON.stringify(c,null,2)}catch(e){$('capState').textContent='offline';$('capState').className='value errText'}}
 $('start').onclick=async()=>{await fetch('/start',{method:'POST'});refresh()}
 $('restart').onclick=async()=>{if(confirm('Sender wirklich neu starten?'))await fetch('/api/restart',{method:'POST'})}
 $('simToggle').onclick=async()=>{await fetch('/api/simulation/toggle',{method:'POST'});refreshSimulation()}
@@ -369,8 +371,10 @@ $('loadSnapshot').onclick=loadSnapshot
 async function runCapabilityAction(url,label){$('capMsg').textContent=label+'...';try{await apiPost(url);await refreshCapabilities()}catch(e){$('capState').textContent='Fehler';$('capState').className='value errText';$('capMsg').textContent=e.message||'Aktion fehlgeschlagen'}}
 bind('capObd',()=>runCapabilityAction('/api/capabilities/obd/start','OBD PID Scan startet'))
 bind('capUds',()=>runCapabilityAction('/api/capabilities/uds/start','UDS Scan startet'))
-bind('capCan',()=>runCapabilityAction('/api/capabilities/can/start','CAN Sniffer startet'))
-bind('capCanBase',()=>runCapabilityAction('/api/capabilities/can/baseline','CAN Baseline wird gesetzt'))
+bind('capCan',()=>runCapabilityAction('/api/capabilities/can/start','CAN Signal-Finder startet'))
+bind('capCanBase',()=>runCapabilityAction('/api/capabilities/can/baseline','CAN Baseline wird aufgenommen'))
+bind('capCanAction',()=>runCapabilityAction('/api/capabilities/can/action/start','CAN Aktion wird aufgezeichnet'))
+bind('capCanFinish',()=>runCapabilityAction('/api/capabilities/can/action/finish','CAN Aktion wird analysiert'))
 bind('capStop',()=>runCapabilityAction('/api/capabilities/stop','Scan wird gestoppt'))
 $('clearLog').onclick=async()=>{if(confirm('Diagnose-Log wirklich löschen?')){await fetch('/api/log/clear',{method:'POST'});refreshLog();refresh()}}
 setInterval(refresh,1000);setInterval(refreshLog,1500);setInterval(refreshSimulation,1000);setInterval(refreshCapabilities,1500);refresh();refreshLog();refreshSimulation();refreshCapabilities();
@@ -609,6 +613,18 @@ void WebConsoleHandler::handleCapabilitiesCanStart() {
 void WebConsoleHandler::handleCapabilitiesCanBaseline() {
     if (!WebSecurity::requireAuthentication(server)) return;
     SenderCapabilityScanner::resetCanSnifferBaseline();
+    server.send(200, "application/json", SenderCapabilityScanner::statusJson());
+}
+
+void WebConsoleHandler::handleCapabilitiesCanActionStart() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    SenderCapabilityScanner::startCanActionCapture();
+    server.send(200, "application/json", SenderCapabilityScanner::statusJson());
+}
+
+void WebConsoleHandler::handleCapabilitiesCanActionFinish() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    SenderCapabilityScanner::finishCanActionCapture();
     server.send(200, "application/json", SenderCapabilityScanner::statusJson());
 }
 

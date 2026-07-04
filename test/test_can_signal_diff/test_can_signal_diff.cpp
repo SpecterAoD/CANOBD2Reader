@@ -39,9 +39,18 @@ void test_can_signal_diff_ignores_different_ids() {
     TEST_ASSERT_EQUAL_UINT(0, Capabilities::diffCanFrames(before, after, candidates, 2));
 }
 
+void test_can_signal_confidence_increases_with_repeated_changes() {
+    TEST_ASSERT_EQUAL_UINT8(0, Capabilities::candidateConfidence(0));
+    TEST_ASSERT_EQUAL_UINT8(5, Capabilities::candidateConfidence(1));
+    TEST_ASSERT_EQUAL_UINT8(50, Capabilities::candidateConfidence(10));
+    TEST_ASSERT_EQUAL_UINT8(100, Capabilities::candidateConfidence(20));
+    TEST_ASSERT_EQUAL_UINT8(100, Capabilities::candidateConfidence(200));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_can_signal_diff_detects_changed_bytes_and_bits);
     RUN_TEST(test_can_signal_diff_ignores_different_ids);
+    RUN_TEST(test_can_signal_confidence_increases_with_repeated_changes);
     return UNITY_END();
 }

@@ -2,6 +2,12 @@
 
 namespace Capabilities {
 
+uint8_t candidateConfidence(uint16_t changeCount) {
+    if (changeCount >= 20) return 100;
+    if (changeCount == 0) return 0;
+    return static_cast<uint8_t>(changeCount * 5U);
+}
+
 std::size_t diffCanFrames(const CanFrameSample& before,
                           const CanFrameSample& after,
                           CanSignalCandidate* out,
@@ -21,6 +27,7 @@ std::size_t diffCanFrames(const CanFrameSample& before,
         out[written].afterValue = after.data[index];
         out[written].changedBitMask = changed;
         out[written].changeCount = 1;
+        out[written].confidence = candidateConfidence(out[written].changeCount);
         ++written;
     }
     return written;

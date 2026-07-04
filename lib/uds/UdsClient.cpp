@@ -7,6 +7,7 @@
 #endif
 
 #include "UdsDiagnostics.h"
+#include "config/UdsConfig.h"
 
 namespace Uds {
 
@@ -29,8 +30,21 @@ bool Client::requestDefaultSession(Response& response) {
     return request(Service::DiagnosticSessionControl, payload, sizeof(payload), response);
 }
 
+bool Client::requestExtendedSession(Response& response) {
+    const uint8_t payload[] = {serviceId(Service::DiagnosticSessionControl), 0x03};
+    return request(Service::DiagnosticSessionControl, payload, sizeof(payload), response);
+}
+
 bool Client::testerPresent(Response& response) {
-    const uint8_t payload[] = {serviceId(Service::TesterPresent), 0x00};
+    const uint8_t payload[] = {serviceId(Service::TesterPresent), UdsConfig::TesterPresentSubFunction};
+    return request(Service::TesterPresent, payload, sizeof(payload), response);
+}
+
+bool Client::testerPresentSuppressed(Response& response) {
+    const uint8_t payload[] = {
+        serviceId(Service::TesterPresent),
+        UdsConfig::TesterPresentSuppressPositiveResponseSubFunction
+    };
     return request(Service::TesterPresent, payload, sizeof(payload), response);
 }
 

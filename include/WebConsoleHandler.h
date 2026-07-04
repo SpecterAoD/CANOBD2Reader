@@ -55,6 +55,8 @@ private:
     static void handleCapabilitiesUdsStart();
     static void handleCapabilitiesCanStart();
     static void handleCapabilitiesCanBaseline();
+    static void handleCapabilitiesCanActionStart();
+    static void handleCapabilitiesCanActionFinish();
     static void handleCapabilitiesStop();
     static void handleUpdatePage();
     static void handleUpdateFinished();

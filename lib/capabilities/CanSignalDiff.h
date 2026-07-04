@@ -18,4 +18,6 @@ std::size_t diffCanFrames(const CanFrameSample& before,
                           CanSignalCandidate* out,
                           std::size_t outCount);
 
+uint8_t candidateConfidence(uint16_t changeCount);
+
 } // namespace Capabilities

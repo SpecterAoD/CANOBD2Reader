@@ -16,6 +16,7 @@
 #include "WebConsoleHandler.h"
 #include "config/ProjectConfig.h"
 #include "config/SenderConfig.h"
+#include "config/UdsConfig.h"
 
 namespace {
 
@@ -33,6 +34,14 @@ constexpr std::size_t kSnifferFrameCapacity = 48;
 
 SenderCapabilityScanner::ActiveScan scan = SenderCapabilityScanner::ActiveScan::Idle;
 Capabilities::ScanState state = Capabilities::ScanState::Idle;
+enum class CanDiscoveryPhase : uint8_t {
+    Idle,
+    CapturingBaseline,
+    BaselineReady,
+    CapturingAction,
+    ResultsReady
+};
+
 uint32_t startedAt = 0;
 uint32_t lastStepAt = 0;
 uint32_t completedAt = 0;
@@ -60,6 +69,10 @@ Uds::Client udsClient;
 uint32_t canSnifferFrames = 0;
 uint32_t canSnifferDroppedFrames = 0;
 bool canSnifferRegistered = false;
+CanDiscoveryPhase canDiscoveryPhase = CanDiscoveryPhase::Idle;
+uint32_t canBaselineStartedAt = 0;
+uint32_t canActionStartedAt = 0;
+uint32_t canActionFinishedAt = 0;
 Capabilities::CanFrameSample snifferFrames[kSnifferFrameCapacity]{};
 std::size_t snifferFrameCount = 0;
 Capabilities::CanSignalCandidate snifferCandidates[Capabilities::MaxCanSignalCandidates]{};
@@ -95,16 +108,22 @@ int findSnifferCandidate(const Capabilities::CanSignalCandidate& candidate) {
 
 void mergeSnifferCandidate(const Capabilities::CanSignalCandidate& candidate) {
     const int existing = findSnifferCandidate(candidate);
+    const uint32_t now = millis();
     if (existing >= 0) {
         Capabilities::CanSignalCandidate& target = snifferCandidates[existing];
         target.afterValue = candidate.afterValue;
         if (target.changeCount < UINT16_MAX) ++target.changeCount;
+        target.confidence = Capabilities::candidateConfidence(target.changeCount);
+        target.lastSeenMs = now;
         return;
     }
 
     if (snifferCandidateCount >= Capabilities::MaxCanSignalCandidates) return;
     snifferCandidates[snifferCandidateCount] = candidate;
     snifferCandidates[snifferCandidateCount].changeCount = 1;
+    snifferCandidates[snifferCandidateCount].confidence = Capabilities::candidateConfidence(1);
+    snifferCandidates[snifferCandidateCount].firstSeenMs = now;
+    snifferCandidates[snifferCandidateCount].lastSeenMs = now;
     ++snifferCandidateCount;
 }
 
@@ -116,11 +135,37 @@ public:
             return;
         }
 
-        ++canSnifferFrames;
         const Capabilities::CanFrameSample current = sampleFromFrame(frame);
         const int existing = findSnifferFrame(current.canId);
+
+        if (canDiscoveryPhase == CanDiscoveryPhase::CapturingBaseline) {
+            ++canSnifferFrames;
+            if (existing < 0) {
+                if (snifferFrameCount < kSnifferFrameCapacity) {
+                    snifferFrames[snifferFrameCount++] = current;
+                } else {
+                    ++canSnifferDroppedFrames;
+                }
+                return;
+            }
+            snifferFrames[existing] = current;
+            return;
+        }
+
+        if (canDiscoveryPhase != CanDiscoveryPhase::CapturingAction) {
+            return;
+        }
+
+        ++canSnifferFrames;
         if (existing < 0) {
             if (snifferFrameCount < kSnifferFrameCapacity) {
+                Capabilities::CanSignalCandidate candidate{};
+                candidate.canId = current.canId;
+                candidate.byteIndex = 0;
+                candidate.beforeValue = 0;
+                candidate.afterValue = current.length > 0 ? current.data[0] : 0;
+                candidate.changedBitMask = current.length > 0 ? current.data[0] : 0xFF;
+                mergeSnifferCandidate(candidate);
                 snifferFrames[snifferFrameCount++] = current;
             } else {
                 ++canSnifferDroppedFrames;
@@ -133,7 +178,8 @@ public:
         for (std::size_t index = 0; index < diffCount; ++index) {
             mergeSnifferCandidate(diff[index]);
         }
-        snifferFrames[existing] = current;
+        // Keep baseline stable while recording the action. Otherwise counters
+        // and cyclic bytes could become the new baseline and hide the event.
     }
 };
 
@@ -180,6 +226,30 @@ const char* stateName(Capabilities::ScanState value) {
     return "UNKNOWN";
 }
 
+const char* canDiscoveryPhaseName(CanDiscoveryPhase value) {
+    switch (value) {
+        case CanDiscoveryPhase::Idle: return "IDLE";
+        case CanDiscoveryPhase::CapturingBaseline: return "CAPTURING_BASELINE";
+        case CanDiscoveryPhase::BaselineReady: return "BASELINE_READY";
+        case CanDiscoveryPhase::CapturingAction: return "CAPTURING_ACTION";
+        case CanDiscoveryPhase::ResultsReady: return "RESULTS_READY";
+    }
+    return "UNKNOWN";
+}
+
+void clearCanSnifferData(bool clearBaseline) {
+    canSnifferFrames = 0;
+    canSnifferDroppedFrames = 0;
+    snifferCandidateCount = 0;
+    canActionStartedAt = 0;
+    canActionFinishedAt = 0;
+    for (auto& candidate : snifferCandidates) candidate = Capabilities::CanSignalCandidate{};
+    if (clearBaseline) {
+        snifferFrameCount = 0;
+        for (auto& frame : snifferFrames) frame = Capabilities::CanFrameSample{};
+    }
+}
+
 uint32_t bytesToMask(const uint8_t* data, uint8_t length) {
     if (data == nullptr || length < 4) return 0;
     return (static_cast<uint32_t>(data[0]) << 24U) |
@@ -219,14 +289,16 @@ void initializeUdsResults() {
     didStepIndex = 0;
     didResultsInitialized = false;
 
-    for (uint32_t requestId = Capabilities::UdsFirstRequestId;
-         requestId <= Capabilities::UdsLastRequestId && ecuResultCount < kEcuCapacity;
-         ++requestId) {
+    for (std::size_t targetIndex = 0;
+         targetIndex < UdsConfig::EcuTargetCount && ecuResultCount < kEcuCapacity;
+         ++targetIndex) {
+        const UdsConfig::EcuTarget& target = UdsConfig::EcuTargets[targetIndex];
+        if (!target.scanByDefault) continue;
         EcuCapability& ecu = ecuResults[ecuResultCount++];
         ecu = EcuCapability{};
-        ecu.requestId = requestId;
-        ecu.responseId = Capabilities::udsResponseIdForRequestId(requestId);
-        std::snprintf(ecu.ecuName, sizeof(ecu.ecuName), "ECU 0x%03lX", static_cast<unsigned long>(requestId));
+        ecu.requestId = target.requestId;
+        ecu.responseId = target.responseId != 0 ? target.responseId : Capabilities::udsResponseIdForRequestId(target.requestId);
+        std::snprintf(ecu.ecuName, sizeof(ecu.ecuName), "%s", target.name);
     }
 }
 
@@ -242,6 +314,7 @@ void initializeDidResultsForReachableEcus() {
         if (!ecu.reachable && !ecu.supportsUds) continue;
 
         for (uint8_t didIndex = 0; didIndex < didProbeCount && didResultCount < kDidCapacity; ++didIndex) {
+            if (!dids[didIndex].scanByDefault) continue;
             UdsDidCapability& did = didResults[didResultCount++];
             did = UdsDidCapability{};
             did.requestId = ecu.requestId;
@@ -362,12 +435,20 @@ void runUdsStep() {
         EcuCapability& ecu = ecuResults[ecuStepIndex++];
         udsClient.setRequestId(ecu.requestId);
         Uds::Response response{};
-        const bool ok = requestTesterPresentWithPending(response);
+        bool ok = false;
+        if (UdsConfig::EnableExtendedDiagnosticSessionForCapabilityScan) {
+            ok = udsClient.requestExtendedSession(response);
+        }
+        if (!ok) {
+            ok = requestTesterPresentWithPending(response);
+        }
         ecu.reachable = ok || response.negative;
         ecu.supportsUds = ok || (response.negative && response.negativeCode != 0);
         if (response.responseId != 0) ecu.responseId = response.responseId;
         if (ok) {
-            std::snprintf(ecu.ecuName, sizeof(ecu.ecuName), "UDS ECU 0x%03lX", static_cast<unsigned long>(ecu.requestId));
+            const auto* target = UdsConfig::findTargetByRequestId(ecu.requestId);
+            std::snprintf(ecu.ecuName, sizeof(ecu.ecuName), "%s",
+                          target != nullptr ? target->name : "UDS ECU");
         }
         return;
     }
@@ -472,10 +553,14 @@ void appendUdsJson(String& json) {
 
 void appendCanSnifferJson(String& json) {
     json += "\"canSniffer\":{\"active\":" + String(scan == SenderCapabilityScanner::ActiveScan::CanSniffer ? "true" : "false") +
-            ",\"frames\":" + String(canSnifferFrames) +
+            ",\"phase\":\"" + String(canDiscoveryPhaseName(canDiscoveryPhase)) + "\",";
+    json += "\"frames\":" + String(canSnifferFrames) +
             ",\"droppedFrames\":" + String(canSnifferDroppedFrames) +
             ",\"knownIds\":" + String(snifferFrameCount) +
             ",\"candidateCount\":" + String(snifferCandidateCount) +
+            ",\"baselineStartedAt\":" + String(canBaselineStartedAt) +
+            ",\"actionStartedAt\":" + String(canActionStartedAt) +
+            ",\"actionFinishedAt\":" + String(canActionFinishedAt) +
             ",\"candidates\":[";
     for (std::size_t i = 0; i < snifferCandidateCount; ++i) {
         const auto& candidate = snifferCandidates[i];
@@ -486,7 +571,10 @@ void appendCanSnifferJson(String& json) {
         json += "\"before\":\"0x" + String(candidate.beforeValue, HEX) + "\",";
         json += "\"after\":\"0x" + String(candidate.afterValue, HEX) + "\",";
         json += "\"changedBitMask\":\"0x" + String(candidate.changedBitMask, HEX) + "\",";
-        json += "\"changeCount\":" + String(candidate.changeCount);
+        json += "\"changeCount\":" + String(candidate.changeCount) + ",";
+        json += "\"confidence\":" + String(candidate.confidence) + ",";
+        json += "\"firstSeenMs\":" + String(candidate.firstSeenMs) + ",";
+        json += "\"lastSeenMs\":" + String(candidate.lastSeenMs);
         json += "}";
     }
     json += "]}";
@@ -516,6 +604,10 @@ void reset() {
     didResultCount = 0;
     didStepIndex = 0;
     didResultsInitialized = false;
+    canDiscoveryPhase = CanDiscoveryPhase::Idle;
+    canBaselineStartedAt = 0;
+    canActionStartedAt = 0;
+    canActionFinishedAt = 0;
     canSnifferFrames = 0;
     canSnifferDroppedFrames = 0;
     snifferFrameCount = 0;
@@ -558,8 +650,10 @@ void startCanSniffer() {
     state = Capabilities::ScanState::Running;
     startedAt = millis();
     canSnifferRegistered = CanRouting::registerListener(canListener);
+    canDiscoveryPhase = canSnifferRegistered ? CanDiscoveryPhase::CapturingBaseline : CanDiscoveryPhase::Idle;
+    canBaselineStartedAt = millis();
     lastMessage = canSnifferRegistered
-        ? "CAN Sniffer aktiv (CanRouter Listener)"
+        ? "CAN Signal-Finder aktiv: Baseline wird passiv gesammelt"
         : "CAN Sniffer konnte nicht registriert werden";
     WebConsoleHandler::log(canSnifferRegistered
         ? "[Capabilities] Passive CAN sniffer registered on CanRouter"
@@ -570,16 +664,38 @@ void startCanSniffer() {
 }
 
 void resetCanSnifferBaseline() {
-    canSnifferFrames = 0;
-    canSnifferDroppedFrames = 0;
-    snifferFrameCount = 0;
-    snifferCandidateCount = 0;
-    for (auto& frame : snifferFrames) frame = Capabilities::CanFrameSample{};
-    for (auto& candidate : snifferCandidates) candidate = Capabilities::CanSignalCandidate{};
-    lastMessage = activeScan() == ActiveScan::CanSniffer
-        ? "CAN Sniffer Baseline neu gesetzt"
-        : "CAN Sniffer Baseline geloescht";
-    WebConsoleHandler::log("[Capabilities] CAN sniffer baseline reset");
+    if (scan != ActiveScan::CanSniffer || !canSnifferRegistered) {
+        startCanSniffer();
+        return;
+    }
+    clearCanSnifferData(true);
+    canDiscoveryPhase = CanDiscoveryPhase::CapturingBaseline;
+    canBaselineStartedAt = millis();
+    lastMessage = "CAN Baseline wird neu gesammelt";
+    WebConsoleHandler::log("[Capabilities] CAN signal baseline capture started");
+}
+
+void startCanActionCapture() {
+    if (scan != ActiveScan::CanSniffer || !canSnifferRegistered) {
+        startCanSniffer();
+    }
+    if (scan != ActiveScan::CanSniffer || !canSnifferRegistered) return;
+    clearCanSnifferData(false);
+    canDiscoveryPhase = CanDiscoveryPhase::CapturingAction;
+    canActionStartedAt = millis();
+    state = Capabilities::ScanState::Running;
+    lastMessage = "CAN Aktion wird aufgezeichnet: jetzt Aktion im Fahrzeug ausloesen";
+    WebConsoleHandler::log("[Capabilities] CAN action capture started");
+}
+
+void finishCanActionCapture() {
+    if (scan != ActiveScan::CanSniffer) {
+        lastMessage = "Kein CAN Signal-Finder aktiv";
+        return;
+    }
+    canDiscoveryPhase = CanDiscoveryPhase::ResultsReady;
+    canActionFinishedAt = millis();
+    complete(Capabilities::ScanState::Complete, "CAN Aktion analysiert");
 }
 
 void stop() {

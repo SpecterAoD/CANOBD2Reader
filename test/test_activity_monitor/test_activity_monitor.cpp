@@ -128,6 +128,23 @@ void test_wakeup_from_display_sleep_on_new_can_message() {
                             static_cast<uint8_t>(snapshot.command));
 }
 
+void test_simulation_activity_keeps_power_manager_awake() {
+    Power::ActivityMonitor monitor;
+    monitor.reset(0);
+    Power::ActivityInput input = baseInput(PowerConfig::ParkDetectionTimeoutMs + PowerConfig::DisplaySleepAfterMs + 20000);
+    input.simulationActive = true;
+    input.batteryVoltage = 12.5f;
+    input.lastCanMessageAtMs = 0;
+    input.lastObdResponseAtMs = 0;
+
+    const Power::ActivitySnapshot snapshot = monitor.update(input);
+
+    TEST_ASSERT_NOT_EQUAL_UINT8(static_cast<uint8_t>(Power::VehicleState::DisplaySleep),
+                                static_cast<uint8_t>(snapshot.state));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(Power::PowerCommand::None),
+                            static_cast<uint8_t>(snapshot.command));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_start_stop_is_detected_when_engine_is_off_but_bus_and_obd_are_active);
@@ -136,5 +153,6 @@ int main(int, char**) {
     RUN_TEST(test_parked_starts_sleep_timer_but_does_not_sleep_immediately);
     RUN_TEST(test_display_sleep_after_parked_timer_elapsed);
     RUN_TEST(test_wakeup_from_display_sleep_on_new_can_message);
+    RUN_TEST(test_simulation_activity_keeps_power_manager_awake);
     return UNITY_END();
 }

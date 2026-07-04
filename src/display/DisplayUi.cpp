@@ -409,14 +409,15 @@ namespace {
   }
 
   void drawSmallStatusCell(int x, int y, int w, const char* label, const String& value, uint16_t color) {
-    tft.fillRoundRect(x, y, w, 18, 5, DisplayConfig::Panel);
-    tft.drawRoundRect(x, y, w, 18, 5, color);
+    constexpr int cellHeight = 16;
+    tft.fillRoundRect(x, y, w, cellHeight, 5, DisplayConfig::Panel);
+    tft.drawRoundRect(x, y, w, cellHeight, 5, color);
     tft.setTextDatum(MC_DATUM);
     tft.setTextSize(1);
     tft.setTextColor(color, DisplayConfig::Panel);
     String text = String(label == nullptr ? "" : label) + " " + value;
     if (text.length() > 12) text = text.substring(0, 12);
-    tft.drawString(text, x + w / 2, y + 9);
+    tft.drawString(text, x + w / 2, y + cellHeight / 2);
   }
 
   void drawInfoLine(int y, const char* label, const String& value, uint16_t color = DisplayConfig::Text) {
@@ -575,136 +576,6 @@ namespace {
     tft.drawString("Max seit Start: " + String(static_cast<int>(maxRpmSinceStart)) + " rpm", 16, 148);
   }
 
-  [[maybe_unused]] void drawMainPage() {
-    using namespace DisplayData;
-    drawMetricBox(6, 28, 150, 58, "Geschwindigkeit", displayValue("Speed", 0), valueColor("Speed"));
-    drawMetricBox(164, 28, 150, 58, "Drehzahl", displayValue("RPM", 0), valueColor("RPM"));
-    drawMetricBox(6, 94, 150, 58, "Kühlmittel", displayValue("CoolantTemp", 0), valueColor("CoolantTemp"));
-    drawMetricBox(164, 94, 150, 58, "Bordspannung", displayValue("BatteryVoltage", 1), valueColor("BatteryVoltage"));
-  }
-
-  [[maybe_unused]] void drawEnginePage() {
-    using namespace DisplayData;
-    drawMetricBox(6, 28, 150, 58, "Öltemperatur", displayValue("OilTemp", 0), valueColor("OilTemp"));
-    drawMetricBox(164, 28, 150, 58, "Kühlmittel", displayValue("CoolantTemp", 0), valueColor("CoolantTemp"));
-    drawMetricBox(6, 94, 150, 58, "Motorlast", displayValue("EngineLoad", 0), valueColor("EngineLoad"));
-    drawMetricBox(164, 94, 150, 58, "Ansaugluft", displayValue("IntakeTemp", 0), valueColor("IntakeTemp"));
-  }
-
-  [[maybe_unused]] void drawConsumptionPage() {
-    using namespace DisplayData;
-    drawMetricBox(6, 28, 150, 58, "Ø Verbrauch", displayValue("AverageConsumption", 1), valueColor("AverageConsumption"));
-    drawMetricBox(164, 28, 150, 58, "Kraftstoffrate", displayValue("FuelRate", 1), valueColor("FuelRate"));
-    drawMetricBox(6, 94, 150, 58, "Geschwindigkeit", displayValue("Speed", 0), valueColor("Speed"));
-    drawMetricBox(164, 94, 150, 58, "Drosselklappe", displayValue("Throttle", 0), valueColor("Throttle"));
-  }
-
-  [[maybe_unused]] void drawAdditionalPage() {
-    using namespace DisplayData;
-    drawMetricBox(6, 28, 150, 58, "MAF", displayValue("MAF", 1), valueColor("MAF"));
-    drawMetricBox(164, 28, 150, 58, "Tankfüllstand", displayValue("FuelLevel", 0), valueColor("FuelLevel"));
-    drawMetricBox(6, 94, 150, 58, "Motorlaufzeit", displayValue("RunTime", 0), valueColor("RunTime"));
-    drawMetricBox(164, 94, 150, 58, "Außentemp.", displayValue("AmbientTemp", 0), valueColor("AmbientTemp"));
-  }
-
-  [[maybe_unused]] void drawDiagnosticsPage() {
-    using namespace DisplayData;
-    uint32_t totalPackets = runtime().receivedPackets + runtime().droppedPackets;
-    uint8_t quality = totalPackets == 0 ? 0 : (runtime().receivedPackets * 100UL) / totalPackets;
-    DisplayTelemetryValue* canStatus = findValue("CAN");
-    DisplayTelemetryValue* obdStatus = findValue("OBD");
-    DisplayTelemetryValue* heartbeat = findValue("HEARTBEAT");
-    const bool espNowOk = isEspNowConnected();
-    const bool canRecent = isCanStatusRecent();
-    const bool obdRecent = isObdStatusRecent();
-
-    drawMetricBox(6, 28, 150, 42, "ESP-NOW", espNowOk ? "aktiv" : "verloren", espNowOk ? DisplayConfig::Ok : DisplayConfig::Error);
-    drawMetricBox(164, 28, 150, 42, "CAN", canRecent && canStatus != nullptr ? canStatus->value : "--",
-                  canRecent && isFresh(canStatus) ? DisplayConfig::Ok : (canRecent ? DisplayConfig::Warn : DisplayConfig::Error));
-    drawMetricBox(6, 76, 150, 42, "OBD", obdRecent && obdStatus != nullptr ? obdStatus->value : "--",
-                  obdRecent && isFresh(obdStatus) ? DisplayConfig::Ok : (obdRecent ? DisplayConfig::Warn : DisplayConfig::Error));
-    drawMetricBox(164, 76, 150, 42, "Heartbeat", heartbeat != nullptr ? heartbeat->value : "--",
-                  espNowOk ? DisplayConfig::Ok : DisplayConfig::Error);
-
-    tft.fillRoundRect(6, 124, 308, 28, 6, DisplayConfig::Panel);
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextSize(1);
-    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
-    String firmwareLine = String("FW ") + DISPLAY_FIRMWARE_VERSION + "  Seq " + String(runtime().lastSequence) + " Q " + String(quality) + "%";
-    tft.drawString(firmwareLine, 14, 132);
-    tft.setTextColor(DisplayConfig::Text, DisplayConfig::Panel);
-    String sim = displayText("Simulation");
-    String scenario = displayText("SimScenario");
-    if (sim == "--") sim = "inaktiv";
-    if (scenario == "--") scenario = "NormalSingleFrame";
-    String line = "Sim " + sim + "  " + scenario;
-    if (line.length() > 42) line = line.substring(0, 42) + "...";
-    tft.drawString(line, 14, 144);
-  }
-
-  [[maybe_unused]] void drawCANPage() {
-    using namespace DisplayData;
-    drawMetricBox(6, 28, 150, 42, "CAN Frames", displayValue("CANCount", 0), valueColor("CANCount"));
-    DisplayTelemetryValue* canStatus = findValue("CAN");
-    drawMetricBox(164, 28, 150, 42, "CAN Status", displayText("CAN"),
-                  isCanStatusRecent() && isFresh(canStatus) ? DisplayConfig::Ok : (isCanStatusRecent() ? DisplayConfig::Warn : DisplayConfig::Error));
-
-    tft.fillRoundRect(6, 78, 308, 74, 6, DisplayConfig::Panel);
-    tft.setTextDatum(TL_DATUM);
-    tft.setTextSize(1);
-    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
-    tft.drawString("Letzter CAN-Frame:", 14, 86);
-    tft.setTextColor(DisplayConfig::Text, DisplayConfig::Panel);
-    String raw = displayText("LastCAN");
-    if (raw.length() > 42) raw = raw.substring(0, 42) + "...";
-    tft.drawString(raw, 14, 102);
-
-    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
-    tft.drawString("Auswertung:", 14, 126);
-    tft.setTextColor(DisplayConfig::Accent, DisplayConfig::Panel);
-    String hint = displayText("CANHint");
-    if (hint.length() > 36) hint = hint.substring(0, 36) + "...";
-    tft.drawString(hint, 14, 140);
-  }
-
-  [[maybe_unused]] void drawUdsDtcPage() {
-    using namespace DisplayData;
-    DisplayTelemetryValue* dtc = findValue("DTC");
-    const bool dtcFresh = dtc != nullptr && millis() - dtc->updatedAt <= DisplayConfig::ValueTimeoutMs;
-    const bool hasFault = dtcFresh && dtc->status == "WARN" && dtc->value != "Keine";
-
-    drawMetricBox(6, 28, 150, 42, "DTC", dtcFresh ? (hasFault ? "AKTIV" : "Keine") : "--",
-                  hasFault ? DisplayConfig::Warn : (dtcFresh ? DisplayConfig::Ok : DisplayConfig::Muted));
-    DisplayTelemetryValue* udsStatus = findValue("UDS");
-    drawMetricBox(164, 28, 150, 42, "UDS", displayText("UDS"),
-                  isFresh(udsStatus) ? DisplayConfig::Ok : DisplayConfig::Warn);
-
-    tft.fillRoundRect(6, 78, 308, 74, 6, DisplayConfig::Panel);
-    tft.setTextDatum(TL_DATUM);
-    tft.setTextSize(1);
-    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
-    tft.drawString("Fehlercodes:", 14, 86);
-
-    tft.setTextSize(1);
-    tft.setTextColor(hasFault ? DisplayConfig::Warn : DisplayConfig::Text, DisplayConfig::Panel);
-    String codes = displayText("DTC");
-    if (codes.length() > 42) codes = codes.substring(0, 42) + "...";
-    tft.drawString(codes, 14, 102);
-
-    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
-    tft.drawString("VIN / UDS VIN:", 14, 122);
-    tft.setTextColor(DisplayConfig::Text, DisplayConfig::Panel);
-    String vin = displayText("VIN");
-    if (vin == "--") vin = displayText("UDS_VIN");
-    if (vin.length() > 30) vin = vin.substring(0, 30);
-    tft.drawString(vin, 14, 138);
-
-    tft.setTextSize(1);
-    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Panel);
-    String age = dtcFresh ? "DTC vor " + String((millis() - dtc->updatedAt) / 1000) + "s" : "Keine aktuelle DTC-Abfrage";
-    tft.drawString(age, 14, 146);
-  }
-
   void drawMainPageV2() {
     using namespace DisplayData;
     drawMetricBox(6, 24, 150, 52, "Geschwindigkeit", displayValue("Speed", 0), valueColor("Speed"));
@@ -716,13 +587,13 @@ namespace {
     DisplayTelemetryValue* obdStatus = findValue("OBD");
     DisplayTelemetryValue* dtc = findValue("DTC");
     const bool hasFault = dtc != nullptr && isFresh(dtc) && dtc->status == "WARN" && dtc->value != "Keine";
-    drawSmallStatusCell(6, 140, 74, "ESP", isEspNowConnected() ? "OK" : "ERR",
+    drawSmallStatusCell(6, 136, 74, "ESP", isEspNowConnected() ? "OK" : "ERR",
                         isEspNowConnected() ? DisplayConfig::Ok : DisplayConfig::Error);
-    drawSmallStatusCell(84, 140, 74, "CAN", isCanStatusRecent() ? displayText("CAN") : "--",
+    drawSmallStatusCell(84, 136, 74, "CAN", isCanStatusRecent() ? displayText("CAN") : "--",
                         statusColorForValue(canStatus));
-    drawSmallStatusCell(162, 140, 74, "OBD", isObdStatusRecent() ? displayText("OBD") : "--",
+    drawSmallStatusCell(162, 136, 74, "OBD", isObdStatusRecent() ? displayText("OBD") : "--",
                         statusColorForValue(obdStatus));
-    drawSmallStatusCell(240, 140, 74, "DTC", hasFault ? "AKT" : (isFresh(dtc) ? "OK" : "--"),
+    drawSmallStatusCell(240, 136, 74, "DTC", hasFault ? "AKT" : (isFresh(dtc) ? "OK" : "--"),
                         hasFault ? DisplayConfig::Warn : (isFresh(dtc) ? DisplayConfig::Ok : DisplayConfig::Muted));
   }
 
@@ -766,10 +637,10 @@ namespace {
     drawMetricBox(164, 68, 150, 38, "Heartbeat", heartbeat != nullptr ? heartbeat->value : "--",
                   isFresh(heartbeat) ? DisplayConfig::Ok : DisplayConfig::Warn);
 
-    tft.fillRoundRect(6, 112, 308, 42, 6, DisplayConfig::Panel);
-    drawInfoLine(122, "Pakete", String(runtime().receivedPackets) + "/" + String(runtime().droppedPackets) +
+    tft.fillRoundRect(6, 112, 308, 38, 6, DisplayConfig::Panel);
+    drawInfoLine(121, "Pakete", String(runtime().receivedPackets) + "/" + String(runtime().droppedPackets) +
                            " Q " + String(quality) + "%");
-    drawInfoLine(140, "Firmware", String(DISPLAY_FIRMWARE_VERSION) + " Seq " + String(runtime().lastSequence));
+    drawInfoLine(137, "Firmware", String(DISPLAY_FIRMWARE_VERSION) + " Seq " + String(runtime().lastSequence));
   }
 
   void drawUdsDtcPageV2() {
@@ -784,7 +655,7 @@ namespace {
     drawMetricBox(110, 24, 100, 38, "ECUs", displayText("ReachableEcus"), valueColor("ReachableEcus"));
     drawMetricBox(214, 24, 100, 38, "Pending", displayText("UdsPending"), valueColor("UdsPending"));
 
-    tft.fillRoundRect(6, 68, 308, 86, 6, DisplayConfig::Panel);
+    tft.fillRoundRect(6, 68, 308, 80, 6, DisplayConfig::Panel);
     String vin = displayText("VIN");
     if (vin == "--") vin = displayText("UDS_VIN");
     String dtcText = displayText("DTC");
@@ -794,7 +665,7 @@ namespace {
     drawInfoLine(78, "VIN", vin);
     drawInfoLine(96, "OBD-DTC", dtcText, hasFault ? DisplayConfig::Warn : (dtcFresh ? DisplayConfig::Ok : DisplayConfig::Muted));
     drawInfoLine(114, "UDS-DTC", udsDtcText, statusColorForValue(udsDtc));
-    drawInfoLine(132, "NRC/Backoff", nrc + " / " + displayText("UdsBackoff"),
+    drawInfoLine(130, "NRC/Backoff", nrc + " / " + displayText("UdsBackoff"),
                  nrc.indexOf("0x78") >= 0 ? DisplayConfig::Warn : DisplayConfig::Text);
   }
 
@@ -804,13 +675,13 @@ namespace {
     drawMetricBox(110, 24, 100, 38, "Baseline", displayText("CanBaseline"), valueColor("CanBaseline"));
     drawMetricBox(214, 24, 100, 38, "Frames", displayValue("CANCount", 0), valueColor("CANCount"));
 
-    tft.fillRoundRect(6, 68, 308, 86, 6, DisplayConfig::Panel);
+    tft.fillRoundRect(6, 68, 308, 80, 6, DisplayConfig::Panel);
     drawInfoLine(78, "Kandidaten", displayText("CanCandidates"));
     drawInfoLine(96, "CAN-ID", displayText("CanCandidateId"));
     String raw = displayText("LastCAN");
     String hint = displayText("CANHint");
     drawInfoLine(114, "Letzter", raw);
-    drawInfoLine(132, "Hinweis", hint, DisplayConfig::Accent);
+    drawInfoLine(130, "Hinweis", hint, DisplayConfig::Accent);
   }
 
   void drawAdditionalPageV2() {

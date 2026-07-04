@@ -14,7 +14,9 @@ public:
     uint32_t requestId() const { return isoTp_.requestId(); }
 
     bool requestDefaultSession(Response& response);
+    bool requestExtendedSession(Response& response);
     bool testerPresent(Response& response);
+    bool testerPresentSuppressed(Response& response);
     bool readDataByIdentifier(uint16_t did, Response& response);
     bool readDtcInformation(uint8_t subFunction, uint8_t statusMask, Response& response);
 

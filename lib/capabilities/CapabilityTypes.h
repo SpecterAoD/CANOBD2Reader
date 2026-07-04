@@ -7,8 +7,8 @@ namespace Capabilities {
 
 constexpr std::size_t MaxObdPid = 0x80;
 constexpr std::size_t MaxObdPidResults = MaxObdPid + 1;
-constexpr std::size_t MaxEcuResults = 8;
-constexpr std::size_t MaxDidResults = MaxEcuResults * 10;
+constexpr std::size_t MaxEcuResults = 10;
+constexpr std::size_t MaxDidResults = MaxEcuResults * 24;
 constexpr std::size_t MaxCanSignalCandidates = 32;
 
 enum class ScanState : uint8_t {
@@ -74,6 +74,9 @@ struct CanSignalCandidate {
     uint8_t afterValue = 0;
     uint8_t changedBitMask = 0;
     uint16_t changeCount = 0;
+    uint8_t confidence = 0;
+    uint32_t firstSeenMs = 0;
+    uint32_t lastSeenMs = 0;
 };
 
 const char* statusText(CapabilityStatus status);

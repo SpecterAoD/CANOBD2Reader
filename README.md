@@ -368,28 +368,44 @@ und Kraftstoffrate. Die Webtabelle unterscheidet:
 - `DECODE_ERROR`: Antwort kam, passt aber nicht zum bekannten Datenformat.
 - `NEGATIVE_RESPONSE`: ECU hat die Anfrage aktiv abgelehnt.
 
-Der UDS-Scan prueft aktuell Request-IDs `0x7E0` bis `0x7E7` und lesende
-Dienste wie `0x3E TesterPresent` und `0x22 ReadDataByIdentifier`. DIDs werden
-fuer alle erreichbaren ECUs vorbereitet, nicht nur fuer `0x7E0`. Gepruefte DIDs
-sind unter anderem `0xF180` bis `0xF190` inklusive VIN. NRC `0x78`
+Der UDS-Scan nutzt eine zentrale, konservative Ziel-Config
+`include/config/UdsConfig.h`. Standardmaessig werden nur physische, lesende
+Diagnoseziele gescannt, z. B. Motor `0x7E0 -> 0x7E8`, Getriebe
+`0x7E1 -> 0x7E9`, ABS/ESP `0x7E2 -> 0x7EA`, BCM `0x7E4 -> 0x7EC`,
+Klima `0x746 -> 0x7B0` und Kombiinstrument `0x714 -> 0x77E`.
+`0x7DF` bleibt als funktionaler OBD-/Gateway-Kontext dokumentiert, wird aber
+nicht als physisches UDS-Scan-Ziel benutzt.
+
+UDS ist absichtlich read-only ausgelegt. `SecurityAccess`, Schreibdienste,
+Codierung, Anpassung und Loeschen von Fehlern sind deaktiviert. Der Scan nutzt
+lesende Dienste wie `0x3E TesterPresent` und `0x22 ReadDataByIdentifier`.
+Standardmaessig gepruefte DIDs sind vor allem Identifikationswerte wie
+`0xF180` bis `0xF190` inklusive VIN sowie `0xF195`. VW-spezifische Live-DID-
+Kandidaten, z. B. fuer Oeltemperatur oder Ladedruck, sind in der Config
+dokumentiert, aber nicht automatisch im Default-Scan aktiv, weil Bedeutung und
+Skalierung vom konkreten Steuergeraet abhaengen. NRC `0x78`
 (`ResponsePending`) wird als Zwischenstatus behandelt: der Client wartet bis
 zum konfigurierten Gesamtfenster `SenderConfig::UdsResponsePendingTimeoutMs`
 weiter. Erst danach wird der Test als Timeout bewertet.
 
-Der CAN-Sniffer ist passiv an den `CanRouterHub` angebunden. Er sendet keine
-Frames und beeinflusst keine Steuergeraete. Gelesene Roh-CAN-Frames werden von
-`CANHandler::processIncoming()` an registrierte Listener verteilt; der Sniffer
-sammelt daraus geaenderte Bytes und Bitmasken als Kandidaten. Damit lassen sich
-Ereignisse wie Blinker, Gangwechsel oder Schalterzustaende eingrenzen, ohne
-einen zweiten TWAI-Leser zu starten.
+Der CAN-Signal-Finder ist passiv an den `CanRouterHub` angebunden. Er sendet
+keine Frames und beeinflusst keine Steuergeraete. Gelesene Roh-CAN-Frames
+werden von `CANHandler::processIncoming()` an registrierte Listener verteilt.
+Der Finder arbeitet als Baseline-/Aktionsvergleich und sammelt daraus
+geaenderte Bytes, Bitmasken, Wechselzaehler und eine einfache Confidence-
+Bewertung als Kandidaten. Damit lassen sich beliebige beobachtbare Aktionen
+wie Blinker, Gangwechsel, Licht, Tueren oder Assistenzzustaende eingrenzen,
+ohne einen zweiten TWAI-Leser zu starten.
 
 Fuer die Suche nach Ereignissen empfiehlt sich:
 
-1. CAN-Sniffer starten.
+1. CAN Signal-Finder starten.
 2. Ruhigen Ausgangszustand herstellen.
-3. `CAN Baseline neu` druecken.
-4. Genau ein Ereignis ausloesen, z. B. Blinker links.
-5. Kandidatenliste und Export-JSON sichern.
+3. `Baseline aufnehmen` druecken und ein paar Sekunden warten.
+4. `Aktion starten` druecken.
+5. Genau ein Ereignis ausloesen, z. B. Blinker links.
+6. `Aktion stoppen / analysieren` druecken.
+7. Kandidatenliste und Export-JSON sichern.
 
 ### Sender-Diagnose-Log am OBD2-Anschluss
 

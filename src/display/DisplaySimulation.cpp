@@ -70,6 +70,19 @@ namespace DisplaySimulation {
     upsertValue("STATUS", "ACTIVITY_SCORE", "ActivityScore",
                 scenario == Simulation::Scenario::PowerParked || scenario == Simulation::Scenario::PowerDisplaySleep ? "0" : "12",
                 "", "OK", internalSimulationIndex + 5);
+    upsertValue("STATUS", "UDS", "UDS", "SIMULATED", "", "OK", internalSimulationIndex + 6);
+    upsertValue("STATUS", "ECU_COUNT", "ReachableEcus", "2", "", "OK", internalSimulationIndex + 7);
+    upsertValue("STATUS", "UDS_PENDING", "UdsPending",
+                scenario == Simulation::Scenario::NormalMultiFrameDtc ? "1" : "0",
+                "", scenario == Simulation::Scenario::NormalMultiFrameDtc ? "WARN" : "OK", internalSimulationIndex + 8);
+    upsertValue("STATUS", "UDS_BACKOFF", "UdsBackoff", "0s", "", "OK", internalSimulationIndex + 9);
+    upsertValue("STATUS", "UDS_DID_F190", "UDS_VIN", "WVGZZZ5N6RM079696", "", "OK", internalSimulationIndex + 10);
+    upsertValue("DTC", "UDS", "UDS_DTC",
+                scenario == Simulation::Scenario::NormalMultiFrameDtc ? "P0133 P0420" : "Keine",
+                "", scenario == Simulation::Scenario::NormalMultiFrameDtc ? "WARN" : "OK", internalSimulationIndex + 11);
+    upsertValue("STATUS", "UDS_NEGATIVE", "UDS_NRC",
+                scenario == Simulation::Scenario::NormalMultiFrameDtc ? "0x78 ResponsePending" : "--",
+                "", scenario == Simulation::Scenario::NormalMultiFrameDtc ? "WARN" : "OK", internalSimulationIndex + 12);
     runtime().vehicleState = simulatedPowerState(scenario);
     runtime().powerCommand = simulatedPowerCommand(scenario);
     runtime().activityScore = scenario == Simulation::Scenario::PowerParked || scenario == Simulation::Scenario::PowerDisplaySleep ? 0 : 12;
@@ -80,6 +93,10 @@ namespace DisplaySimulation {
     upsertValue("CAN", "RAW", "LastCAN", "0x7E8 DLC8 04 41 0C 1A F8 55 55 55", "", "OK", internalSimulationIndex + 4);
     upsertValue("CAN", "HINT", "CANHint", Simulation::scenarioDiagnosticText(scenario), "", isoTp.negativeResponse ? "ERROR" : (isoTp.timeoutExpected ? "TIMEOUT" : "OK"), internalSimulationIndex + 5);
     upsertValue("CAN", "COUNT", "CANCount", "128", "frames", "OK", internalSimulationIndex + 3);
+    upsertValue("CAN", "CAN_SNIFFER", "CanSniffer", "AKTIV", "", "OK", internalSimulationIndex + 13);
+    upsertValue("CAN", "CAN_BASELINE", "CanBaseline", "JA", "", "OK", internalSimulationIndex + 14);
+    upsertValue("CAN", "CAN_CANDIDATES", "CanCandidates", "3", "", "OK", internalSimulationIndex + 15);
+    upsertValue("CAN", "CAN_CANDIDATE_ID", "CanCandidateId", "0x3C0 B2", "", "OK", internalSimulationIndex + 16);
     upsertValue("DTC", "ACTIVE", "DTC",
                 scenario == Simulation::Scenario::NormalSingleFrame ? "Keine" : "P0133 P0420",
                 "",

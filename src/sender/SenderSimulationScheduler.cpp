@@ -90,6 +90,22 @@ void tick(uint32_t nowMs) {
     SenderTelemetry::sendStatus("POWER_STATE", simulatedPowerState(scenario), "OK");
     SenderTelemetry::sendStatus("ACTIVITY_SCORE", simulatedActivityScore(scenario), "OK");
     SenderTelemetry::sendStatus("POWER_COMMAND", simulatedPowerCommand(scenario), "OK");
+    SenderTelemetry::sendStatus("UDS", "SIMULATED", "OK");
+    SenderTelemetry::send("STATUS", "ECU_COUNT", "ReachableEcus", "2", "", "OK");
+    SenderTelemetry::send("STATUS", "UDS_PENDING", "UdsPending",
+                          scenario == Simulation::Scenario::NormalMultiFrameDtc ? "1" : "0",
+                          "",
+                          scenario == Simulation::Scenario::NormalMultiFrameDtc ? "WARN" : "OK");
+    SenderTelemetry::send("STATUS", "UDS_BACKOFF", "UdsBackoff", "0s", "", "OK");
+    SenderTelemetry::send("STATUS", "UDS_DID_F190", "UDS_VIN", "WVGZZZ5N6RM079696", "", "OK");
+    SenderTelemetry::send("DTC", "UDS", "UDS_DTC",
+                          scenario == Simulation::Scenario::NormalMultiFrameDtc ? "P0133 P0420" : "Keine",
+                          "",
+                          scenario == Simulation::Scenario::NormalMultiFrameDtc ? "WARN" : "OK");
+    SenderTelemetry::send("STATUS", "UDS_NEGATIVE", "UDS_NRC",
+                          scenario == Simulation::Scenario::NormalMultiFrameDtc ? "0x78 ResponsePending" : "--",
+                          "",
+                          scenario == Simulation::Scenario::NormalMultiFrameDtc ? "WARN" : "OK");
     SenderTelemetry::send("STATUS", "SIM_SCENARIO", "SimScenario",
                           Simulation::RuntimeSimulation::scenarioName(), "", "OK");
     SenderTelemetry::send("STATUS", "SIM_DETAIL", "SimDetail",
@@ -100,6 +116,10 @@ void tick(uint32_t nowMs) {
                           Simulation::scenarioDiagnosticText(scenario), "",
                           isoTp.negativeResponse ? "ERROR" : (isoTp.timeoutExpected ? "TIMEOUT" : "OK"));
     SenderTelemetry::send("CAN", "COUNT", "CANCount", "128", "frames", "OK");
+    SenderTelemetry::send("CAN", "CAN_SNIFFER", "CanSniffer", "AKTIV", "", "OK");
+    SenderTelemetry::send("CAN", "CAN_BASELINE", "CanBaseline", "JA", "", "OK");
+    SenderTelemetry::send("CAN", "CAN_CANDIDATES", "CanCandidates", "3", "", "OK");
+    SenderTelemetry::send("CAN", "CAN_CANDIDATE_ID", "CanCandidateId", "0x3C0 B2", "", "OK");
     SenderTelemetry::send("DTC", "ACTIVE", "DTC",
                           scenario == Simulation::Scenario::NormalSingleFrame ? "Keine" : "P0133 P0420",
                           "",

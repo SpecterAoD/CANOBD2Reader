@@ -1,4 +1,5 @@
 #include "UdsCapability.h"
+#include "config/UdsConfig.h"
 
 namespace Capabilities {
 namespace {
@@ -8,19 +9,6 @@ constexpr UdsServiceProbe kServiceProbes[] = {
     {0x22, "ReadDataByIdentifier"},
     {0x19, "ReadDTCInformation"},
     {0x3E, "TesterPresent"},
-};
-
-constexpr UdsDidProbe kDidProbes[] = {
-    {0xF180, "BootSoftwareIdentification"},
-    {0xF181, "ApplicationSoftwareIdentification"},
-    {0xF182, "ApplicationDataIdentification"},
-    {0xF187, "ManufacturerSparePartNumber"},
-    {0xF188, "EcuSoftwareNumber"},
-    {0xF189, "EcuSoftwareVersion"},
-    {0xF18A, "SystemSupplierIdentifier"},
-    {0xF18B, "EcuManufacturingDate"},
-    {0xF18C, "EcuSerialNumber"},
-    {0xF190, "VIN"},
 };
 
 } // namespace
@@ -44,11 +32,12 @@ bool shouldContinueWaitingForPending(uint32_t startMs, uint32_t nowMs, uint32_t 
 }
 
 uint32_t udsResponseIdForRequestId(uint32_t requestId) {
-    return requestId + 8U;
+    return UdsConfig::responseIdForRequestId(requestId);
 }
 
 bool isUdsRequestIdInScanRange(uint32_t requestId) {
-    return requestId >= UdsFirstRequestId && requestId <= UdsLastRequestId;
+    return (requestId >= UdsFirstRequestId && requestId <= UdsLastRequestId) ||
+           UdsConfig::isConfiguredRequestId(requestId);
 }
 
 const UdsServiceProbe* udsServiceProbes(uint8_t& count) {
@@ -57,8 +46,16 @@ const UdsServiceProbe* udsServiceProbes(uint8_t& count) {
 }
 
 const UdsDidProbe* udsDidProbes(uint8_t& count) {
-    count = sizeof(kDidProbes) / sizeof(kDidProbes[0]);
-    return kDidProbes;
+    static UdsDidProbe probes[UdsConfig::DidCandidateCount]{};
+    for (std::size_t index = 0; index < UdsConfig::DidCandidateCount; ++index) {
+        probes[index] = {
+            UdsConfig::DidCandidates[index].did,
+            UdsConfig::DidCandidates[index].name,
+            UdsConfig::DidCandidates[index].scanByDefault
+        };
+    }
+    count = static_cast<uint8_t>(UdsConfig::DidCandidateCount);
+    return probes;
 }
 
 } // namespace Capabilities

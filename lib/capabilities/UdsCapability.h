@@ -14,6 +14,7 @@ struct UdsServiceProbe {
 struct UdsDidProbe {
     uint16_t did;
     const char* name;
+    bool scanByDefault;
 };
 
 constexpr uint32_t UdsFirstRequestId = 0x7E0;

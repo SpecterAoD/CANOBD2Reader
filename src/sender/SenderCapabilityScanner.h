@@ -23,6 +23,8 @@ void startObdPidScan();
 void startUdsScan();
 void startCanSniffer();
 void resetCanSnifferBaseline();
+void startCanActionCapture();
+void finishCanActionCapture();
 void stop();
 
 /// Runs at most one scanner step. Normal OBD/UDS polling is paused while this is active.
