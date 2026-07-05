@@ -1,4 +1,5 @@
 #include <unity.h>
+#include <cstring>
 #include "AuthHelpers.h"
 #include "WebRuntimeHandlers.h"
 #include "config/ProjectConfig.h"
@@ -71,6 +72,17 @@ void test_ota_metadata_markers_can_be_found_in_binary_data() {
     TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareBufferContainsVersionMarker(bytes, size, "V9.9.9"));
 }
 
+void test_ota_metadata_accepts_new_version_marker() {
+    const char* image =
+        "xxxxCANOBD2_FW_METADATA_BEGIN;target=sender;version=V9.9.9;protocol=2;CANOBD2_FW_METADATA_ENDxxxx";
+    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(image);
+    const size_t size = std::strlen(image);
+
+    TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareBufferContainsTargetMarker(bytes, size, "sender"));
+    TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareBufferContainsVersionMarker(bytes, size, ProjectConfig::FirmwareVersion));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareBufferContainsTargetMarker(bytes, size, "display"));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_constant_time_equals);
@@ -79,5 +91,6 @@ int main(int, char**) {
     RUN_TEST(test_placeholder_secret_guard_mode_is_explicit);
     RUN_TEST(test_ota_target_filename_guard);
     RUN_TEST(test_ota_metadata_markers_can_be_found_in_binary_data);
+    RUN_TEST(test_ota_metadata_accepts_new_version_marker);
     return UNITY_END();
 }

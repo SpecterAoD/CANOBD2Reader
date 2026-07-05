@@ -13,6 +13,7 @@
 #if defined(ARDUINO)
   #include "DiagnosticLog.h"
   #include "AuthHelpers.h"
+  #include "FirmwareMetadata.h"
   #include "config/ProjectConfig.h"
   #include "config/SecurityConfig.h"
 #endif
@@ -25,6 +26,8 @@ constexpr size_t kOtaSearchTailSize = 96;
 constexpr size_t kOtaCombinedSearchWindowSize = kOtaSearchTailSize * 2;
 constexpr size_t kSha256DigestSize = 32;
 constexpr size_t kSha256HexStringSize = (kSha256DigestSize * 2) + 1;
+constexpr const char* kFirmwareMetadataBegin = "CANOBD2_FW_METADATA_BEGIN";
+constexpr const char* kFirmwareVersionMarkerPrefix = "version=V";
 
 bool asciiEqualsIgnoreCase(char a, char b) {
     if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
@@ -104,6 +107,17 @@ bool bufferContainsText(const uint8_t* data, size_t size, const char* text) {
     return false;
 }
 
+bool bufferContainsAnyFirmwareVersionMarker(const uint8_t* data, size_t size) {
+    return bufferContainsText(data, size, kFirmwareVersionMarkerPrefix);
+}
+
+bool bufferContainsTargetMetadata(const uint8_t* data, size_t size, const char* expectedTarget) {
+    if (expectedTarget == nullptr || expectedTarget[0] == '\0') return false;
+    char marker[32];
+    std::snprintf(marker, sizeof(marker), "target=%s", expectedTarget);
+    return bufferContainsText(data, size, marker);
+}
+
 void appendJsonEscapedField(String& json, const char* key, const String& value) {
     json += '"';
     json += key;
@@ -170,12 +184,20 @@ void updateOtaValidationState(const uint8_t* data, size_t size) {
     combinedSize += copySize;
 
     if (!otaSessionTargetSeen) {
-        otaSessionTargetSeen = bufferContainsText(data, size, ProjectConfig::TargetName) ||
-                               bufferContainsText(combined, combinedSize, ProjectConfig::TargetName);
+        otaSessionTargetSeen =
+            bufferContainsTargetMetadata(data, size, ProjectConfig::TargetName) ||
+            bufferContainsTargetMetadata(combined, combinedSize, ProjectConfig::TargetName) ||
+            bufferContainsText(data, size, ProjectConfig::TargetName) ||
+            bufferContainsText(combined, combinedSize, ProjectConfig::TargetName);
     }
     if (!otaSessionVersionSeen) {
-        otaSessionVersionSeen = bufferContainsText(data, size, ProjectConfig::FirmwareVersion) ||
-                                bufferContainsText(combined, combinedSize, ProjectConfig::FirmwareVersion);
+        otaSessionVersionSeen =
+            (bufferContainsText(data, size, kFirmwareMetadataBegin) &&
+             bufferContainsAnyFirmwareVersionMarker(data, size)) ||
+            (bufferContainsText(combined, combinedSize, kFirmwareMetadataBegin) &&
+             bufferContainsAnyFirmwareVersionMarker(combined, combinedSize)) ||
+            bufferContainsText(data, size, ProjectConfig::FirmwareVersion) ||
+            bufferContainsText(combined, combinedSize, ProjectConfig::FirmwareVersion);
     }
 
     if (size >= sizeof(otaSearchTail)) {
@@ -268,12 +290,15 @@ bool firmwareBufferContainsText(const uint8_t* data, size_t size, const char* te
 
 bool firmwareBufferContainsTargetMarker(const uint8_t* data, size_t size, const char* expectedTarget) {
     if (expectedTarget == nullptr || expectedTarget[0] == '\0') return false;
-    return firmwareBufferContainsText(data, size, expectedTarget);
+    return bufferContainsTargetMetadata(data, size, expectedTarget) ||
+           firmwareBufferContainsText(data, size, expectedTarget);
 }
 
 bool firmwareBufferContainsVersionMarker(const uint8_t* data, size_t size, const char* expectedVersion) {
     if (expectedVersion == nullptr || expectedVersion[0] == '\0') return false;
-    return firmwareBufferContainsText(data, size, expectedVersion);
+    return (firmwareBufferContainsText(data, size, kFirmwareMetadataBegin) &&
+            bufferContainsAnyFirmwareVersionMarker(data, size)) ||
+           firmwareBufferContainsText(data, size, expectedVersion);
 }
 
 #if defined(ARDUINO)
@@ -406,6 +431,7 @@ void appendFirmwareJson(String& json, const String& otaStatus) {
     appendJsonEscapedField(json, "buildTime", buildTime);
     appendJsonEscapedField(json, "otaStatus", otaStatus);
     appendJsonEscapedField(json, "otaFilenameHint", otaFilenameHint);
+    appendJsonEscapedField(json, "otaMetadata", FirmwareMetadata::text());
     appendJsonBoolField(json, "otaTargetFilenameRequired", SecurityConfig::RequireOtaTargetInFilename);
     appendJsonBoolField(json, "otaMetadataRequired", true);
     appendJsonBoolField(json, "securityReady", securityWarning.length() == 0);

@@ -22,6 +22,13 @@
   #endif
 #endif
 
+#define CANOBD2_STRINGIFY_VALUE(value) #value
+#define CANOBD2_STRINGIFY(value) CANOBD2_STRINGIFY_VALUE(value)
+
+#ifndef CANOBD2_OTA_COMPAT_VERSION_MARKERS
+  #define CANOBD2_OTA_COMPAT_VERSION_MARKERS "V1.0.13;V2.0.0.b1;V2.0.0.b2;V2.0.0.b3;V0.0.0-dev"
+#endif
+
 // OTA bleibt pro Environment aktiviert; die konkrete Nutzung/Upload-Methode wird
 // nicht im Code erzwungen, sondern ueber PlatformIO upload_protocol gesteuert.
 #define CANOBD2_OTA_COMPATIBLE 1

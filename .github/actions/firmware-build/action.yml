@@ -39,6 +39,17 @@ runs:
         cp include/secrets.example.h include/secrets.h
         echo "Build uses include/secrets.example.h placeholder credentials."
 
+    - name: Validate version
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9]+)*$ ]]; then
+          echo "Invalid version '${VERSION}'. Enter the version without leading V, for example 2.0.0.b3." >&2
+          exit 1
+        fi
+
     - name: Validate target
       shell: bash
       env:
@@ -91,6 +102,30 @@ runs:
             ;;
         esac
 
+    - name: Verify firmware OTA metadata
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+        VERSION_TAG: V${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        verify_bin() {
+          local env_name="$1"
+          local expected_target="$2"
+          local bin=".pio/build/${env_name}/firmware.bin"
+          test -f "${bin}"
+          grep -a -q "CANOBD2_FW_METADATA_BEGIN" "${bin}"
+          grep -a -q "target=${expected_target}" "${bin}"
+          grep -a -q "version=${VERSION_TAG}" "${bin}"
+          grep -a -q "protocol=2" "${bin}"
+        }
+        if [[ "${TARGET}" == "sender" || "${TARGET}" == "all" ]]; then
+          verify_bin sender sender
+        fi
+        if [[ "${TARGET}" == "display" || "${TARGET}" == "all" ]]; then
+          verify_bin display display
+        fi
+
     - name: Run native unit tests
       if: ${{ inputs.run_tests == 'true' }}
       shell: bash
@@ -108,6 +143,16 @@ runs:
         set -euo pipefail
 
         mkdir -p output ota flash_package
+        if [[ "${RELEASE_TYPE}" == "test" ]]; then
+          channel="test"
+          is_test_firmware="true"
+        elif [[ "${RELEASE_TYPE}" == "prerelease" ]]; then
+          channel="prerelease"
+          is_test_firmware="false"
+        else
+          channel="stable"
+          is_test_firmware="false"
+        fi
 
         sender_sha256=""
         display_sha256=""
@@ -140,7 +185,10 @@ runs:
           echo "  \"commit\": \"${GITHUB_SHA}\","
           echo "  \"target\": \"${TARGET}\","
           echo "  \"release_type\": \"${RELEASE_TYPE}\","
+          echo "  \"channel\": \"${channel}\","
+          echo "  \"is_test_firmware\": ${is_test_firmware},"
           echo "  \"protocol\": 2,"
+          echo "  \"ota_metadata\": \"CANOBD2_FW_METADATA_BEGIN\","
           echo "  \"sender_bin\": \"${sender_bin}\","
           echo "  \"display_bin\": \"${display_bin}\","
           echo "  \"sender_bin_stable\": \"${sender_stable}\","
@@ -154,6 +202,8 @@ runs:
           echo "# CAN OBD2 Firmware ${VERSION_TAG}"
           echo
           echo "- Type: ${RELEASE_TYPE}"
+          echo "- Channel: ${channel}"
+          echo "- Test firmware: ${is_test_firmware}"
           echo "- Target: ${TARGET}"
           echo "- Commit: ${GITHUB_SHA}"
           echo "- Protocol: 2"

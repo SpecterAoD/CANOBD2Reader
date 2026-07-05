@@ -87,6 +87,19 @@ jobs:
         run: |
           platformio run -e sender -e display
 
+      - name: Verify firmware OTA metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -a -q "CANOBD2_FW_METADATA_BEGIN" .pio/build/sender/firmware.bin
+          grep -a -q "target=sender" .pio/build/sender/firmware.bin
+          grep -a -q "version=${VERSION_TAG}" .pio/build/sender/firmware.bin
+          grep -a -q "protocol=2" .pio/build/sender/firmware.bin
+          grep -a -q "CANOBD2_FW_METADATA_BEGIN" .pio/build/display/firmware.bin
+          grep -a -q "target=display" .pio/build/display/firmware.bin
+          grep -a -q "version=${VERSION_TAG}" .pio/build/display/firmware.bin
+          grep -a -q "protocol=2" .pio/build/display/firmware.bin
+
       - name: Run native unit tests
         run: |
           platformio test -e native
@@ -96,6 +109,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p output
+          channel="ci"
 
           cp .pio/build/sender/firmware.bin "output/CAN_OBD2_sender_${VERSION_TAG}.bin"
           cp .pio/build/display/firmware.bin "output/CAN_OBD2_display_${VERSION_TAG}.bin"
@@ -111,7 +125,12 @@ jobs:
             echo "{"
             echo "  \"version\": \"${VERSION_TAG}\","
             echo "  \"commit\": \"${GITHUB_SHA}\","
+            echo "  \"target\": \"all\","
+            echo "  \"release_type\": \"ci\","
+            echo "  \"channel\": \"${channel}\","
+            echo "  \"is_test_firmware\": true,"
             echo "  \"protocol\": 2,"
+            echo "  \"ota_metadata\": \"CANOBD2_FW_METADATA_BEGIN\","
             echo "  \"sender_bin\": \"CAN_OBD2_sender_${VERSION_TAG}.bin\","
             echo "  \"display_bin\": \"CAN_OBD2_display_${VERSION_TAG}.bin\","
             echo "  \"sender_bin_stable\": \"sender.bin\","
