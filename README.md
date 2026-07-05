@@ -5,6 +5,21 @@ Ein PlatformIO-Projekt mit zwei getrennten Firmware-Zielen:
 - `env:sender`: ESP32 DevKit V1 als CAN-/OBD2-Reader und ESP-NOW-Sender
 - `env:display`: LilyGO T-Display S3 als ESP-NOW-Empfänger und Dashboard-Anzeige
 
+## Projektdokumentation
+
+Die technische Projektdokumentation liegt im Ordner [`docs/`](docs/README.md). Sie ist als Single Source of Truth fuer Architektur, Konfiguration, Runtime, CAN/OBD/UDS, Telemetrie, Display, OTA, Simulation, Tests, Sicherheit und Roadmap gedacht.
+
+Wichtige Einstiege:
+
+- [`docs/00_Master_Design_Document.md`](docs/00_Master_Design_Document.md) - Projektvision, Zielarchitektur, Roadmap und Definition of Done
+- [`docs/01_Architecture.md`](docs/01_Architecture.md) - Gesamtarchitektur und Datenfluss
+- [`docs/02_Project_Structure.md`](docs/02_Project_Structure.md) - Ordner und Module
+- [`docs/16_OTA.md`](docs/16_OTA.md) - OTA, Firmware-Metadaten und Release-Artefakte
+- [`docs/25_Roadmap.md`](docs/25_Roadmap.md) - offene Baustellen und geplante Entwicklung
+- [`docs/26_Developer_Guide.md`](docs/26_Developer_Guide.md) - Entwicklungsablauf, Build, Tests und Release
+
+Bei Architektur- oder Verhaltensaenderungen sollen die passenden Dokumente im selben Commit aktualisiert werden.
+
 ## Projektstruktur
 
 ```text

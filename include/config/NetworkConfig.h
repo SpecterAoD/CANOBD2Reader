@@ -32,7 +32,9 @@ constexpr bool RequireWebStart = SenderConfig::RequireWebStart;
 
 constexpr const char* WifiSsid = Secrets::WifiSsid;
 constexpr const char* WifiPassword = Secrets::WifiPassword;
-constexpr bool WifiEnable = WifiSsid[0] != '\0';
+constexpr bool EnableStationWifi = true;
+constexpr bool WifiEnable = EnableStationWifi && WifiSsid[0] != '\0';
+constexpr uint32_t WifiConnectTimeoutMs = 15000;
 
 constexpr uint8_t EspNowChannel = ProjectConfig::EspNowChannel;
 constexpr bool UseEspNowEncryption = true;

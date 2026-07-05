@@ -1,0 +1,72 @@
+# CANOBD2Reader Project Documentation
+
+## Contents
+
+- [Purpose](#purpose)
+- [Single source of truth](#single-source-of-truth)
+- [Documentation index](#documentation-index)
+- [How to maintain this documentation](#how-to-maintain-this-documentation)
+
+## Purpose
+
+This folder contains the technical project documentation for CANOBD2Reader. It describes both the current implementation and the intended target architecture so future development can continue without rediscovering design decisions.
+
+## Single source of truth
+
+The most important entry point is the [Master Design Document](00_Master_Design_Document.md). All other documents provide detail for one subsystem.
+
+Each chapter uses this structure where useful:
+
+- **Current state**: what exists in the repository today.
+- **Target state**: the desired long-term architecture.
+- **Migration plan**: safe steps to move from current state to target state.
+
+## Documentation index
+
+| Chapter | Topic |
+| --- | --- |
+| [00](00_Master_Design_Document.md) | Master design, vision, roadmap and definition of done |
+| [01](01_Architecture.md) | Overall architecture and data flow |
+| [02](02_Project_Structure.md) | Repository and module structure |
+| [03](03_Coding_Guidelines.md) | C++ and project coding standards |
+| [04](04_Config_System.md) | Static configuration system |
+| [05](05_Runtime.md) | Runtime state and lifecycle |
+| [06](06_CAN_Architecture.md) | CAN, TWAI and router architecture |
+| [07](07_ISOTP.md) | ISO-TP transport layer |
+| [08](08_OBD.md) | OBD-II scheduler, PID decoding and capability scan |
+| [09](09_UDS.md) | UDS read-only diagnostics and discovery |
+| [10](10_Telemetry.md) | Sender/display telemetry protocol |
+| [11](11_ESP_NOW.md) | ESP-NOW transport and recovery |
+| [12](12_Display.md) | Display UI, pages, navigation and rendering |
+| [13](13_Sender.md) | Sender firmware architecture |
+| [14](14_PowerManager.md) | Power management and start-stop detection |
+| [15](15_Webserver.md) | Web UI, REST APIs and status handling |
+| [16](16_OTA.md) | OTA, firmware metadata and release artifacts |
+| [17](17_Simulation.md) | Simulation architecture and scenarios |
+| [18](18_Testing.md) | Unit, integration and hardware tests |
+| [19](19_GitHub_Actions.md) | CI, test builds, prereleases and releases |
+| [20](20_Hardware.md) | Sender/display hardware, pins and wiring |
+| [21](21_API.md) | JSON API reference |
+| [22](22_Security.md) | Secrets, authentication and safe diagnostics |
+| [23](23_Logging.md) | Serial and persistent diagnostic logging |
+| [24](24_Diagnostics.md) | Diagnostic workflows and capability scanner |
+| [25](25_Roadmap.md) | Open work, known limitations and planned features |
+| [26](26_Developer_Guide.md) | Developer setup and contribution workflow |
+
+Additional older documents are kept for context:
+
+- [architecture.md](architecture.md)
+- [isotp.md](isotp.md)
+- [security.md](security.md)
+- [simulation.md](simulation.md)
+- [telemetry.md](telemetry.md)
+
+## How to maintain this documentation
+
+When a subsystem changes, update the corresponding chapter in the same commit as the code change. At minimum, update:
+
+1. Current state.
+2. Relevant APIs or packet structures.
+3. Tests and hardware validation notes.
+4. Roadmap item status in [25_Roadmap.md](25_Roadmap.md).
+

@@ -11,6 +11,8 @@
 #include "DiagnosticLog.h"
 #include "WebAssets.h"
 #include "WebRuntimeHandlers.h"
+#include "FirmwareUpdateManager.h"
+#include "WifiStationManager.h"
 #include <ArduinoOTA.h>
 #include <WiFi.h>
 #include <WebServer.h>
@@ -28,6 +30,23 @@ namespace {
   void displayWebLogCallback(const String& message) {
     DisplayData::runtime().lastError = message;
     DiagnosticLog::appendf("[DISPLAY] %s", message.c_str());
+  }
+
+  String simpleGithubUpdatePage() {
+    return R"rawliteral(
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CANOBD2 Display Updates</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#07101d;color:#f8fafc;margin:0;padding:16px;max-width:520px}button,input,select{width:100%;padding:12px;margin:6px 0;border-radius:12px;border:1px solid #334155;background:#0f172a;color:#f8fafc}.card{background:#182235;border:1px solid #263244;border-radius:16px;padding:14px;margin:10px 0}pre{white-space:pre-wrap;word-break:break-word}</style></head><body>
+<h1>Display GitHub Updates</h1><div class="card"><h2>WLAN / Hotspot</h2><input id="ssid" placeholder="SSID"><input id="pass" placeholder="Passwort" type="password"><button onclick="wifiSave()">Speichern</button><button onclick="post('/api/wifi/connect')">WLAN verbinden</button><button onclick="post('/api/wifi/forget')">WLAN vergessen</button></div>
+<div class="card"><h2>Update</h2><select id="channel"><option>development</option><option>beta</option><option>stable</option></select><button onclick="setChannel()">Kanal setzen</button><button onclick="post('/api/update/check')">Nach Updates suchen</button><button onclick="post('/api/update/install')">Neueste Version installieren</button><input id="version" placeholder="Rollback/Version z.B. V2.0.0.b4"><button onclick="installVersion()">Ausgewaehlte Version installieren</button></div>
+<div class="card"><h2>Status</h2><pre id="out">--</pre></div><script>
+async function post(u,body){let r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body||''}); await refresh(); return r}
+async function wifiSave(){await post('/api/wifi/configure','ssid='+encodeURIComponent(ssid.value)+'&password='+encodeURIComponent(pass.value))}
+async function setChannel(){await post('/api/update/channel','channel='+encodeURIComponent(channel.value))}
+async function installVersion(){await post('/api/update/install','version='+encodeURIComponent(version.value))}
+async function refresh(){let w=await fetch('/api/wifi/status').then(r=>r.json()).catch(e=>({error:String(e)}));let u=await fetch('/api/update/status').then(r=>r.json()).catch(e=>({error:String(e)}));let v=await fetch('/api/update/versions').then(r=>r.json()).catch(e=>({versions:[]}));out.textContent=JSON.stringify({wifi:w,update:u,versions:v},null,2)}
+setInterval(refresh,2000);refresh();
+</script></body></html>
+)rawliteral";
   }
 
   String displayDiagnosticTextReport() {
@@ -170,6 +189,66 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     json += "\"lastError\":\"" + WebRuntimeHandlers::jsonEscape(runtime.lastError) + "\"";
     json += "}";
     server.send(200, "application/json", json);
+  }
+
+  void handleGithubUpdatePage() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    server.send(200, "text/html; charset=utf-8", simpleGithubUpdatePage());
+  }
+
+  void handleWifiStatus() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    server.send(200, "application/json", Network::WifiStationManager::statusJson());
+  }
+
+  void handleWifiConfigure() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    const bool ok = Network::WifiStationManager::configure(server.arg("ssid"), server.arg("password"));
+    server.send(ok ? 200 : 400, "application/json", ok ? "{\"saved\":true}" : "{\"saved\":false}");
+  }
+
+  void handleWifiConnect() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    const bool ok = Network::WifiStationManager::connect();
+    displayWebLogCallback(ok ? "[UPDATE] WLAN verbunden" : "[UPDATE] WLAN Verbindung fehlgeschlagen");
+    server.send(ok ? 200 : 500, "application/json", Network::WifiStationManager::statusJson());
+  }
+
+  void handleWifiForget() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    const bool ok = Network::WifiStationManager::forget();
+    server.send(ok ? 200 : 500, "application/json", Network::WifiStationManager::statusJson());
+  }
+
+  void handleGithubUpdateStatus() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    server.send(200, "application/json", FirmwareUpdate::FirmwareUpdateManager::statusJson());
+  }
+
+  void handleGithubUpdateVersions() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    server.send(200, "application/json", FirmwareUpdate::FirmwareUpdateManager::versionsJson());
+  }
+
+  void handleGithubUpdateCheck() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    const bool ok = FirmwareUpdate::FirmwareUpdateManager::checkNow();
+    server.send(ok ? 200 : 500, "application/json", FirmwareUpdate::FirmwareUpdateManager::statusJson());
+  }
+
+  void handleGithubUpdateInstall() {
+    if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireOtaAuthentication)) return;
+    const String version = server.arg("version");
+    const bool ok = version.length() > 0
+                        ? FirmwareUpdate::FirmwareUpdateManager::installVersion(version.c_str(), true)
+                        : FirmwareUpdate::FirmwareUpdateManager::installLatest(true);
+    server.send(ok ? 200 : 500, "application/json", FirmwareUpdate::FirmwareUpdateManager::statusJson());
+  }
+
+  void handleGithubUpdateChannel() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    FirmwareUpdate::FirmwareUpdateManager::setChannel(FirmwareUpdate::parseChannel(server.arg("channel").c_str()));
+    server.send(200, "application/json", FirmwareUpdate::FirmwareUpdateManager::statusJson());
   }
 
   void handlePersistentLog() {
@@ -318,6 +397,11 @@ namespace DisplayOta {
     WiFi.softAP(NetworkConfig::DisplayWebSsid,
                 NetworkConfig::DisplayWebPassword,
                 NetworkConfig::EspNowChannel);
+    Network::WifiStationManager::begin();
+    FirmwareUpdate::FirmwareUpdateManager::begin(ProjectConfig::TargetName,
+                                         ProjectConfig::FirmwareVersion,
+                                         ProjectConfig::ProtocolVersion);
+    FirmwareUpdate::FirmwareUpdateManager::setLogCallback(displayWebLogCallback);
 
     static const char* authHeaders[] = {"X-API-Token", "Authorization"};
     server.collectHeaders(authHeaders, 2);
@@ -354,6 +438,16 @@ namespace DisplayOta {
     server.on("/api/simulation/toggle", HTTP_POST, handleSimulationToggle);
     server.on("/api/simulation/scenario", HTTP_GET, handleSimulationStatus);
     server.on("/api/simulation/scenario", HTTP_POST, handleSimulationScenario);
+    server.on("/github-update", HTTP_GET, handleGithubUpdatePage);
+    server.on("/api/wifi/status", HTTP_GET, handleWifiStatus);
+    server.on("/api/wifi/configure", HTTP_POST, handleWifiConfigure);
+    server.on("/api/wifi/connect", HTTP_POST, handleWifiConnect);
+    server.on("/api/wifi/forget", HTTP_POST, handleWifiForget);
+    server.on("/api/update/status", HTTP_GET, handleGithubUpdateStatus);
+    server.on("/api/update/versions", HTTP_GET, handleGithubUpdateVersions);
+    server.on("/api/update/check", HTTP_POST, handleGithubUpdateCheck);
+    server.on("/api/update/install", HTTP_POST, handleGithubUpdateInstall);
+    server.on("/api/update/channel", HTTP_POST, handleGithubUpdateChannel);
     server.on("/update", HTTP_POST, handleUpdateFinished, handleUpdateUpload);
     server.begin();
     DisplayData::runtime().lastError = "Display Web-OTA bereit";
@@ -363,6 +457,7 @@ namespace DisplayOta {
 #if CANOBD2_ENABLE_DISPLAY_OTA
     ArduinoOTA.handle();
     server.handleClient();
+    FirmwareUpdate::FirmwareUpdateManager::handle();
 #endif
   }
 }

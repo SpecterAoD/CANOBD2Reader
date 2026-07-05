@@ -58,6 +58,16 @@ private:
     static void handleCapabilitiesCanActionStart();
     static void handleCapabilitiesCanActionFinish();
     static void handleCapabilitiesStop();
+    static void handleGithubUpdatePage();
+    static void handleWifiStatus();
+    static void handleWifiConfigure();
+    static void handleWifiConnect();
+    static void handleWifiForget();
+    static void handleGithubUpdateStatus();
+    static void handleGithubUpdateVersions();
+    static void handleGithubUpdateCheck();
+    static void handleGithubUpdateInstall();
+    static void handleGithubUpdateChannel();
     static void handleUpdatePage();
     static void handleUpdateFinished();
     static void handleUpdateUpload();
