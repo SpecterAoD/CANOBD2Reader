@@ -39,16 +39,23 @@ runs:
         cp include/secrets.example.h include/secrets.h
         echo "Build uses include/secrets.example.h placeholder credentials."
 
-    - name: Validate version
+    - name: Normalize and validate version
       shell: bash
       env:
-        VERSION: ${{ inputs.version }}
+        RAW_VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
-        if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9]+)*$ ]]; then
-          echo "Invalid version '${VERSION}'. Enter the version without leading V, for example 2.0.0.b3." >&2
+        version="${RAW_VERSION#v}"
+        version="${version#V}"
+        version="${version/Beta/beta}"
+        version="${version/BETA/beta}"
+        if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9]+)*$ ]]; then
+          echo "Invalid version '${RAW_VERSION}'. Use values like 2.0.0.b4, V2.0.0.b4 or 2.0.0-beta.1." >&2
           exit 1
         fi
+        echo "CANOBD2_NORMALIZED_VERSION=${version}" >> "${GITHUB_ENV}"
+        echo "CANOBD2_VERSION_TAG=V${version}" >> "${GITHUB_ENV}"
+        echo "Normalized firmware version: V${version}"
 
     - name: Validate target
       shell: bash
@@ -87,9 +94,9 @@ runs:
       shell: bash
       env:
         TARGET: ${{ inputs.target }}
-        CANOBD2_FIRMWARE_VERSION: V${{ inputs.version }}
       run: |
         set -euo pipefail
+        export CANOBD2_FIRMWARE_VERSION="${CANOBD2_VERSION_TAG}"
         case "${TARGET}" in
           sender)
             platformio run -e sender
@@ -106,7 +113,6 @@ runs:
       shell: bash
       env:
         TARGET: ${{ inputs.target }}
-        VERSION_TAG: V${{ inputs.version }}
       run: |
         set -euo pipefail
         verify_bin() {
@@ -116,7 +122,7 @@ runs:
           test -f "${bin}"
           grep -a -q "CANOBD2_FW_METADATA_BEGIN" "${bin}"
           grep -a -q "target=${expected_target}" "${bin}"
-          grep -a -q "version=${VERSION_TAG}" "${bin}"
+          grep -a -q "version=${CANOBD2_VERSION_TAG}" "${bin}"
           grep -a -q "protocol=2" "${bin}"
         }
         if [[ "${TARGET}" == "sender" || "${TARGET}" == "all" ]]; then
@@ -136,11 +142,11 @@ runs:
     - name: Prepare firmware artifacts
       shell: bash
       env:
-        VERSION_TAG: V${{ inputs.version }}
         TARGET: ${{ inputs.target }}
         RELEASE_TYPE: ${{ inputs.release_type }}
       run: |
         set -euo pipefail
+        VERSION_TAG="${CANOBD2_VERSION_TAG}"
 
         mkdir -p output ota flash_package
         if [[ "${RELEASE_TYPE}" == "test" ]]; then

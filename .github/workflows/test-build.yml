@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Firmware version without leading V, for example 1.0.15.test1"
+        description: "Firmware version, for example 1.0.15.test1 or V1.0.15.test1"
         required: true
         type: string
       target:

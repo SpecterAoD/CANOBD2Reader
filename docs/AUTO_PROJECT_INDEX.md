@@ -52,6 +52,12 @@
     - debugMakro.h
     - legacy_modular_main.cpp
     - legacy_src/
+  - AUTO_BUILD_FLAGS.md
+  - AUTO_CONFIG_REFERENCE.md
+  - AUTO_FIRMWARE_ARTIFACTS.md
+  - AUTO_FIRMWARE_SIZE.md
+  - AUTO_PROJECT_INDEX.md
+  - AUTO_TEST_OVERVIEW.md
   - images/
     - .gitkeep
   - isotp.md

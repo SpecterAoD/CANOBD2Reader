@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Beta version without leading V, for example 2.0.0-beta.1"
+        description: "Beta version, for example 2.0.0-beta.1 or V2.0.0-Beta.1"
         required: true
         type: string
       target:
@@ -29,16 +29,30 @@ jobs:
   beta-release:
     runs-on: ubuntu-24.04
 
-    env:
-      VERSION: ${{ inputs.version }}
-      VERSION_TAG: V${{ inputs.version }}
-      RELEASE_TAG: firmware-beta-V${{ inputs.version }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Normalize beta version
+        id: version
+        shell: bash
+        env:
+          RAW_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="${RAW_VERSION#v}"
+          version="${version#V}"
+          version="${version/Beta/beta}"
+          version="${version/BETA/beta}"
+          echo "VERSION=${version}" >> "${GITHUB_ENV}"
+          echo "VERSION_TAG=V${version}" >> "${GITHUB_ENV}"
+          echo "RELEASE_TAG=firmware-beta-V${version}" >> "${GITHUB_ENV}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "version_tag=V${version}" >> "${GITHUB_OUTPUT}"
+          echo "release_tag=firmware-beta-V${version}" >> "${GITHUB_OUTPUT}"
+          echo "Normalized beta version: V${version}"
 
       - name: Validate beta version and release tag
         shell: bash
@@ -56,7 +70,7 @@ jobs:
       - name: Build beta firmware artifacts
         uses: ./.github/actions/firmware-build
         with:
-          version: ${{ inputs.version }}
+          version: ${{ steps.version.outputs.version }}
           target: ${{ inputs.target }}
           run_tests: "true"
           release_type: prerelease
@@ -73,11 +87,10 @@ jobs:
       - name: Create GitHub beta prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: CAN OBD2 Beta Firmware ${{ env.VERSION_TAG }}
+          tag_name: ${{ steps.version.outputs.release_tag }}
+          name: CAN OBD2 Beta Firmware ${{ steps.version.outputs.version_tag }}
           files: output/*
           body_path: output/RELEASE_NOTES.md
           draft: ${{ inputs.draft }}
           prerelease: true
           generate_release_notes: true
-
