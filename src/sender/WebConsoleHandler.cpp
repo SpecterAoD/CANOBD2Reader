@@ -39,15 +39,29 @@ namespace {
     String simpleGithubUpdatePage() {
         return R"rawliteral(
 <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CANOBD2 GitHub Updates</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#07101d;color:#f8fafc;margin:0;padding:16px;max-width:520px}button,input,select{width:100%;padding:12px;margin:6px 0;border-radius:12px;border:1px solid #334155;background:#0f172a;color:#f8fafc}.card{background:#182235;border:1px solid #263244;border-radius:16px;padding:14px;margin:10px 0}pre{white-space:pre-wrap;word-break:break-word}</style></head><body>
-<h1>GitHub Updates</h1><div class="card"><h2>WLAN / Hotspot</h2><input id="ssid" placeholder="SSID"><input id="pass" placeholder="Passwort" type="password"><button onclick="wifiSave()">Speichern</button><button onclick="post('/api/wifi/connect')">WLAN verbinden</button><button onclick="post('/api/wifi/forget')">WLAN vergessen</button></div>
-<div class="card"><h2>Update</h2><select id="channel"><option>development</option><option>beta</option><option>stable</option></select><button onclick="setChannel()">Kanal setzen</button><button onclick="post('/api/update/check')">Nach Updates suchen</button><button onclick="post('/api/update/install')">Neueste Version installieren</button><input id="version" placeholder="Rollback/Version z.B. V2.0.0.b4"><button onclick="installVersion()">Ausgewaehlte Version installieren</button></div>
-<div class="card"><h2>Status</h2><pre id="out">--</pre></div><script>
-async function post(u,body){let r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body||''}); await refresh(); return r}
+<title>CANOBD2 GitHub Updates</title><style>
+body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#07101d;color:#f8fafc;margin:0;padding:14px;max-width:760px}
+h1{font-size:1.55rem;margin:8px 0 12px}.grid{display:grid;gap:10px}.card{background:#182235;border:1px solid #263244;border-radius:16px;padding:14px;margin:10px 0}
+button,input,select{width:100%;box-sizing:border-box;padding:12px;margin:6px 0;border-radius:12px;border:1px solid #334155;background:#0f172a;color:#f8fafc}
+button.primary{background:#0369a1}button.warn{background:#9a3412}button.danger{background:#991b1b}button:disabled{opacity:.45}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:8px}.pill{padding:8px;border-radius:10px;background:#0f172a}.ok{color:#22c55e}.bad{color:#ef4444}.muted{color:#94a3b8}
+table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{border-bottom:1px solid #334155;padding:7px;text-align:left}td:last-child{text-align:right}
+pre{white-space:pre-wrap;word-break:break-word;font-size:.8rem}.small{font-size:.84rem;color:#94a3b8}
+</style></head><body>
+<h1>GitHub Updates - Sender</h1>
+<div class="card"><h2>WLAN / Hotspot</h2><input id="ssid" placeholder="SSID"><input id="pass" placeholder="Passwort" type="password"><button class="primary" onclick="wifiSave()">Speichern</button><button onclick="post('/api/wifi/connect')">WLAN verbinden</button><button onclick="post('/api/wifi/forget')">WLAN vergessen</button><div id="wifi" class="small">--</div></div>
+<div class="card"><h2>Update-Kanal</h2><select id="channel"><option value="development">Development</option><option value="beta">Beta</option><option value="stable">Stable</option></select><button onclick="setChannel()">Kanal setzen</button><button class="primary" onclick="post('/api/update/check')">Nach Updates suchen</button><button class="primary" onclick="installLatest()">Neueste passende Version installieren</button><div id="status" class="kv"></div></div>
+<div class="card"><h2>Verfügbare Versionen</h2><div class="small">Rollback wird nie automatisch installiert und benötigt eine Browser-Bestätigung.</div><table><thead><tr><th>Version</th><th>Kanal</th><th>Status</th><th>Aktion</th></tr></thead><tbody id="versions"><tr><td colspan="4">Noch kein Manifest geladen.</td></tr></tbody></table></div>
+<div class="card"><h2>Rohdaten</h2><pre id="out">--</pre></div><script>
+async function post(u,body){let r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body||''}); let t=await r.text(); await refresh(); if(!r.ok) alert(t); return r}
 async function wifiSave(){await post('/api/wifi/configure','ssid='+encodeURIComponent(ssid.value)+'&password='+encodeURIComponent(pass.value))}
 async function setChannel(){await post('/api/update/channel','channel='+encodeURIComponent(channel.value))}
-async function installVersion(){await post('/api/update/install','version='+encodeURIComponent(version.value))}
-async function refresh(){let w=await fetch('/api/wifi/status').then(r=>r.json()).catch(e=>({error:String(e)}));let u=await fetch('/api/update/status').then(r=>r.json()).catch(e=>({error:String(e)}));let v=await fetch('/api/update/versions').then(r=>r.json()).catch(e=>({versions:[]}));out.textContent=JSON.stringify({wifi:w,update:u,versions:v},null,2)}
+async function installLatest(){if(confirm('Neueste passende Firmware installieren?')) await post('/api/update/install')}
+async function installVersion(ver,status){let body='version='+encodeURIComponent(ver); if(status==='rollback'){if(!confirm('Rollback auf '+ver+' installieren?')) return; body+='&confirm=rollback'} else {if(!confirm('Firmware '+ver+' installieren?')) return} await post('/api/update/install',body)}
+function cls(status){return status==='newer'?'ok':status==='rollback'?'bad':'muted'}
+function renderStatus(w,u){wifi.innerHTML='WLAN: <b class="'+(w.connected?'ok':'bad')+'">'+(w.connected?'verbunden':'offline')+'</b> '+(w.ip||''); channel.value=(u.channel||'development').toLowerCase(); status.innerHTML='<div class="pill">Installiert<br><b>'+u.installed+'</b></div><div class="pill">Verfügbar<br><b class="'+(u.updateAvailable?'ok':'muted')+'">'+(u.availableVersion||'--')+'</b></div><div class="pill">Target<br><b>'+u.target+'</b></div><div class="pill">Auto<br><b>'+(u.autoUpdate?'aktiv':'aus')+'</b></div><div class="pill">Rollback<br><b>'+(u.allowRollback?'erlaubt':'gesperrt')+'</b></div><div class="pill">Fehler<br><b class="'+(u.lastError?'bad':'ok')+'">'+(u.lastError||'--')+'</b></div>'}
+function renderVersions(v){let rows=(v.versions||[]).map(x=>{let action=''; if(x.status==='newer') action='<button class="primary" onclick="installVersion(\''+x.version+'\',\''+x.status+'\')">Installieren</button>'; else if(x.status==='rollback') action='<button class="warn" onclick="installVersion(\''+x.version+'\',\''+x.status+'\')">Rollback</button>'; else action='<span class="muted">'+x.status+'</span>'; return '<tr><td><b>'+x.version+'</b><br><span class="small">'+(x.createdAt||'')+'</span></td><td>'+x.channel+'</td><td class="'+cls(x.status)+'">'+x.status+'</td><td>'+action+'</td></tr>'}).join(''); versions.innerHTML=rows||'<tr><td colspan="4">Keine Versionen geladen.</td></tr>'}
+async function refresh(){let w=await fetch('/api/wifi/status').then(r=>r.json()).catch(e=>({error:String(e)}));let u=await fetch('/api/update/status').then(r=>r.json()).catch(e=>({error:String(e)}));let v=await fetch('/api/update/versions').then(r=>r.json()).catch(e=>({versions:[]}));renderStatus(w,u);renderVersions(v);out.textContent=JSON.stringify({wifi:w,update:u,versions:v},null,2)}
 setInterval(refresh,2000);refresh();
 </script></body></html>
 )rawliteral";
@@ -303,7 +317,7 @@ void WebConsoleHandler::handleRoot() {
 .wrap{width:100%;max-width:430px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 14px)}
 header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.title{font-size:20px;font-weight:800}.sub{font-size:12px;color:var(--muted)}
 .pill{padding:6px 10px;border-radius:999px;background:#263244;color:var(--muted);font-size:12px}.pill.ok{color:#052e16;background:var(--ok)}.pill.warn{color:#431407;background:var(--warn)}.pill.err{color:#450a0a;background:var(--err)}
-.nav{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;position:sticky;top:0;background:rgba(7,11,18,.92);backdrop-filter:blur(10px);padding:8px 0;z-index:2}
+.nav{display:grid;grid-template-columns:repeat(6,1fr);gap:7px;position:sticky;top:0;background:rgba(7,11,18,.92);backdrop-filter:blur(10px);padding:8px 0;z-index:2}
 button,.btn{border:0;border-radius:14px;padding:11px 8px;background:#1f2937;color:var(--text);font-weight:700;font-size:13px;text-decoration:none;text-align:center}
 button.active{background:var(--accent);color:#042f3d}.page{display:none}.page.active{display:block}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.card{background:var(--card);border:1px solid #263244;border-radius:18px;padding:12px;min-height:78px}.wide{grid-column:1/-1}.label{font-size:12px;color:var(--muted);margin-bottom:8px}.value{font-size:24px;font-weight:800;word-break:break-word}.small{font-size:13px;color:var(--muted);line-height:1.35}.okText{color:var(--ok)}.warnText{color:var(--warn)}.errText{color:var(--err)}
 table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:7px 4px;border-bottom:1px solid #263244;text-align:left}th{color:var(--muted);font-weight:700}.status-OK{color:var(--ok)}.status-TIMEOUT,.status-PENDING{color:var(--warn)}.status-UNSUPPORTED{color:var(--muted)}.status-NEGATIVE_RESPONSE,.status-DECODE_ERROR,.status-SEND_FAILED{color:var(--err)}
@@ -320,6 +334,7 @@ input[type=file]{width:100%;padding:12px;border-radius:14px;background:#0f172a;c
 <button data-page="cap">Cap</button>
 <button data-page="log">Log</button>
 <button data-page="ota">OTA</button>
+<button data-page="gh">GitHub</button>
 </nav>
 <section id="dash" class="page active"><div class="grid">
 <div class="card wide"><div class="label">Firmware</div><div class="small">Version: <span id="fw">--</span><br>Target: <span id="target">--</span><br>Protocol: <span id="proto">--</span><br>Build: <span id="build">--</span></div></div>
@@ -375,6 +390,9 @@ Timeouts: <span id="udsTimeouts">--</span> · Negative: <span id="udsNeg">--</sp
 <div class="card wide"><div class="label">OTA Status</div><div id="otastatus" class="value">--</div><div class="small">Frei: <span id="freeota">--</span> · Sketch: <span id="sketch">--</span> · Flash: <span id="flash">--</span></div></div>
 <form class="actions" method="POST" action="/update" enctype="multipart/form-data"><input type="file" name="firmware" accept=".bin"><button class="primary" type="submit">OTA Update starten</button></form>
 <div class="actions"><button id="restart" class="danger">Sender neu starten</button></div></section>
+<section id="gh" class="page"><div class="grid">
+<div class="card wide"><div class="label">GitHub Updates / Rollback</div><div class="small">Firmware per WLAN oder Handy-Hotspot aus dem GitHub-Manifest laden. Sender installiert nur Sender-Firmware. Rollback ist manuell und benötigt eine Browser-Bestätigung.</div><div class="actions"><a class="btn primary" href="/github-update">GitHub Update-Seite öffnen</a></div></div>
+</div></section>
 </div>
 <script>
 const $=id=>document.getElementById(id);
@@ -720,8 +738,9 @@ void WebConsoleHandler::handleGithubUpdateCheck() {
 void WebConsoleHandler::handleGithubUpdateInstall() {
     if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireOtaAuthentication)) return;
     const String version = server.arg("version");
+    const bool rollbackConfirmed = server.arg("confirm") == "rollback";
     const bool ok = version.length() > 0
-                        ? FirmwareUpdate::FirmwareUpdateManager::installVersion(version.c_str(), true)
+                        ? FirmwareUpdate::FirmwareUpdateManager::installVersion(version.c_str(), true, rollbackConfirmed)
                         : FirmwareUpdate::FirmwareUpdateManager::installLatest(true);
     server.send(ok ? 200 : 500, "application/json", FirmwareUpdate::FirmwareUpdateManager::statusJson());
 }

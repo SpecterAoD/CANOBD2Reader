@@ -15,6 +15,8 @@ uint32_t lastConnectAttemptMs = 0;
 }
 
 void WifiStationManager::begin() {
+    const auto credentials = WifiCredentialStore::load();
+    currentSsid = credentials.ssid;
 #if defined(ARDUINO)
     WiFi.mode(WIFI_AP_STA);
 #endif

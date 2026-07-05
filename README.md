@@ -320,6 +320,30 @@ OTA-Fehler erscheinen direkt in der Weboberflaeche und im `/status` Feld
 `otaStatus`. Typische Ursachen sind eine falsche `.bin` fuer das Zielgeraet,
 zu wenig freier OTA-Speicher oder ein abgebrochener Upload.
 
+### GitHub-Updates und Rollback
+
+Sender und Display besitzen zusätzlich eine GitHub-Update-Seite:
+
+- Sender: `http://192.168.4.1/github-update`
+- Display: `http://192.168.4.1/github-update`
+
+Dort können WLAN-/Hotspot-Zugangsdaten eingetragen, der Update-Kanal gewählt
+und verfügbare Versionen aus dem GitHub-Manifest angezeigt werden. Die Geräte
+installieren nur Firmware für das eigene Target (`sender` bzw. `display`) und
+prüfen Protocol-Version, SHA256 und OTA-Speicher.
+
+Release-Workflows erzeugen neben `firmware_manifest.json` auch
+`update_manifest.json`. Diese Datei ist das geräteseitige Update-Manifest für
+die Weboberfläche und wird zusätzlich in den zentralen GitHub-Release
+`firmware-index` hochgeladen:
+
+```text
+https://github.com/SpecterAoD/CANOBD2Reader/releases/download/firmware-index/update_manifest.json
+```
+
+Ältere Versionen werden als Rollback angezeigt. Rollback wird nie automatisch
+installiert, sondern nur nach manueller Auswahl und Browser-Bestätigung.
+
 ## Debug-/Feature-Flags
 
 Die zentralen Build-Flags liegen in `platformio.ini` und `include/common_config.h`:

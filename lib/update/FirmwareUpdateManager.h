@@ -25,7 +25,7 @@ public:
     static UpdateChannel channel();
     static bool checkNow();
     static bool installLatest(bool manual);
-    static bool installVersion(const char* version, bool manual);
+    static bool installVersion(const char* version, bool manual, bool rollbackConfirmed = false);
     static String statusJson();
     static String versionsJson();
 #if defined(ARDUINO)
@@ -34,4 +34,3 @@ public:
 };
 
 } // namespace FirmwareUpdate
-

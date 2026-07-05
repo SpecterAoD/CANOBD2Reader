@@ -87,11 +87,22 @@ void test_rollback_is_manual_only_policy() {
                                                     FirmwareUpdate::UpdateChannel::Development, false));
 }
 
+void test_find_version_accepts_optional_v_prefix() {
+    FirmwareUpdate::UpdateManifest manifest;
+    TEST_ASSERT_TRUE(FirmwareUpdate::parseManifest(kManifest, manifest));
+    const auto* withPrefix = FirmwareUpdate::findVersion(manifest, "sender", "V1.0.13");
+    const auto* withoutPrefix = FirmwareUpdate::findVersion(manifest, "sender", "1.0.13");
+    TEST_ASSERT_NOT_NULL(withPrefix);
+    TEST_ASSERT_NOT_NULL(withoutPrefix);
+    TEST_ASSERT_EQUAL_STRING(withPrefix->version.c_str(), withoutPrefix->version.c_str());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_manifest_parse_and_best_update);
     RUN_TEST(test_stable_filters_development);
     RUN_TEST(test_wrong_target_protocol_and_sha_are_rejected);
     RUN_TEST(test_rollback_is_manual_only_policy);
+    RUN_TEST(test_find_version_accepts_optional_v_prefix);
     return UNITY_END();
 }

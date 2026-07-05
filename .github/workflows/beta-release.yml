@@ -74,6 +74,7 @@ jobs:
           target: ${{ inputs.target }}
           run_tests: "true"
           release_type: prerelease
+          release_tag: ${{ steps.version.outputs.release_tag }}
 
       - name: Create beta release tag
         shell: bash
@@ -94,3 +95,15 @@ jobs:
           draft: ${{ inputs.draft }}
           prerelease: true
           generate_release_notes: true
+
+      - name: Publish GitHub update index
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: firmware-index
+          name: CAN OBD2 Firmware Update Index
+          files: output/update_manifest.json
+          body: Machine-readable update index for device-side GitHub OTA.
+          draft: false
+          prerelease: true
+          make_latest: false
+          overwrite_files: true

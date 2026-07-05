@@ -16,6 +16,10 @@ inputs:
     description: test, prerelease or release.
     required: false
     default: test
+  release_tag:
+    description: GitHub release tag used for firmware download URLs.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -144,16 +148,23 @@ runs:
       env:
         TARGET: ${{ inputs.target }}
         RELEASE_TYPE: ${{ inputs.release_type }}
+        INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
       run: |
         set -euo pipefail
         VERSION_TAG="${CANOBD2_VERSION_TAG}"
+        RELEASE_TAG="${INPUT_RELEASE_TAG}"
+        if [[ -z "${RELEASE_TAG}" ]]; then
+          RELEASE_TAG="firmware-${VERSION_TAG}"
+        fi
+        ASSET_BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
+        CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
         mkdir -p output ota flash_package
         if [[ "${RELEASE_TYPE}" == "test" ]]; then
-          channel="test"
+          channel="development"
           is_test_firmware="true"
         elif [[ "${RELEASE_TYPE}" == "prerelease" ]]; then
-          channel="prerelease"
+          channel="beta"
           is_test_firmware="false"
         else
           channel="stable"
@@ -205,6 +216,80 @@ runs:
         } > output/firmware_manifest.json
 
         {
+          echo "{"
+          echo "  \"manifestVersion\": 1,"
+          echo "  \"project\": \"CANOBD2Reader\","
+          echo "  \"generatedAt\": \"${CREATED_AT}\","
+          echo "  \"releaseTag\": \"${RELEASE_TAG}\","
+          echo "  \"sender\": ["
+          if [[ -n "${sender_bin}" ]]; then
+            echo "    {"
+            echo "      \"version\": \"${VERSION_TAG}\","
+            echo "      \"channel\": \"${channel}\","
+            echo "      \"target\": \"sender\","
+            echo "      \"protocol\": 2,"
+            echo "      \"url\": \"${ASSET_BASE_URL}/${sender_stable}\","
+            echo "      \"sha256\": \"${sender_sha256}\","
+            echo "      \"createdAt\": \"${CREATED_AT}\""
+            echo "    }"
+          fi
+          echo "  ],"
+          echo "  \"display\": ["
+          if [[ -n "${display_bin}" ]]; then
+            echo "    {"
+            echo "      \"version\": \"${VERSION_TAG}\","
+            echo "      \"channel\": \"${channel}\","
+            echo "      \"target\": \"display\","
+            echo "      \"protocol\": 2,"
+            echo "      \"url\": \"${ASSET_BASE_URL}/${display_stable}\","
+            echo "      \"sha256\": \"${display_sha256}\","
+            echo "      \"createdAt\": \"${CREATED_AT}\""
+            echo "    }"
+          fi
+          echo "  ]"
+          echo "}"
+        } > output/update_manifest.json
+
+        INDEX_MANIFEST_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/firmware-index/update_manifest.json"
+        curl -fsSL "${INDEX_MANIFEST_URL}" -o previous_update_manifest.json || true
+        python - <<'PY'
+        import json
+        from pathlib import Path
+
+        current_path = Path("output/update_manifest.json")
+        previous_path = Path("previous_update_manifest.json")
+        current = json.loads(current_path.read_text(encoding="utf-8"))
+        try:
+            previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path.exists() else {}
+        except Exception:
+            previous = {}
+
+        merged = {
+            "manifestVersion": 1,
+            "project": "CANOBD2Reader",
+            "generatedAt": current.get("generatedAt", ""),
+            "releaseTag": current.get("releaseTag", ""),
+            "sender": previous.get("sender", []) if isinstance(previous.get("sender", []), list) else [],
+            "display": previous.get("display", []) if isinstance(previous.get("display", []), list) else [],
+        }
+
+        for target in ("sender", "display"):
+            incoming = current.get(target, [])
+            if not isinstance(incoming, list):
+                incoming = []
+            for entry in reversed(incoming):
+                version = entry.get("version", "")
+                merged[target] = [
+                    old for old in merged[target]
+                    if not (old.get("version", "") == version and old.get("target", target) == target)
+                ]
+                merged[target].insert(0, entry)
+            merged[target] = merged[target][:40]
+
+        current_path.write_text(json.dumps(merged, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        PY
+
+        {
           echo "# CAN OBD2 Firmware ${VERSION_TAG}"
           echo
           echo "- Type: ${RELEASE_TYPE}"
@@ -227,12 +312,14 @@ runs:
         } > output/RELEASE_NOTES.md
 
         cp output/firmware_manifest.json ota/latest.json
+        cp output/update_manifest.json ota/update_manifest.json
         if [[ -f output/sender.bin ]]; then cp output/sender.bin ota/sender.bin; fi
         if [[ -f output/display.bin ]]; then cp output/display.bin ota/display.bin; fi
         (cd ota && sha256sum * > SHA256SUMS.txt)
         (cd ota && zip -r "../output/CAN_OBD2_OTA_${VERSION_TAG}.zip" .)
 
         cp output/firmware_manifest.json flash_package/firmware_manifest.json
+        cp output/update_manifest.json flash_package/update_manifest.json
         cp output/RELEASE_NOTES.md flash_package/RELEASE_NOTES.md
         cp output/*.bin flash_package/
         if [[ -f output/sender.bin ]]; then

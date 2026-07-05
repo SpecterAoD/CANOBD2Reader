@@ -297,11 +297,33 @@ bool FirmwareUpdateManager::installLatest(bool manual) {
 #endif
 }
 
-bool FirmwareUpdateManager::installVersion(const char* version, bool manual) {
+bool FirmwareUpdateManager::installVersion(const char* version, bool manual, bool rollbackConfirmed) {
     if (!manifestLoaded && !checkNow()) return false;
     const FirmwareVersionEntry* entry = findVersion(manifest, targetName, version);
     if (entry == nullptr) {
         lastError = "Requested version not found";
+        return false;
+    }
+    const auto eligibility = evaluateEntry(*entry,
+                                           targetName,
+                                           protocolVersion,
+                                           firmwareVersion,
+                                           selectedChannel,
+                                           UpdateConfig::AllowRollback);
+    if (eligibility != InstallEligibility::Installable &&
+        eligibility != InstallEligibility::Rollback) {
+        lastError = std::string("Entry not installable: ") + eligibilityName(eligibility);
+        return false;
+    }
+    if (eligibility == InstallEligibility::Rollback &&
+        (!manual || !UpdateConfig::AllowRollback)) {
+        lastError = "Rollback requires manual confirmation";
+        return false;
+    }
+    if (eligibility == InstallEligibility::Rollback &&
+        UpdateConfig::RequireConfirmationForRollback &&
+        !rollbackConfirmed) {
+        lastError = "Rollback requires explicit confirmation";
         return false;
     }
 #if defined(ARDUINO)
@@ -319,6 +341,10 @@ String FirmwareUpdateManager::statusJson() {
     json += UpdateConfig::EnableAutoUpdate ? "true" : "false";
     json += ",\"autoInstall\":";
     json += UpdateConfig::AutoInstallUpdates ? "true" : "false";
+    json += ",\"allowRollback\":";
+    json += UpdateConfig::AllowRollback ? "true" : "false";
+    json += ",\"requireRollbackConfirmation\":";
+    json += UpdateConfig::RequireConfirmationForRollback ? "true" : "false";
     json += ",\"channel\":\"";
     json += channelName(selectedChannel);
     json += "\",\"installed\":\"";

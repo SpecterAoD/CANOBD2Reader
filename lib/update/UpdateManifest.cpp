@@ -228,8 +228,9 @@ const FirmwareVersionEntry* findVersion(const UpdateManifest& manifest,
                                         const char* target,
                                         const char* version) {
     const auto& list = equalsIgnoreCase(target, "display") ? manifest.display : manifest.sender;
+    const std::string requested = trimVersion(version == nullptr ? "" : version);
     for (const auto& entry : list) {
-        if (entry.version == version) return &entry;
+        if (entry.version == version || trimVersion(entry.version) == requested) return &entry;
     }
     return nullptr;
 }
@@ -278,4 +279,3 @@ std::string manifestVersionsJson(const UpdateManifest& manifest,
 }
 
 } // namespace FirmwareUpdate
-

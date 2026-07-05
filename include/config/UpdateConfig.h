@@ -27,7 +27,7 @@ constexpr uint32_t AutoCheckMinIntervalMs = 15UL * 60UL * 1000UL;
 constexpr uint32_t RestartAfterUpdateMs = 750;
 
 constexpr const char* ManifestUrl =
-    "https://github.com/SpecterAoD/CANOBD2Reader/releases/latest/download/update_manifest.json";
+    "https://github.com/SpecterAoD/CANOBD2Reader/releases/download/firmware-index/update_manifest.json";
 
 // GitHub currently serves release assets through a public TLS chain. Keep this
 // certificate configurable and update it if GitHub changes its chain.
