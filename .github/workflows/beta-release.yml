@@ -1,0 +1,83 @@
+name: Beta Firmware PreRelease
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Beta version without leading V, for example 2.0.0-beta.1"
+        required: true
+        type: string
+      target:
+        description: "Firmware target to build"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - sender
+          - display
+      draft:
+        description: "Create the GitHub beta prerelease as draft"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  beta-release:
+    runs-on: ubuntu-24.04
+
+    env:
+      VERSION: ${{ inputs.version }}
+      VERSION_TAG: V${{ inputs.version }}
+      RELEASE_TAG: firmware-beta-V${{ inputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate beta version and release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+            echo "Invalid beta version '${VERSION}'. Use x.y.z-beta.n, for example 2.0.0-beta.1." >&2
+            exit 1
+          fi
+          if git rev-parse "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Release tag '${RELEASE_TAG}' already exists." >&2
+            exit 1
+          fi
+
+      - name: Build beta firmware artifacts
+        uses: ./.github/actions/firmware-build
+        with:
+          version: ${{ inputs.version }}
+          target: ${{ inputs.target }}
+          run_tests: "true"
+          release_type: prerelease
+
+      - name: Create beta release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${RELEASE_TAG}" -m "CAN OBD2 Beta Firmware ${VERSION_TAG}"
+          git push origin "${RELEASE_TAG}"
+
+      - name: Create GitHub beta prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: CAN OBD2 Beta Firmware ${{ env.VERSION_TAG }}
+          files: output/*
+          body_path: output/RELEASE_NOTES.md
+          draft: ${{ inputs.draft }}
+          prerelease: true
+          generate_release_notes: true
+

@@ -116,6 +116,52 @@ Native Tests:
 platformio test -e native
 ```
 
+## Entwickler-Scripts
+
+Für lokale Prüfungen und wiederkehrende Entwickleraufgaben liegen Scripts unter
+[`scripts/`](scripts/). Alle Pfade werden relativ zum Repository-Root aufgelöst.
+
+Wichtige Einstiegspunkte:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\doctor.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\dev_check.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\clean_build.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\list_ports.ps1
+```
+
+Weitere Komfortscripts:
+
+- `flash_sender.ps1` / `flash_display.ps1`: USB-Upload für ein einzelnes Gerät
+- `ota_upload_sender.ps1` / `ota_upload_display.ps1`: OTA-Upload per IP
+- `monitor_sender.ps1` / `monitor_display.ps1`: serieller Monitor
+- `backup_config.ps1`: lokale `secrets.h` und wichtige Konfigurationsdateien außerhalb des Repos sichern
+- `prepare_beta.ps1`: lokale Beta-Version vorbereiten
+
+Plattformunabhängige Python-Helfer prüfen Secrets, Doku, Protokollversionen,
+Line-Endings, Firmware-Größen, Manifeste und erzeugen Auto-Dokumentation.
+
+## Automatisch generierte Dokumentation
+
+Diese Dateien werden aus Repository-Struktur, `platformio.ini`, Tests und Config
+erzeugt und sind als generiert markiert:
+
+- [`docs/AUTO_PROJECT_INDEX.md`](docs/AUTO_PROJECT_INDEX.md)
+- [`docs/AUTO_BUILD_FLAGS.md`](docs/AUTO_BUILD_FLAGS.md)
+- [`docs/AUTO_FIRMWARE_ARTIFACTS.md`](docs/AUTO_FIRMWARE_ARTIFACTS.md)
+- [`docs/AUTO_TEST_OVERVIEW.md`](docs/AUTO_TEST_OVERVIEW.md)
+- [`docs/AUTO_CONFIG_REFERENCE.md`](docs/AUTO_CONFIG_REFERENCE.md)
+
+Regenerieren:
+
+```powershell
+python scripts/generate_project_index.py
+python scripts/generate_build_docs.py
+python scripts/generate_config_reference.py
+python scripts/generate_test_overview.py
+python scripts/export_firmware_info.py --target all --output docs/AUTO_FIRMWARE_ARTIFACTS.md
+```
+
 ## Flashen
 
 Sender per USB:
@@ -197,6 +243,22 @@ Runtime-Verhalten:
 - Pull Requests und normale Branch-Builds kompilieren Sender + Display und führen die Native-Tests aus.
 - Release-Erstellung ist vom Build getrennt und läuft nur für Tags (`firmware-*`, `v*`).
 - Die Firmware-Artefakte enthalten zusätzlich ein `firmware_manifest.json` mit SHA-256-Hashes für Sender und Display.
+
+Zusätzliche Workflows:
+
+- `build.yml`: normale CI für Push, Pull Request und manuellen Build.
+- `test-build.yml`: manuelle Test-Firmware als Artifact, kein GitHub Release.
+- `docs.yml`: prüft Markdown-Doku und lädt automatisch generierte Doku als Artifact hoch.
+- `size-report.yml`: baut Sender/Display und erzeugt Größen-/OTA-Berichte.
+- `beta-release.yml`: bewusste Beta-Version als GitHub Pre-Release.
+- `prerelease.yml`: manuelle PreRelease-Firmware.
+- `release.yml`: manuelle Stable-/Release-Firmware.
+
+Release-Logik:
+
+- CI-Builds und Test-Firmware sind reine Artifacts.
+- Beta/PreRelease wird als GitHub Pre-Release veröffentlicht.
+- Stable Release bleibt der einzige normale öffentliche Release-Kandidat.
 
 ### Sender-Start und Statuslogik
 

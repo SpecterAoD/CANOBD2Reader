@@ -1,0 +1,566 @@
+# AUTO Project Index
+
+> AUTO-GENERATED FILE. Do not edit manually.
+> Regenerate with the corresponding script in `scripts/`.
+
+## Repository tree
+
+```text
+- .gitattributes
+- .github/
+  - actions/
+    - firmware-build/
+  - workflows/
+    - beta-release.yml
+    - build.yml
+    - docs.yml
+    - prerelease.yml
+    - release.yml
+    - size-report.yml
+    - test-build.yml
+- .gitignore
+- docs/
+  - 00_Master_Design_Document.md
+  - 01_Architecture.md
+  - 02_Project_Structure.md
+  - 03_Coding_Guidelines.md
+  - 04_Config_System.md
+  - 05_Runtime.md
+  - 06_CAN_Architecture.md
+  - 07_ISOTP.md
+  - 08_OBD.md
+  - 09_UDS.md
+  - 10_Telemetry.md
+  - 11_ESP_NOW.md
+  - 12_Display.md
+  - 13_Sender.md
+  - 14_PowerManager.md
+  - 15_Webserver.md
+  - 16_OTA.md
+  - 17_Simulation.md
+  - 18_Testing.md
+  - 19_GitHub_Actions.md
+  - 20_Hardware.md
+  - 21_API.md
+  - 22_Security.md
+  - 23_Logging.md
+  - 24_Diagnostics.md
+  - 25_Roadmap.md
+  - 26_Developer_Guide.md
+  - architecture.md
+  - archive/
+    - debugMakro.h
+    - legacy_modular_main.cpp
+    - legacy_src/
+  - images/
+    - .gitkeep
+  - isotp.md
+  - README.md
+  - security.md
+  - simulation.md
+  - telemetry.md
+  - update_manifest.example.json
+- include/
+  - CANDecoder.h
+  - CANHandler.h
+  - common_config.h
+  - config/
+    - BuildConfig.h
+    - DisplayConfig.h
+    - LoggingConfig.h
+    - NetworkConfig.h
+    - ObdConfig.h
+    - PowerConfig.h
+    - ProjectConfig.h
+    - SecurityConfig.h
+    - SenderConfig.h
+    - SimulationConfig.h
+    - UdsConfig.h
+    - UpdateConfig.h
+  - Logger.h
+  - OBDHandler.h
+  - OTAHandler.h
+  - PID_Converter.h
+  - PIDs.h
+  - secrets.example.h
+  - secrets_defaults.h
+  - SimulationData.h
+  - TelemetryProtocol.h
+  - UpdateManager.h
+  - Utils.h
+  - WebConsoleHandler.h
+- lib/
+  - can_router/
+    - CanRouter.cpp
+    - CanRouter.h
+    - CanRouterHub.cpp
+    - CanRouterHub.h
+  - capabilities/
+    - CanSignalDiff.cpp
+    - CanSignalDiff.h
+    - CapabilityTypes.cpp
+    - CapabilityTypes.h
+    - ObdCapability.cpp
+    - ObdCapability.h
+    - UdsCapability.cpp
+    - UdsCapability.h
+  - common/
+    - CANDecoder.cpp
+    - FirmwareMetadata.cpp
+    - FirmwareMetadata.h
+    - PID_Converter.cpp
+    - protocol.cpp
+    - protocol.h
+    - README.md
+    - shared_types.h
+    - simulation_data.h
+  - display/
+    - DisplaySeverity.cpp
+    - DisplaySeverity.h
+  - isotp/
+    - IsoTpHandler.cpp
+    - IsoTpHandler.h
+    - IsoTpReassembler.cpp
+    - IsoTpReassembler.h
+    - IsoTpTypes.h
+  - logging/
+    - DiagnosticLog.cpp
+    - DiagnosticLog.h
+  - network/
+    - WifiCredentialStore.cpp
+    - WifiCredentialStore.h
+    - WifiStationManager.cpp
+    - WifiStationManager.h
+  - obd/
+    - BoostCalculator.cpp
+    - BoostCalculator.h
+    - DtcDecoder.h
+    - ObdDiagnostics.h
+    - PidDecoder.cpp
+    - PidDecoder.h
+    - VinDecoder.h
+  - power/
+    - ActivityMonitor.cpp
+    - ActivityMonitor.h
+  - runtime/
+    - DisplayRuntimeState.h
+    - SenderLoopState.h
+    - SenderRuntimeCoordinator.cpp
+    - SenderRuntimeCoordinator.h
+    - SenderRuntimeState.h
+    - WebRuntimeStatus.h
+  - simulation/
+    - IsoTpSimulation.cpp
+    - IsoTpSimulation.h
+    - ObdSimulation.cpp
+    - ObdSimulation.h
+    - RuntimeSimulation.cpp
+    - RuntimeSimulation.h
+    - SimulationTypes.cpp
+    - SimulationTypes.h
+  - status/
+    - SenderLedController.cpp
+    - SenderLedController.h
+    - StatusLogic.h
+  - telemetry/
+    - TelemetryCodec.cpp
+    - TelemetryCodec.h
+    - TelemetryPacket.h
+    - TelemetrySequence.cpp
+    - TelemetrySequence.h
+  - transport/
+    - EspNowTelemetryTransport.cpp
+    - EspNowTelemetryTransport.h
+  - uds/
+    - UdsClient.cpp
+    - UdsClient.h
+    - UdsDecoder.cpp
+    - UdsDecoder.h
+    - UdsDiagnostics.h
+    - UdsTypes.h
+  - update/
+    - FirmwareUpdateManager.cpp
+    - FirmwareUpdateManager.h
+    - GitHubUpdateClient.cpp
+    - GitHubUpdateClient.h
+    - UpdateChannel.cpp
+    - UpdateChannel.h
+    - UpdateManifest.cpp
+    - UpdateManifest.h
+  - utils/
+    - Crc16.cpp
+    - Crc16.h
+  - web/
+    - AuthHelpers.cpp
+    - AuthHelpers.h
+    - WebAssets.cpp
+    - WebAssets.h
+    - WebRuntimeHandlers.cpp
+    - WebRuntimeHandlers.h
+- LICENSE
+- partitions/
+  - ota_4mb.csv
+- platformio.ini
+- README.md
+- scripts/
+  - apply_firmware_version.py
+  - auto_upload_port.py
+  - backup_config.ps1
+  - check_line_endings.py
+  - check_protocol_version.py
+  - check_secrets.py
+  - clean_build.ps1
+  - compare_firmware_size.py
+  - decode_status_json.py
+  - dev_check.ps1
+  - doctor.ps1
+  - ensure_intelhex.py
+  - export_firmware_info.py
+  - flash_display.ps1
+  - flash_sender.ps1
+  - generate_build_docs.py
+  - generate_config_reference.py
+  - generate_project_index.py
+  - generate_test_overview.py
+  - list_ports.ps1
+  - make_release_notes.py
+  - monitor_display.ps1
+  - monitor_sender.ps1
+  - ota_upload_display.ps1
+  - ota_upload_sender.ps1
+  - prepare_beta.ps1
+  - repo_utils.py
+  - upload_both.ps1
+  - validate_manifest.py
+  - verify_docs.py
+- src/
+  - display/
+    - DisplayApp.cpp
+    - DisplayApp.h
+    - DisplayData.cpp
+    - DisplayData.h
+    - DisplayOta.cpp
+    - DisplayOta.h
+    - DisplayReceiver.cpp
+    - DisplayReceiver.h
+    - DisplaySimulation.cpp
+    - DisplaySimulation.h
+    - DisplayTypes.h
+    - DisplayUi.cpp
+    - DisplayUi.h
+    - main.cpp
+  - sender/
+    - CANHandler.cpp
+    - main.cpp
+    - OBDHandler.cpp
+    - OTAHandler.cpp
+    - SenderApp.cpp
+    - SenderApp.h
+    - SenderCallbacks.h
+    - SenderCanAlerts.cpp
+    - SenderCanAlerts.h
+    - SenderCapabilityScanner.cpp
+    - SenderCapabilityScanner.h
+    - SenderEspNow.cpp
+    - SenderEspNow.h
+    - SenderHeartbeat.cpp
+    - SenderHeartbeat.h
+    - SenderLedButton.cpp
+    - SenderLedButton.h
+    - SenderObdScheduler.cpp
+    - SenderObdScheduler.h
+    - SenderPower.cpp
+    - SenderPower.h
+    - SenderPowerScheduler.cpp
+    - SenderPowerScheduler.h
+    - SenderSimulationScheduler.cpp
+    - SenderSimulationScheduler.h
+    - SenderTelemetry.cpp
+    - SenderTelemetry.h
+    - SenderUdsScheduler.cpp
+    - SenderUdsScheduler.h
+    - SenderWebStatus.cpp
+    - SenderWebStatus.h
+    - WebConsoleHandler.cpp
+- test/
+  - test_activity_monitor/
+    - test_activity_monitor.cpp
+  - test_boost_calculation/
+    - test_boost_calculation.cpp
+  - test_can_router/
+    - test_can_router.cpp
+  - test_can_signal_diff/
+    - test_can_signal_diff.cpp
+  - test_config/
+    - test_config.cpp
+  - test_config_split/
+    - test_config_split.cpp
+  - test_crc/
+    - test_crc.cpp
+  - test_diagnostic_log/
+    - test_diagnostic_log.cpp
+  - test_display_severity/
+    - test_display_severity.cpp
+  - test_display_status/
+    - test_display_status.cpp
+  - test_heartbeat/
+    - test_heartbeat.cpp
+  - test_isotp/
+    - test_isotp.cpp
+  - test_isotp_simulation/
+    - test_isotp_simulation.cpp
+  - test_led_controller/
+    - test_led_controller.cpp
+  - test_obd_capability_scan/
+    - test_obd_capability_scan.cpp
+  - test_obd_diagnostics/
+    - test_obd_diagnostics.cpp
+  - test_pid_decoder/
+    - test_pid_decoder.cpp
+  - test_runtime/
+    - test_sender_runtime.cpp
+  - test_security/
+    - test_security.cpp
+  - test_sender_display_simulation_contract/
+    - test_sender_display_simulation_contract.cpp
+  - test_sender_startup/
+    - test_sender_startup.cpp
+  - test_simulation/
+    - test_simulation.cpp
+  - test_simulation_display_values/
+    - test_simulation_display_values.cpp
+  - test_telemetry_codec/
+    - test_telemetry_codec.cpp
+  - test_transport/
+    - test_transport.cpp
+  - test_uds/
+    - test_uds.cpp
+  - test_uds_pending/
+    - test_uds_pending.cpp
+  - test_update_channel/
+    - test_update_channel.cpp
+  - test_update_manifest/
+    - test_update_manifest.cpp
+  - test_version/
+    - test_version.cpp
+- VERSION.txt
+```
+
+## Module overview
+
+### `include/config`
+
+- `BuildConfig.h`
+- `DisplayConfig.h`
+- `LoggingConfig.h`
+- `NetworkConfig.h`
+- `ObdConfig.h`
+- `PowerConfig.h`
+- `ProjectConfig.h`
+- `SecurityConfig.h`
+- `SenderConfig.h`
+- `SimulationConfig.h`
+- `UdsConfig.h`
+- `UpdateConfig.h`
+
+### `lib/can_router`
+
+- `CanRouter.cpp`
+- `CanRouter.h`
+- `CanRouterHub.cpp`
+- `CanRouterHub.h`
+
+### `lib/isotp`
+
+- `IsoTpHandler.cpp`
+- `IsoTpHandler.h`
+- `IsoTpReassembler.cpp`
+- `IsoTpReassembler.h`
+- `IsoTpTypes.h`
+
+### `lib/obd`
+
+- `BoostCalculator.cpp`
+- `BoostCalculator.h`
+- `DtcDecoder.h`
+- `ObdDiagnostics.h`
+- `PidDecoder.cpp`
+- `PidDecoder.h`
+- `VinDecoder.h`
+
+### `lib/uds`
+
+- `UdsClient.cpp`
+- `UdsClient.h`
+- `UdsDecoder.cpp`
+- `UdsDecoder.h`
+- `UdsDiagnostics.h`
+- `UdsTypes.h`
+
+### `lib/telemetry`
+
+- `TelemetryCodec.cpp`
+- `TelemetryCodec.h`
+- `TelemetryPacket.h`
+- `TelemetrySequence.cpp`
+- `TelemetrySequence.h`
+
+### `lib/transport`
+
+- `EspNowTelemetryTransport.cpp`
+- `EspNowTelemetryTransport.h`
+
+### `lib/runtime`
+
+- `DisplayRuntimeState.h`
+- `SenderLoopState.h`
+- `SenderRuntimeCoordinator.cpp`
+- `SenderRuntimeCoordinator.h`
+- `SenderRuntimeState.h`
+- `WebRuntimeStatus.h`
+
+### `lib/web`
+
+- `AuthHelpers.cpp`
+- `AuthHelpers.h`
+- `WebAssets.cpp`
+- `WebAssets.h`
+- `WebRuntimeHandlers.cpp`
+- `WebRuntimeHandlers.h`
+
+### `lib/update`
+
+- `FirmwareUpdateManager.cpp`
+- `FirmwareUpdateManager.h`
+- `GitHubUpdateClient.cpp`
+- `GitHubUpdateClient.h`
+- `UpdateChannel.cpp`
+- `UpdateChannel.h`
+- `UpdateManifest.cpp`
+- `UpdateManifest.h`
+
+### `lib/network`
+
+- `WifiCredentialStore.cpp`
+- `WifiCredentialStore.h`
+- `WifiStationManager.cpp`
+- `WifiStationManager.h`
+
+### `lib/power`
+
+- `ActivityMonitor.cpp`
+- `ActivityMonitor.h`
+
+### `lib/simulation`
+
+- `IsoTpSimulation.cpp`
+- `IsoTpSimulation.h`
+- `ObdSimulation.cpp`
+- `ObdSimulation.h`
+- `RuntimeSimulation.cpp`
+- `RuntimeSimulation.h`
+- `SimulationTypes.cpp`
+- `SimulationTypes.h`
+
+### `src/sender`
+
+- `CANHandler.cpp`
+- `OBDHandler.cpp`
+- `OTAHandler.cpp`
+- `SenderApp.cpp`
+- `SenderApp.h`
+- `SenderCallbacks.h`
+- `SenderCanAlerts.cpp`
+- `SenderCanAlerts.h`
+- `SenderCapabilityScanner.cpp`
+- `SenderCapabilityScanner.h`
+- `SenderEspNow.cpp`
+- `SenderEspNow.h`
+- `SenderHeartbeat.cpp`
+- `SenderHeartbeat.h`
+- `SenderLedButton.cpp`
+- `SenderLedButton.h`
+- `SenderObdScheduler.cpp`
+- `SenderObdScheduler.h`
+- `SenderPower.cpp`
+- `SenderPower.h`
+- `SenderPowerScheduler.cpp`
+- `SenderPowerScheduler.h`
+- `SenderSimulationScheduler.cpp`
+- `SenderSimulationScheduler.h`
+- `SenderTelemetry.cpp`
+- `SenderTelemetry.h`
+- `SenderUdsScheduler.cpp`
+- `SenderUdsScheduler.h`
+- `SenderWebStatus.cpp`
+- `SenderWebStatus.h`
+- `WebConsoleHandler.cpp`
+- `main.cpp`
+
+### `src/display`
+
+- `DisplayApp.cpp`
+- `DisplayApp.h`
+- `DisplayData.cpp`
+- `DisplayData.h`
+- `DisplayOta.cpp`
+- `DisplayOta.h`
+- `DisplayReceiver.cpp`
+- `DisplayReceiver.h`
+- `DisplaySimulation.cpp`
+- `DisplaySimulation.h`
+- `DisplayTypes.h`
+- `DisplayUi.cpp`
+- `DisplayUi.h`
+- `main.cpp`
+
+### `test`
+
+- No direct files.
+
+### `.github/workflows`
+
+- `beta-release.yml`
+- `build.yml`
+- `docs.yml`
+- `prerelease.yml`
+- `release.yml`
+- `size-report.yml`
+- `test-build.yml`
+
+### `.github/actions`
+
+- No direct files.
+
+### `scripts`
+
+- `apply_firmware_version.py`
+- `auto_upload_port.py`
+- `backup_config.ps1`
+- `check_line_endings.py`
+- `check_protocol_version.py`
+- `check_secrets.py`
+- `clean_build.ps1`
+- `compare_firmware_size.py`
+- `decode_status_json.py`
+- `dev_check.ps1`
+- `doctor.ps1`
+- `ensure_intelhex.py`
+- `export_firmware_info.py`
+- `flash_display.ps1`
+- `flash_sender.ps1`
+- `generate_build_docs.py`
+- `generate_config_reference.py`
+- `generate_project_index.py`
+- `generate_test_overview.py`
+- `list_ports.ps1`
+- `make_release_notes.py`
+- `monitor_display.ps1`
+- `monitor_sender.ps1`
+- `ota_upload_display.ps1`
+- `ota_upload_sender.ps1`
+- `prepare_beta.ps1`
+- `repo_utils.py`
+- `upload_both.ps1`
+- `validate_manifest.py`
+- `verify_docs.py`

@@ -1,0 +1,52 @@
+name: Firmware Size Report
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  size-report:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install platformio
+
+      - name: Use example secrets
+        run: |
+          cp include/secrets.example.h include/secrets.h
+
+      - name: Build firmware
+        run: |
+          platformio run -e sender -e display
+
+      - name: Generate size and artifact reports
+        run: |
+          python scripts/export_firmware_info.py --target all --output docs/AUTO_FIRMWARE_ARTIFACTS.md
+          python scripts/compare_firmware_size.py
+          platformio run -e sender -t size > sender_size.txt
+          platformio run -e display -t size > display_size.txt
+
+      - name: Upload size artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FIRMWARE_SIZE_REPORT
+          path: |
+            docs/AUTO_FIRMWARE_ARTIFACTS.md
+            docs/AUTO_FIRMWARE_SIZE.md
+            sender_size.txt
+            display_size.txt
+

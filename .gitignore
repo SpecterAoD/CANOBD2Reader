@@ -35,6 +35,7 @@ build/
 *.bak
 *.tmp
 *.log
+__pycache__/
 
 # OS-specific
 .DS_Store

@@ -61,6 +61,14 @@ Additional older documents are kept for context:
 - [simulation.md](simulation.md)
 - [telemetry.md](telemetry.md)
 
+Automatically generated references:
+
+- [AUTO_PROJECT_INDEX.md](AUTO_PROJECT_INDEX.md)
+- [AUTO_BUILD_FLAGS.md](AUTO_BUILD_FLAGS.md)
+- [AUTO_FIRMWARE_ARTIFACTS.md](AUTO_FIRMWARE_ARTIFACTS.md)
+- [AUTO_TEST_OVERVIEW.md](AUTO_TEST_OVERVIEW.md)
+- [AUTO_CONFIG_REFERENCE.md](AUTO_CONFIG_REFERENCE.md)
+
 ## How to maintain this documentation
 
 When a subsystem changes, update the corresponding chapter in the same commit as the code change. At minimum, update:
@@ -69,4 +77,3 @@ When a subsystem changes, update the corresponding chapter in the same commit as
 2. Relevant APIs or packet structures.
 3. Tests and hardware validation notes.
 4. Roadmap item status in [25_Roadmap.md](25_Roadmap.md).
-
