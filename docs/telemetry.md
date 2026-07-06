@@ -62,14 +62,14 @@ DTC,ACTIVE,DTC,P0133 P0420,,WARN,47
 ## Display fields
 
 - Main: `Speed`, `RPM`, `CoolantTemp`, `BatteryVoltage`
-- RPM graph: `RPM`
-- Boost: `BoostPressureBar`, `ManifoldAbsolutePressure`, `BarometricPressure`
 - Engine: `OilTemp`, `EngineLoad`, `Throttle`, `IntakeTemp`
 - Consumption: `InstantConsumption`, `AverageConsumption`, `FuelRate`
-- Additional values: `MAF`, `FuelLevel`, `RunTime`, `AmbientTemp`
+- Additional values: `MAF`, `MAP`, `BARO`, `FuelLevel`, `RunTime`, `AmbientTemp`, `ControlModuleVoltage`
 - CAN page: `LastCAN`, `CANHint`, `CANCount`
 - Diagnostics: CAN/OBD/ESP-NOW status, sequence, packet loss, firmware version
 - Error codes: `DTC`
+
+Dedicated RPM graph and boost pages are currently removed from the display page list. The values can still be transported if available, but UI rendering focuses on driving values and diagnostics.
 
 ## Backward compatibility
 

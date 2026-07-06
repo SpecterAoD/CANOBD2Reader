@@ -54,7 +54,7 @@ runs:
         version="${version/Beta/beta}"
         version="${version/BETA/beta}"
         if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9]+)*$ ]]; then
-          echo "Invalid version '${RAW_VERSION}'. Use values like 2.0.0.b4, V2.0.0.b4 or 2.0.0-beta.1." >&2
+          echo "Invalid version '${RAW_VERSION}'. Use values like 2.0.0.b6, V2.0.0.b6 or 2.0.0-beta.1." >&2
           exit 1
         fi
         echo "CANOBD2_NORMALIZED_VERSION=${version}" >> "${GITHUB_ENV}"

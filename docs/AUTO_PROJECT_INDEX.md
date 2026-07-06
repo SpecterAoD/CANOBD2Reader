@@ -47,6 +47,7 @@
   - 24_Diagnostics.md
   - 25_Roadmap.md
   - 26_Developer_Guide.md
+  - 27_Scripts.md
   - architecture.md
   - archive/
     - debugMakro.h

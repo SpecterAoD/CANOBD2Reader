@@ -9,10 +9,11 @@
 
 ## Short-term
 
-1. Real-test Web-OTA from older firmware to `V2.0.0.b4`.
-2. Repair/verify web buttons for OBD PID scan, UDS scan and CAN sniffer.
-3. Improve display refresh rate and remove empty UI boxes.
+1. Real-test Web-OTA and GitHub rollback from older firmware to `V2.0.0.b6`.
+2. Repair/verify web buttons for OBD PID scan, UDS scan and CAN sniffer on real hardware.
+3. Validate live OBD speed after the fast/slow PID scheduler change.
 4. Validate persistent diagnostic logs in vehicle tests.
+5. Improve raw CAN/HEX diagnostic visibility on the display and in exports.
 
 ## Mid-term
 
@@ -35,5 +36,5 @@
 - UDS DIDs are partly vehicle-specific and must be discovered carefully.
 - CAN sniffer candidates need human validation.
 - Web security is local/basic and should not be exposed to untrusted networks.
-- Display layout still needs ergonomic refinement.
-
+- Display layout still needs ergonomic refinement, especially the diagnostic pages.
+- UDS and CAN signal discovery should remain manual/read-only until vehicle-specific behavior is better understood.

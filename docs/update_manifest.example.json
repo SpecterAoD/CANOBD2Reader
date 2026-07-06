@@ -4,9 +4,9 @@
   "generatedAt": "2026-07-05T12:00:00Z",
   "sender": [
     {
-      "version": "V2.0.0.b4",
+      "version": "V2.0.0.b6",
       "channel": "development",
-      "url": "https://github.com/SpecterAoD/CANOBD2Reader/releases/download/firmware-V2.0.0.b4/sender.bin",
+      "url": "https://github.com/SpecterAoD/CANOBD2Reader/releases/download/firmware-V2.0.0.b6/sender.bin",
       "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       "protocol": 2,
       "createdAt": "2026-07-05T12:00:00Z"
@@ -22,13 +22,12 @@
   ],
   "display": [
     {
-      "version": "V2.0.0.b4",
+      "version": "V2.0.0.b6",
       "channel": "development",
-      "url": "https://github.com/SpecterAoD/CANOBD2Reader/releases/download/firmware-V2.0.0.b4/display.bin",
+      "url": "https://github.com/SpecterAoD/CANOBD2Reader/releases/download/firmware-V2.0.0.b6/display.bin",
       "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
       "protocol": 2,
       "createdAt": "2026-07-05T12:00:00Z"
     }
   ]
 }
-

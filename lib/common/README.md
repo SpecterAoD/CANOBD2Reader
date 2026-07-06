@@ -1,15 +1,14 @@
-# common
+# lib/common
 
-Gemeinsame PlatformIO-Bibliothek fuer Sender und Display.
+Gemeinsame PlatformIO-Bibliothek für Sender, Display und native Tests.
 
 Enthalten:
 
-- `protocol.h/.cpp`: gemeinsames ESP-NOW-Telemetrieformat und CRC.
-- `shared_types.h`: identische Datenstrukturen fuer beide Targets.
-- `simulation_data.h`: simulierte Testwerte fuer alle Display-Seiten.
-- `PID_Converter.cpp`: OBD2-Rohdatenkonvertierung.
-- `CANDecoder.cpp`: einfache CAN-Rohframe-Auswertung fuer die Display-CAN-Seite.
+- `protocol.h/.cpp`: ältere gemeinsame Protokoll-/CRC-Helfer, die während der Migration noch benötigt werden.
+- `FirmwareMetadata.h/.cpp`: eingebetteter OTA-Metadatenblock mit Schema, Target, Version und Protokollbereich.
+- `shared_types.h`: gemeinsame einfache Datentypen für Sender/Display.
+- `simulation_data.h`: gemeinsame Simulationswerte.
+- `PID_Converter.cpp`: OBD-II-Rohdatenkonvertierung für Legacy-Pfade.
+- `CANDecoder.cpp`: einfache CAN-Rohframe-Auswertung für Diagnose-/Displayansichten.
 
-Die Bibliothek wird von beiden Environments automatisch gebaut. Dadurch werden
-`src/sender` und `src/display` getrennt kompiliert, teilen sich aber dasselbe
-Protokoll.
+Neue Telemetrie-Logik liegt primär unter `lib/telemetry/`. Neue Firmware-Validierung sollte über `FirmwareMetadata` und die gemeinsamen Web-Handler laufen, nicht über neue doppelte Parser.

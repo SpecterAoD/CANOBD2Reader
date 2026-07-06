@@ -21,6 +21,8 @@ GitHub Actions builds firmware, runs tests and creates test/prerelease/release a
 | `beta-release.yml` | Manual beta firmware as GitHub prerelease. |
 | `prerelease.yml` | Manual prerelease with Git tag and GitHub prerelease. |
 | `release.yml` | Manual release with Git tag and GitHub release. |
+| `docs.yml` | Manual/CI documentation generation and documentation artifact upload. |
+| `size-report.yml` | Manual firmware size report for sender/display and OTA capacity checks. |
 
 ## Composite action
 
@@ -65,6 +67,8 @@ manual rollback selection.
 ## Versioning
 
 Manual workflows expect versions without leading `V`; the action produces `V<version>` metadata.
+
+Accepted examples include `2.0.0.b6`, `2.0.0-beta.1` and `2.0.0-rc1`. Workflows normalize the leading `V` to avoid tags such as `VV2.0.0...`.
 
 Test builds are marked with:
 

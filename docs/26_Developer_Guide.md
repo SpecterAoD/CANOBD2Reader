@@ -31,6 +31,12 @@ pio run -e sender
 pio run -e display
 ```
 
+On Windows, the combined local check is:
+
+```powershell
+.\scripts\dev_check.ps1
+```
+
 ## Tests
 
 ```bash
@@ -63,3 +69,14 @@ Enter versions without leading `V`.
 
 When code changes behavior, update the matching chapter under `docs/`. Also update [25_Roadmap.md](25_Roadmap.md) when a known limitation is fixed or a new risk appears.
 
+Regenerate auto documentation after structural/config/build changes:
+
+```powershell
+python .\scripts\generate_project_index.py
+python .\scripts\generate_build_docs.py
+python .\scripts\generate_config_reference.py
+python .\scripts\generate_test_overview.py
+python .\scripts\verify_docs.py
+```
+
+See [27_Scripts.md](27_Scripts.md) for all helper scripts.

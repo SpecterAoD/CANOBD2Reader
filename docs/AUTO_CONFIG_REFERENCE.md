@@ -125,6 +125,8 @@
 |---|---|
 | `std::size_t` | `ObdPidCount` |
 | `std::size_t` | `PidCount` |
+| `std::size_t` | `FastLivePidCount` |
+| `std::size_t` | `SlowLivePidCount` |
 | `float` | `DefaultBarometricPressureKpa` |
 | `uint32_t` | `SupportedPidRefreshIntervalMs` |
 | `uint32_t` | `DtcQueryIntervalMs` |
@@ -203,12 +205,15 @@
 | `int` | `PollingRateMs` |
 | `int` | `CanIdleTimeoutMs` |
 | `uint32_t` | `ObdPollIntervalMs` |
+| `uint32_t` | `FastLiveObdPollIntervalMs` |
+| `uint32_t` | `SlowLiveObdPollIntervalMs` |
 | `std::size_t` | `MaxObdPidsPerTick` |
 | `uint32_t` | `ObdResponseTimeoutMs` |
 | `uint32_t` | `ObdTxTimeoutMs` |
 | `uint32_t` | `BatterySendIntervalMs` |
 | `uint32_t` | `HeartbeatIntervalMs` |
 | `uint32_t` | `SimulationIntervalMs` |
+| `uint32_t` | `RawCanTelemetryIntervalMs` |
 | `uint32_t` | `LedTestDebounceMs` |
 | `uint32_t` | `SupportedPidRefreshMs` |
 | `uint32_t` | `DtcQueryIntervalMs` |

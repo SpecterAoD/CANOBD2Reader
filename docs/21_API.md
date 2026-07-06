@@ -54,7 +54,7 @@ Exact endpoint names should be kept in sync with `WebConsoleHandler.cpp`.
 
 ```json
 {
-  "firmware": "V2.0.0.b4",
+  "firmware": "V2.0.0.b6",
   "target": "sender",
   "protocol": 2,
   "buildTime": "Jul 5 2026 08:46:54",
@@ -66,3 +66,13 @@ Exact endpoint names should be kept in sync with `WebConsoleHandler.cpp`.
 }
 ```
 
+GitHub update endpoints are exposed by the shared web update handlers when enabled:
+
+| Endpoint | Method | Purpose |
+| --- | --- | --- |
+| `/github-update` | GET | GitHub update/rollback page. |
+| `/api/update/status` | GET | Current channel, Wi-Fi/update state and available version summary. |
+| `/api/update/wifi` | POST | Store runtime/persistent WLAN credentials where supported. |
+| `/api/update/check` | POST | Trigger a manifest check. |
+| `/api/update/versions` | GET | List compatible newer and older versions. |
+| `/api/update/install` | POST | Install selected version after target/protocol/SHA256 checks. |

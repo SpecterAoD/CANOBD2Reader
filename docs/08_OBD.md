@@ -23,6 +23,13 @@ The project contains:
 - `lib/obd/VinDecoder.h`
 - sender OBD scheduler and diagnostics.
 
+Live polling is split into two configured groups:
+
+- `ObdConfig::FastLivePids`: speed, RPM, coolant temperature and ECU voltage.
+- `ObdConfig::SlowLivePids`: slower values such as oil temperature, engine load, intake temperature, MAF, MAP, BARO, fuel level and runtime.
+
+`SenderConfig::FastLiveObdPollIntervalMs` is tuned for responsive display values, while `SenderConfig::SlowLiveObdPollIntervalMs` avoids starving the bus with low-priority requests. Each scheduler tick sends at most one PID request so CAN/ISO-TP and heartbeat work can continue.
+
 ## Supported values
 
 Important PIDs:
@@ -72,4 +79,4 @@ The display must show already calculated values; it should not duplicate boost c
 - Live-value PID priorities are configurable.
 - Unsupported PIDs are not aggressively polled.
 - Capability scan results can later be persisted safely.
-
+- The web capability scan should feed the runtime PID selection without changing compile-time defaults.

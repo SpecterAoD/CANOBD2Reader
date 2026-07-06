@@ -5,5 +5,5 @@
 
 | Target | Current bytes | Previous bytes | Delta |
 |---|---:|---:|---:|
-| `sender` | 1240080 | 0 | +1240080 |
-| `display` | 1057888 | 0 | +1057888 |
+| `sender` | 1245600 | 1240080 | +5520 |
+| `display` | 1061680 | 1057888 | +3792 |

@@ -27,11 +27,10 @@ Current intended page set:
 4. Compact diagnostics.
 5. UDS / DTC.
 6. CAN sniffer.
-7. RPM graph.
-8. Additional values.
-9. Power management.
+7. Additional values.
+8. Power management.
 
-Boost as a dedicated page has been removed; MAP/BARO/MAF belong on additional/engine diagnostics pages unless a future design reintroduces a page.
+The dedicated boost page and the dedicated RPM graph page have been removed. RPM remains on the main page. MAP, BARO and MAF belong on the additional values page or engine diagnostics. This keeps the page list compact and leaves more room for useful diagnostic/CAN information.
 
 ## Rendering rules
 
@@ -40,6 +39,8 @@ Boost as a dedicated page has been removed; MAP/BARO/MAF belong on additional/en
 - Critical values use red.
 - Timeout/unknown values use muted gray.
 - Display should avoid unnecessary full-screen redraws.
+- Empty values must not be drawn as green “OK” fields. If no value is available, the field should show a meaningful fallback such as `N/A`, `--`, a raw CAN/HEX value, or be suppressed.
+- Main live values should use the latest telemetry directly; smoothing must never hide a real timeout.
 
 ## Navigation
 
@@ -57,4 +58,3 @@ Split `DisplayUi.cpp` into:
 - graphs.
 
 The immediate UI priority is removing empty boxes and making simulation pages representative of real telemetry.
-

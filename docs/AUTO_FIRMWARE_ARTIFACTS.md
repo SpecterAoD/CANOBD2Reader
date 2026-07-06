@@ -3,9 +3,9 @@
 > AUTO-GENERATED FILE. Do not edit manually.
 > Regenerate with the corresponding script in `scripts/`.
 
-- Version: `V2.0.0.b4`
+- Version: `V2.0.0.b6`
 
 | Target | State | BIN bytes | BIN SHA256 | ELF bytes |
 |---|---:|---:|---|---:|
-| `sender` | `present` | `1240080` | `ce0f9a2a3f9286e5f41b7eebb38e484b73c90d3e0efbed560d3691447c637e36` | `20691908` |
-| `display` | `present` | `1057888` | `832d31424fd6ea9335bd17364c6d8df281d3d28aed17321d7e2d83beb1bfdc39` | `20195812` |
+| `sender` | `present` | `1245600` | `cbf50498e8dddd4e077995ada16ae5eddeb284d8686fd019d47f071f14bddbc4` | `20787260` |
+| `display` | `present` | `1061680` | `e1f0afab08c3fffe5a57f5d33966063aec41617733c1378c80ac4aa76d194291` | `20206384` |

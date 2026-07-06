@@ -32,14 +32,18 @@ Firmware binaries contain a plain ASCII metadata block:
 
 ```text
 CANOBD2_FW_METADATA_BEGIN;
+schema=1;
 target=sender;
-version=V2.0.0.b4;
+version=V2.0.0.b6;
 protocol=2;
-compat_versions=...;
+min_protocol=2;
+max_protocol=2;
 CANOBD2_FW_METADATA_END
 ```
 
 This block allows browser upload validation without parsing ESP image internals.
+
+Older firmware used a growing `compat_versions` list. That approach was removed because it would become unmaintainable over time. Compatibility is now checked by metadata schema, target, version and protocol range.
 
 ## GitHub artifacts
 
@@ -96,6 +100,8 @@ Web-OTA should reject:
 - failed `Update.end(true)`.
 
 It should accept a newer version than the currently installed one.
+
+Rollback through the GitHub update page is allowed only when explicitly confirmed in the browser and when the same metadata checks pass. Rollback is never automatic.
 
 ## Migration plan
 

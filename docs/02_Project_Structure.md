@@ -40,6 +40,7 @@ The repository is one PlatformIO project with multiple environments. Code is org
 - `LoggingConfig.h`
 - `ObdConfig.h`
 - `UdsConfig.h`
+- `UpdateConfig.h`
 
 Secrets are intentionally split:
 
@@ -64,6 +65,7 @@ Secrets are intentionally split:
 | `lib/telemetry` | Packet, codec and sequence helpers. |
 | `lib/transport` | ESP-NOW telemetry transport. |
 | `lib/uds` | UDS client, decoder and diagnostics. |
+| `lib/update` | GitHub manifest parsing, channel/version selection and OTA update decisions. |
 | `lib/web` | Shared web, authentication, OTA and status helpers. |
 
 ## src
@@ -93,10 +95,21 @@ Native Unity tests cover portable logic. Hardware-dependent code is kept behind 
 
 `docs/` contains this documentation. `docs/archive/` stores legacy snippets and migration references.
 
+## scripts
+
+`scripts/` contains local developer tooling. PowerShell scripts are optimized for Windows/VS Code development; Python scripts are cross-platform checks and documentation generators. See [27_Scripts.md](27_Scripts.md) for the maintained script reference.
+
+Important groups:
+
+- build/check: `dev_check.ps1`, `clean_build.ps1`, `doctor.ps1`
+- flashing/monitoring: `flash_sender.ps1`, `flash_display.ps1`, `monitor_sender.ps1`, `monitor_display.ps1`
+- OTA helpers: `ota_upload_sender.ps1`, `ota_upload_display.ps1`
+- docs: `generate_project_index.py`, `generate_build_docs.py`, `generate_config_reference.py`, `generate_test_overview.py`
+- safety/release: `check_secrets.py`, `validate_manifest.py`, `make_release_notes.py`
+
 ## Migration notes
 
 Current large files that should be split further:
 
 - `src/display/DisplayUi.cpp`: target split into pages/widgets/themes.
 - `src/sender/WebConsoleHandler.cpp`: target split into smaller shared web assets and endpoint handlers.
-
