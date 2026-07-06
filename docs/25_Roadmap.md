@@ -6,6 +6,7 @@
 - [Mid-term](#mid-term)
 - [Long-term](#long-term)
 - [Known limitations](#known-limitations)
+- [Issue-ready backlog](#issue-ready-backlog)
 
 ## Short-term
 
@@ -38,3 +39,7 @@
 - Web security is local/basic and should not be exposed to untrusted networks.
 - Display layout still needs ergonomic refinement, especially the diagnostic pages.
 - UDS and CAN signal discovery should remain manual/read-only until vehicle-specific behavior is better understood.
+
+## Issue-ready backlog
+
+The detailed audit backlog is maintained in [28_Audit_Work_Items.md](28_Audit_Work_Items.md). Each item is written so it can be copied into a GitHub issue with priority, scope and acceptance criteria.

@@ -53,6 +53,7 @@ Each chapter uses this structure where useful:
 | [25](25_Roadmap.md) | Open work, known limitations and planned features |
 | [26](26_Developer_Guide.md) | Developer setup and contribution workflow |
 | [27](27_Scripts.md) | Local helper scripts, checks, flashing and generated docs |
+| [28](28_Audit_Work_Items.md) | Audit findings and issue-ready work items |
 
 Additional older documents are kept for context:
 
