@@ -15,6 +15,7 @@
 3. Validate live OBD speed after the fast/slow PID scheduler change.
 4. Validate persistent diagnostic logs in vehicle tests.
 5. Improve raw CAN/HEX diagnostic visibility on the display and in exports.
+6. Define and implement SavvyCAN dedicated sender/display mode for live USB logging.
 
 ## Mid-term
 
@@ -31,6 +32,7 @@
 3. Rich CAN signal discovery workflow.
 4. Better trip statistics and historical graphs.
 5. Generated Doxygen documentation.
+6. Optional SavvyCAN/GVRET-compatible RX-only USB bridge mode.
 
 ## Known limitations
 

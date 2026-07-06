@@ -99,6 +99,7 @@ The audit items are mirrored as GitHub issues:
 | AUDIT-011 | [#19](https://github.com/SpecterAoD/CANOBD2Reader/issues/19) |
 | AUDIT-012 | [#20](https://github.com/SpecterAoD/CANOBD2Reader/issues/20) |
 | AUDIT-013 | [#21](https://github.com/SpecterAoD/CANOBD2Reader/issues/21) |
+| AUDIT-014 | [#22](https://github.com/SpecterAoD/CANOBD2Reader/issues/22) |
 
 ## Issue-ready work items
 
@@ -416,6 +417,57 @@ Acceptance criteria:
 - A new developer understands why timeouts/backoff/fallbacks exist.
 - Comments describe intent and constraints, not line-by-line mechanics.
 
+### AUDIT-014 - SavvyCAN dedicated sender/display mode
+
+Priority: Medium
+
+Goal:
+
+Add a dedicated high-throughput SavvyCAN USB logging mode. In this mode the sender focuses on CAN RX to USB streaming for a laptop running SavvyCAN, while the display is reduced to a simple SavvyCAN status page.
+
+Sender behavior:
+
+- CAN RX remains active.
+- USB live logging to the laptop is active.
+- OBD polling is paused or strongly reduced.
+- UDS is paused.
+- Normal display telemetry is stopped.
+- Only minimal system-mode/status telemetry is sent to the display.
+- Webserver remains available for start/stop/status.
+- OTA should be blocked or warn while SavvyCAN logging is active.
+- Simulation is off in this mode.
+
+Display behavior:
+
+- Automatically switches to a dedicated SavvyCAN status page when the sender announces the mode.
+- Shows only a minimal view, for example `SAVVYCAN`, `ACTIVE`, `CAN OK`, `USB LOG`.
+- Normal pages and heavy rendering are paused.
+- Returns to the normal page set when sender announces normal mode.
+
+Initial control:
+
+- `POST /api/mode/savvycan/start`
+- `POST /api/mode/savvycan/stop`
+- `GET /api/mode/status`
+
+Safety requirements:
+
+- TX from laptop/SavvyCAN into the vehicle must be blocked in phase 1.
+- Mode is runtime-only and defaults to off after restart.
+- No writes to vehicle ECUs.
+- USB streaming must not block CAN RX.
+- Dropped frames must be counted.
+
+Acceptance criteria:
+
+- Sender can enter/leave SavvyCAN mode via web UI.
+- Display switches to minimal SavvyCAN page after receiving the sender mode.
+- Normal ESP-NOW display telemetry is reduced to minimal status only.
+- OBD/UDS schedulers are paused or reduced while active.
+- Raw CAN frames are streamed over USB in a SavvyCAN-compatible or documented intermediate format.
+- TX is hard-blocked.
+- Build and native tests remain green.
+
 ## Pi Zero logging extension
 
 The Pi Zero should not replace ESP32 persistent logs. It should be an optional high-capacity companion logger.
@@ -511,3 +563,4 @@ Do not open all issues as urgent work. Suggested first issues:
 3. `AUDIT-003` improve display diagnostics.
 4. `AUDIT-004` split WebConsoleHandler.
 5. `AUDIT-010` Pi Zero logging design spike.
+6. `AUDIT-014` SavvyCAN dedicated mode design and implementation.
