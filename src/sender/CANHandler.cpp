@@ -7,6 +7,8 @@ bool CANHandler::driverInstalled = false;
 bool CANHandler::driverStarted = false;
 
 namespace {
+uint32_t lastRawCanTelemetryAtMs = 0;
+
 CanRouting::CanFrame toRoutedFrame(const twai_message_t& message) {
     CanRouting::CanFrame frame{};
     frame.id = message.identifier;
@@ -102,9 +104,13 @@ void CANHandler::handleMessage(twai_message_t& message) {
     // the explicit sender flag so OBD polling and heartbeat telemetry do not
     // get starved by unrelated bus frames.
     if (SenderConfig::SendRawData) {
-        CANDecoder::DecodedFrame decoded = CANDecoder::decode(message);
-        Utils::sendTelemetry("CAN", "RAW", "LastCAN", decoded.raw, "", "OK");
-        Utils::sendTelemetry("CAN", "HINT", "CANHint", decoded.hint, "", "OK");
+        const uint32_t now = millis();
+        if (now - lastRawCanTelemetryAtMs >= SenderConfig::RawCanTelemetryIntervalMs) {
+            lastRawCanTelemetryAtMs = now;
+            CANDecoder::DecodedFrame decoded = CANDecoder::decode(message);
+            Utils::sendTelemetry("CAN", "RAW", "LastCAN", decoded.raw, "", "OK");
+            Utils::sendTelemetry("CAN", "HINT", "CANHint", decoded.hint, "", "OK");
+        }
         Logger::canFrame(message);
     }
 }

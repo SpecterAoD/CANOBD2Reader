@@ -22,12 +22,13 @@
 namespace {
 
 // Tail buffer for sliding-window metadata checks across OTA chunks.
-constexpr size_t kOtaSearchTailSize = 96;
+constexpr size_t kOtaSearchTailSize = 160;
 constexpr size_t kOtaCombinedSearchWindowSize = kOtaSearchTailSize * 2;
 constexpr size_t kSha256DigestSize = 32;
 constexpr size_t kSha256HexStringSize = (kSha256DigestSize * 2) + 1;
 constexpr const char* kFirmwareMetadataBegin = "CANOBD2_FW_METADATA_BEGIN";
 constexpr const char* kFirmwareVersionMarkerPrefix = "version=V";
+constexpr const char* kFirmwareMetadataSchemaPrefix = "schema=";
 
 bool asciiEqualsIgnoreCase(char a, char b) {
     if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
@@ -111,11 +112,25 @@ bool bufferContainsAnyFirmwareVersionMarker(const uint8_t* data, size_t size) {
     return bufferContainsText(data, size, kFirmwareVersionMarkerPrefix);
 }
 
+bool bufferContainsFirmwareMetadataMarker(const uint8_t* data, size_t size) {
+    return bufferContainsText(data, size, kFirmwareMetadataBegin);
+}
+
 bool bufferContainsTargetMetadata(const uint8_t* data, size_t size, const char* expectedTarget) {
     if (expectedTarget == nullptr || expectedTarget[0] == '\0') return false;
     char marker[32];
     std::snprintf(marker, sizeof(marker), "target=%s", expectedTarget);
     return bufferContainsText(data, size, marker);
+}
+
+bool bufferContainsProtocolMetadata(const uint8_t* data, size_t size, uint8_t expectedProtocol) {
+    char marker[24];
+    std::snprintf(marker, sizeof(marker), "protocol=%u", static_cast<unsigned int>(expectedProtocol));
+    return bufferContainsText(data, size, marker);
+}
+
+bool bufferContainsMetadataSchema(const uint8_t* data, size_t size) {
+    return bufferContainsText(data, size, kFirmwareMetadataSchemaPrefix);
 }
 
 void appendJsonEscapedField(String& json, const char* key, const String& value) {
@@ -150,8 +165,11 @@ void appendJsonUnsignedField(String& json, const char* key, unsigned long value)
 #if defined(ARDUINO)
 bool otaSessionActive = false;
 bool otaSessionRejected = false;
+bool otaSessionMetadataSeen = false;
+bool otaSessionSchemaSeen = false;
 bool otaSessionTargetSeen = false;
 bool otaSessionVersionSeen = false;
+bool otaSessionProtocolSeen = false;
 char otaSessionSha256[kSha256HexStringSize] = {};
 uint8_t otaSearchTail[kOtaSearchTailSize] = {};
 size_t otaSearchTailLength = 0;
@@ -159,8 +177,11 @@ mbedtls_sha256_context otaSha256Context;
 
 void resetOtaValidationState() {
     mbedtls_sha256_free(&otaSha256Context);
+    otaSessionMetadataSeen = false;
+    otaSessionSchemaSeen = false;
     otaSessionTargetSeen = false;
     otaSessionVersionSeen = false;
+    otaSessionProtocolSeen = false;
     otaSessionSha256[0] = '\0';
     otaSearchTailLength = 0;
     std::memset(otaSearchTail, 0, sizeof(otaSearchTail));
@@ -190,14 +211,29 @@ void updateOtaValidationState(const uint8_t* data, size_t size) {
             bufferContainsText(data, size, ProjectConfig::TargetName) ||
             bufferContainsText(combined, combinedSize, ProjectConfig::TargetName);
     }
+    if (!otaSessionMetadataSeen) {
+        otaSessionMetadataSeen =
+            bufferContainsFirmwareMetadataMarker(data, size) ||
+            bufferContainsFirmwareMetadataMarker(combined, combinedSize);
+    }
+    if (!otaSessionSchemaSeen) {
+        otaSessionSchemaSeen =
+            bufferContainsMetadataSchema(data, size) ||
+            bufferContainsMetadataSchema(combined, combinedSize);
+    }
     if (!otaSessionVersionSeen) {
         otaSessionVersionSeen =
-            (bufferContainsText(data, size, kFirmwareMetadataBegin) &&
+            (bufferContainsFirmwareMetadataMarker(data, size) &&
              bufferContainsAnyFirmwareVersionMarker(data, size)) ||
-            (bufferContainsText(combined, combinedSize, kFirmwareMetadataBegin) &&
+            (bufferContainsFirmwareMetadataMarker(combined, combinedSize) &&
              bufferContainsAnyFirmwareVersionMarker(combined, combinedSize)) ||
             bufferContainsText(data, size, ProjectConfig::FirmwareVersion) ||
             bufferContainsText(combined, combinedSize, ProjectConfig::FirmwareVersion);
+    }
+    if (!otaSessionProtocolSeen) {
+        otaSessionProtocolSeen =
+            bufferContainsProtocolMetadata(data, size, ProjectConfig::ProtocolVersion) ||
+            bufferContainsProtocolMetadata(combined, combinedSize, ProjectConfig::ProtocolVersion);
     }
 
     if (size >= sizeof(otaSearchTail)) {
@@ -301,6 +337,12 @@ bool firmwareBufferContainsVersionMarker(const uint8_t* data, size_t size, const
            firmwareBufferContainsText(data, size, expectedVersion);
 }
 
+bool firmwareBufferContainsProtocolMarker(const uint8_t* data, size_t size, uint8_t expectedProtocol) {
+    return bufferContainsFirmwareMetadataMarker(data, size) &&
+           bufferContainsMetadataSchema(data, size) &&
+           bufferContainsProtocolMetadata(data, size, expectedProtocol);
+}
+
 #if defined(ARDUINO)
 String updateErrorText(const char* prefix) {
     return String(prefix == nullptr ? "Update error" : prefix) + ", error=" + String(Update.getError());
@@ -378,12 +420,15 @@ bool finishWebOtaUpload(size_t totalSize, String& status, LogCallback logCallbac
 
     finalizeOtaSha256();
 
-    if (!otaSessionTargetSeen || !otaSessionVersionSeen) {
+    if (!otaSessionMetadataSeen || !otaSessionSchemaSeen || !otaSessionTargetSeen || !otaSessionVersionSeen || !otaSessionProtocolSeen) {
         Update.end();
         otaSessionActive = false;
         status = String("OTA abgelehnt: Firmware-Metadaten ungueltig (target=") +
                  (otaSessionTargetSeen ? "ok" : "fehlt") + ", version=" +
-                 (otaSessionVersionSeen ? "ok" : "fehlt") + ")";
+                 (otaSessionVersionSeen ? "ok" : "fehlt") + ", protocol=" +
+                 (otaSessionProtocolSeen ? "ok" : "fehlt") + ", metadata=" +
+                 (otaSessionMetadataSeen ? "ok" : "fehlt") + ", schema=" +
+                 (otaSessionSchemaSeen ? "ok" : "fehlt") + ")";
         if (logCallback != nullptr) {
             logCallback("[WebOTA] " + status);
             logCallback(String("[WebOTA] sha256=") + otaSessionSha256);

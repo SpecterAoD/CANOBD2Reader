@@ -2,7 +2,6 @@
 #include "DisplayData.h"
 #include "DiagnosticLog.h"
 #include "driver/ledc.h"
-#include <math.h>
 #include <cstring>
 
 namespace {
@@ -13,7 +12,6 @@ namespace {
   uint32_t lastUiStatsLogMs = 0;
   bool fullPageRedraw = true;
   bool displaySleeping = false;
-  float maxRpmSinceStart = 0.0f;
   bool lastEspNowConnected = false;
 
   struct DisplayInitCommand {
@@ -141,6 +139,7 @@ namespace {
     static const uint8_t gSlash[7] = {0b00001,0b00010,0b00100,0b01000,0b10000,0,0};
     static const uint8_t gDash[7] = {0,0,0,0b11111,0,0,0};
     static const uint8_t gPercent[7] = {0b11001,0b11010,0b00100,0b01000,0b10110,0b00110,0};
+    static const uint8_t gColon[7] = {0,0b01100,0b01100,0,0b01100,0b01100,0};
 
     static const uint8_t g0[7] = {0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110};
     static const uint8_t g1[7] = {0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110};
@@ -168,13 +167,16 @@ namespace {
     static const uint8_t gN[7] = {0b10001,0b11001,0b10101,0b10011,0b10001,0b10001,0b10001};
     static const uint8_t gO[7] = {0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110};
     static const uint8_t gP[7] = {0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000};
+    static const uint8_t gQ[7] = {0b01110,0b10001,0b10001,0b10001,0b10101,0b10010,0b01101};
     static const uint8_t gR[7] = {0b11110,0b10001,0b10001,0b11110,0b10100,0b10010,0b10001};
     static const uint8_t gS[7] = {0b01111,0b10000,0b10000,0b01110,0b00001,0b00001,0b11110};
     static const uint8_t gT[7] = {0b11111,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100};
     static const uint8_t gU[7] = {0b10001,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110};
     static const uint8_t gV[7] = {0b10001,0b10001,0b10001,0b10001,0b10001,0b01010,0b00100};
     static const uint8_t gW[7] = {0b10001,0b10001,0b10001,0b10101,0b10101,0b10101,0b01010};
+    static const uint8_t gX[7] = {0b10001,0b01010,0b00100,0b00100,0b00100,0b01010,0b10001};
     static const uint8_t gY[7] = {0b10001,0b10001,0b01010,0b00100,0b00100,0b00100,0b00100};
+    static const uint8_t gZ[7] = {0b11111,0b00001,0b00010,0b00100,0b01000,0b10000,0b11111};
 
     switch (c) {
       case ' ': return gSpace;
@@ -182,13 +184,14 @@ namespace {
       case '/': return gSlash;
       case '-': return gDash;
       case '%': return gPercent;
+      case ':': return gColon;
       case '0': return g0; case '1': return g1; case '2': return g2; case '3': return g3; case '4': return g4;
       case '5': return g5; case '6': return g6; case '7': return g7; case '8': return g8; case '9': return g9;
       case 'A': return gA; case 'B': return gB; case 'C': return gC; case 'D': return gD; case 'E': return gE;
       case 'F': return gF; case 'G': return gG; case 'H': return gH; case 'I': return gI; case 'K': return gK;
-      case 'L': return gL; case 'M': return gM; case 'N': return gN; case 'O': return gO; case 'P': return gP;
+      case 'L': return gL; case 'M': return gM; case 'N': return gN; case 'O': return gO; case 'P': return gP; case 'Q': return gQ;
       case 'R': return gR; case 'S': return gS; case 'T': return gT; case 'U': return gU; case 'V': return gV;
-      case 'W': return gW; case 'Y': return gY;
+      case 'W': return gW; case 'X': return gX; case 'Y': return gY; case 'Z': return gZ;
       default: return gSpace;
     }
   }
@@ -361,7 +364,50 @@ namespace {
     tft.drawString(footer, 4, tft.height() - 8);
   }
 
+  bool isMissingDisplayValue(const String& value) {
+    String normalized = value;
+    normalized.trim();
+    normalized.toUpperCase();
+    return normalized.length() == 0 ||
+           normalized == "--" ||
+           normalized == "N/A" ||
+           normalized == "NA";
+  }
+
+  String textOrFallback(const char* name, const char* fallback) {
+    String value = DisplayData::displayText(name);
+    return isMissingDisplayValue(value) ? String(fallback == nullptr ? "WARTET" : fallback) : value;
+  }
+
+  String valueOrFallback(const char* name, uint8_t decimals, const char* fallback) {
+    String value = DisplayData::displayValue(name, decimals);
+    return isMissingDisplayValue(value) ? String(fallback == nullptr ? "WARTET" : fallback) : value;
+  }
+
+  String countOrZero(const char* name) {
+    String value = DisplayData::displayValue(name, 0);
+    return isMissingDisplayValue(value) ? "0" : value;
+  }
+
+  String canIdFromRaw(const String& raw) {
+    if (isMissingDisplayValue(raw)) return "--";
+    const int spaceIndex = raw.indexOf(' ');
+    return spaceIndex > 0 ? raw.substring(0, spaceIndex) : raw;
+  }
+
+  String compactCanHex(const String& raw) {
+    if (isMissingDisplayValue(raw)) return "WARTET AUF CAN";
+    String text = raw;
+    text.replace("DLC", " D");
+    return text;
+  }
+
   void drawMetricBox(int x, int y, int w, int h, const char* label, const String& value, uint16_t color) {
+    const bool overlay = startupOverlayActive();
+    const String shownValue = overlay ? diagnosticValueForLabel(label) : value;
+    const bool missing = !overlay && isMissingDisplayValue(shownValue);
+    const uint16_t effectiveColor = missing ? DisplayConfig::Muted : color;
+
     if (fullPageRedraw) {
       tft.fillRoundRect(x, y, w, h, 6, DisplayConfig::Panel);
 
@@ -370,8 +416,8 @@ namespace {
       drawBitmapText(x + 8, y + 7, labelText, 1, DisplayConfig::Text, DisplayConfig::Panel);
     }
 
-    tft.drawRoundRect(x, y, w, h, 6, color);
-    tft.fillRoundRect(x + 2, y + h - 5, w - 4, 3, 2, color);
+    tft.drawRoundRect(x, y, w, h, 6, effectiveColor);
+    tft.fillRoundRect(x + 2, y + h - 5, w - 4, 3, 2, effectiveColor);
 
     // Subtle value background for readability without changing the overall card style.
     const int valueBgX = x + 6;
@@ -380,16 +426,13 @@ namespace {
     const int valueBgH = h - 28;
     tft.fillRoundRect(valueBgX, valueBgY, valueBgW, valueBgH, 4, DisplayConfig::Background);
 
-    const bool overlay = startupOverlayActive();
-    const String shownValue = overlay ? diagnosticValueForLabel(label) : value;
-
     if (overlay) {
       drawDiagnosticSegmentsInBox(x, y, w, h, label);
       return;
     }
 
-    String textValue = (shownValue == "--") ? "N/A" : shownValue;
-    const uint16_t valueTextColor = overlay ? DisplayConfig::Accent : color;
+    String textValue = missing ? "N/A" : shownValue;
+    const uint16_t valueTextColor = missing ? DisplayConfig::Muted : effectiveColor;
     int valueScale = 2;
     int maxChars = (valueBgW - 8) / (6 * valueScale);
     if (maxChars <= 3 || textValue.length() > static_cast<size_t>(maxChars)) {
@@ -410,14 +453,19 @@ namespace {
 
   void drawSmallStatusCell(int x, int y, int w, const char* label, const String& value, uint16_t color) {
     constexpr int cellHeight = 16;
+    const bool missing = isMissingDisplayValue(value);
+    const uint16_t effectiveColor = missing ? DisplayConfig::Muted : color;
     tft.fillRoundRect(x, y, w, cellHeight, 5, DisplayConfig::Panel);
-    tft.drawRoundRect(x, y, w, cellHeight, 5, color);
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextSize(1);
-    tft.setTextColor(color, DisplayConfig::Panel);
-    String text = String(label == nullptr ? "" : label) + " " + value;
-    if (text.length() > 12) text = text.substring(0, 12);
-    tft.drawString(text, x + w / 2, y + cellHeight / 2);
+    tft.drawRoundRect(x, y, w, cellHeight, 5, effectiveColor);
+    String text = String(label == nullptr ? "" : label);
+    text += ":";
+    text += missing ? "N/A" : value;
+    text.toUpperCase();
+    const int maxChars = (w - 8) / 6;
+    if (maxChars > 3 && text.length() > static_cast<size_t>(maxChars)) {
+      text = text.substring(0, maxChars);
+    }
+    drawBitmapText(x + 4, y + 5, text, 1, effectiveColor, DisplayConfig::Panel);
   }
 
   void drawInfoLine(int y, const char* label, const String& value, uint16_t color = DisplayConfig::Text) {
@@ -438,142 +486,12 @@ namespace {
 
   uint16_t statusColorForValue(DisplayTelemetryValue* value) {
     if (value == nullptr) return DisplayConfig::Muted;
-    if (!DisplayData::isFresh(value)) return DisplayConfig::Warn;
+    if (!DisplayData::isFresh(value)) return DisplayConfig::Muted;
     String status = value->status;
     status.toUpperCase();
     if (status == "ERROR" || status == "TIMEOUT" || status == "SEND_FAIL") return DisplayConfig::Error;
     if (status == "WARN" || status == "UNSUPPORTED") return DisplayConfig::Warn;
     return DisplayConfig::Ok;
-  }
-
-  float numericMetricValue(const char* name, bool& fresh) {
-    using namespace DisplayData;
-    DisplayTelemetryValue* value = findValue(String(name));
-    if (value == nullptr && strcmp(name, "RPM") == 0) value = findValue("0C");
-    if (value == nullptr && strcmp(name, "BoostPressureBar") == 0) value = findValue("BOOST");
-    if (value == nullptr && strcmp(name, "ManifoldAbsolutePressure") == 0) value = findValue("0B");
-    if (value == nullptr && strcmp(name, "BarometricPressure") == 0) value = findValue("33");
-
-    fresh = isFresh(value);
-    if (!fresh || value == nullptr) return 0.0f;
-    String raw = value->value;
-    raw.replace(",", ".");
-    return raw.toFloat();
-  }
-
-  int rpmToGaugeAngle(float rpm) {
-    const float clamped = constrain(rpm,
-                                    static_cast<float>(DisplayConfig::RpmMin),
-                                    static_cast<float>(DisplayConfig::RpmMax));
-    const float normalized = (clamped - DisplayConfig::RpmMin) /
-                             static_cast<float>(DisplayConfig::RpmMax - DisplayConfig::RpmMin);
-    constexpr int startAngleDeg = 200;
-    constexpr int endAngleDeg = 340;
-    return startAngleDeg + static_cast<int>((endAngleDeg - startAngleDeg) * normalized);
-  }
-
-  void polarPoint(int centerX, int centerY, int radius, int angleDeg, int& x, int& y) {
-    constexpr float degToRad = 0.01745329252f;
-    const float angle = angleDeg * degToRad;
-    x = centerX + static_cast<int>(cosf(angle) * radius);
-    y = centerY + static_cast<int>(sinf(angle) * radius);
-  }
-
-  void drawArcSegment(int centerX,
-                      int centerY,
-                      int radius,
-                      int startAngleDeg,
-                      int endAngleDeg,
-                      int thickness,
-                      uint16_t color) {
-    if (endAngleDeg < startAngleDeg) return;
-
-    for (int angle = startAngleDeg; angle <= endAngleDeg; angle += 2) {
-      int x = 0;
-      int y = 0;
-      polarPoint(centerX, centerY, radius, angle, x, y);
-      tft.fillCircle(x, y, thickness, color);
-    }
-  }
-
-  void drawGaugeTick(int centerX, int centerY, int angleDeg, int innerRadius, int outerRadius, uint16_t color) {
-    int x1 = 0;
-    int y1 = 0;
-    int x2 = 0;
-    int y2 = 0;
-    polarPoint(centerX, centerY, innerRadius, angleDeg, x1, y1);
-    polarPoint(centerX, centerY, outerRadius, angleDeg, x2, y2);
-    tft.drawLine(x1, y1, x2, y2, color);
-    tft.drawLine(x1 + 1, y1, x2 + 1, y2, color);
-  }
-
-  void drawRpmGraphPage() {
-    using namespace DisplayData;
-    bool rpmFresh = false;
-    const float rpm = numericMetricValue("RPM", rpmFresh);
-    if (rpmFresh && rpm > maxRpmSinceStart) maxRpmSinceStart = rpm;
-
-    const uint16_t color = valueColor("RPM");
-    const int centerX = tft.width() / 2;
-    const int centerY = 122;
-    const int radius = 74;
-    const int startAngle = rpmToGaugeAngle(DisplayConfig::RpmMin);
-    const int warnAngle = rpmToGaugeAngle(DisplayConfig::RpmWarn);
-    const int criticalAngle = rpmToGaugeAngle(DisplayConfig::RpmCritical);
-    const int endAngle = rpmToGaugeAngle(DisplayConfig::RpmMax);
-    const int currentAngle = rpmFresh ? rpmToGaugeAngle(rpm) : startAngle;
-
-    // The RPM page is intentionally redrawn as one calm dashboard surface.
-    // This avoids ghosting when the needle moves backwards.
-    tft.fillRect(0, 21, tft.width(), tft.height() - 37, DisplayConfig::Background);
-
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextSize(1);
-    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
-    tft.drawString("DREHZAHL", centerX, 34);
-
-    String rpmText = rpmFresh ? String(static_cast<int>(rpm)) : "--";
-    const int rpmScale = rpmText.length() > 4 ? 3 : 4;
-    const int rpmTextWidth = static_cast<int>(rpmText.length()) * 6 * rpmScale;
-    drawBitmapText(centerX - rpmTextWidth / 2, 56, rpmText, rpmScale, color, DisplayConfig::Background);
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
-    tft.drawString("rpm", centerX + 70, 82);
-
-    drawArcSegment(centerX, centerY, radius, startAngle, warnAngle, 4, DisplayConfig::Ok);
-    drawArcSegment(centerX, centerY, radius, warnAngle, criticalAngle, 4, DisplayConfig::Warn);
-    drawArcSegment(centerX, centerY, radius, criticalAngle, endAngle, 4, DisplayConfig::Error);
-    if (!rpmFresh) {
-      drawArcSegment(centerX, centerY, radius, startAngle, endAngle, 5, DisplayConfig::Muted);
-    }
-
-    drawGaugeTick(centerX, centerY, startAngle, radius - 10, radius + 10, DisplayConfig::Muted);
-    drawGaugeTick(centerX, centerY, warnAngle, radius - 12, radius + 12, DisplayConfig::Warn);
-    drawGaugeTick(centerX, centerY, criticalAngle, radius - 12, radius + 12, DisplayConfig::Error);
-    drawGaugeTick(centerX, centerY, endAngle, radius - 10, radius + 10, DisplayConfig::Muted);
-
-    if (rpmFresh) {
-      int needleX = 0;
-      int needleY = 0;
-      polarPoint(centerX, centerY, radius - 18, currentAngle, needleX, needleY);
-      tft.drawLine(centerX, centerY, needleX, needleY, color);
-      tft.drawLine(centerX + 1, centerY, needleX + 1, needleY, color);
-      tft.fillCircle(centerX, centerY, 5, color);
-    } else {
-      tft.fillCircle(centerX, centerY, 5, DisplayConfig::Muted);
-    }
-
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextSize(1);
-    tft.setTextColor(DisplayConfig::Muted, DisplayConfig::Background);
-    tft.drawString(String(DisplayConfig::RpmMin), 48, 132);
-    tft.drawString(String(DisplayConfig::RpmWarn), 118, 44);
-    tft.drawString(String(DisplayConfig::RpmCritical), 212, 44);
-    tft.drawString(String(DisplayConfig::RpmMax), 272, 132);
-
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(DisplayConfig::Text, DisplayConfig::Background);
-    tft.drawString("Max seit Start: " + String(static_cast<int>(maxRpmSinceStart)) + " rpm", 16, 148);
   }
 
   void drawMainPageV2() {
@@ -589,11 +507,11 @@ namespace {
     const bool hasFault = dtc != nullptr && isFresh(dtc) && dtc->status == "WARN" && dtc->value != "Keine";
     drawSmallStatusCell(6, 136, 74, "ESP", isEspNowConnected() ? "OK" : "ERR",
                         isEspNowConnected() ? DisplayConfig::Ok : DisplayConfig::Error);
-    drawSmallStatusCell(84, 136, 74, "CAN", isCanStatusRecent() ? displayText("CAN") : "--",
+    drawSmallStatusCell(84, 136, 74, "CAN", isCanStatusRecent() ? textOrFallback("CAN", "WARTET") : "WARTET",
                         statusColorForValue(canStatus));
-    drawSmallStatusCell(162, 136, 74, "OBD", isObdStatusRecent() ? displayText("OBD") : "--",
+    drawSmallStatusCell(162, 136, 74, "OBD", isObdStatusRecent() ? textOrFallback("OBD", "WARTET") : "WARTET",
                         statusColorForValue(obdStatus));
-    drawSmallStatusCell(240, 136, 74, "DTC", hasFault ? "AKT" : (isFresh(dtc) ? "OK" : "--"),
+    drawSmallStatusCell(240, 136, 74, "DTC", hasFault ? "AKT" : (isFresh(dtc) ? "OK" : "KEINE"),
                         hasFault ? DisplayConfig::Warn : (isFresh(dtc) ? DisplayConfig::Ok : DisplayConfig::Muted));
   }
 
@@ -603,9 +521,9 @@ namespace {
     drawMetricBox(164, 24, 150, 48, "Kuehlmittel", displayValue("CoolantTemp", 0), valueColor("CoolantTemp"));
     drawMetricBox(6, 78, 150, 48, "Motorlast", displayValue("EngineLoad", 0), valueColor("EngineLoad"));
     drawMetricBox(164, 78, 150, 48, "Ansaugluft", displayValue("IntakeTemp", 0), valueColor("IntakeTemp"));
-    drawSmallStatusCell(6, 134, 100, "MAP", displayValue("ManifoldAbsolutePressure", 0), valueColor("ManifoldAbsolutePressure"));
-    drawSmallStatusCell(110, 134, 100, "MAF", displayValue("MAF", 1), valueColor("MAF"));
-    drawSmallStatusCell(214, 134, 100, "DK", displayValue("Throttle", 0), valueColor("Throttle"));
+    drawSmallStatusCell(6, 134, 100, "MAP", valueOrFallback("ManifoldAbsolutePressure", 0, "WARTET"), valueColor("ManifoldAbsolutePressure"));
+    drawSmallStatusCell(110, 134, 100, "MAF", valueOrFallback("MAF", 1, "WARTET"), valueColor("MAF"));
+    drawSmallStatusCell(214, 134, 100, "DK", valueOrFallback("Throttle", 0, "WARTET"), valueColor("Throttle"));
   }
 
   void drawConsumptionPageV2() {
@@ -614,8 +532,8 @@ namespace {
     drawMetricBox(164, 24, 150, 48, "Durchschnitt", displayValue("AverageConsumption", 1), valueColor("AverageConsumption"));
     drawMetricBox(6, 78, 150, 48, "Kraftstoff", displayValue("FuelRate", 1), valueColor("FuelRate"));
     drawMetricBox(164, 78, 150, 48, "Tempo", displayValue("Speed", 0), valueColor("Speed"));
-    drawSmallStatusCell(6, 134, 150, "Laufzeit", displayValue("RunTime", 0), valueColor("RunTime"));
-    drawSmallStatusCell(164, 134, 150, "Tank", displayValue("FuelLevel", 0), valueColor("FuelLevel"));
+    drawSmallStatusCell(6, 134, 150, "Laufzeit", valueOrFallback("RunTime", 0, "WARTET"), valueColor("RunTime"));
+    drawSmallStatusCell(164, 134, 150, "Tank", valueOrFallback("FuelLevel", 0, "WARTET"), valueColor("FuelLevel"));
   }
 
   void drawDiagnosticsPageV2() {
@@ -628,13 +546,13 @@ namespace {
 
     drawMetricBox(6, 24, 100, 38, "ESP-NOW", isEspNowConnected() ? "OK" : "ERR",
                   isEspNowConnected() ? DisplayConfig::Ok : DisplayConfig::Error);
-    drawMetricBox(110, 24, 100, 38, "CAN", isCanStatusRecent() ? displayText("CAN") : "--",
+    drawMetricBox(110, 24, 100, 38, "CAN", isCanStatusRecent() ? textOrFallback("CAN", "WARTET") : "WARTET",
                   statusColorForValue(canStatus));
-    drawMetricBox(214, 24, 100, 38, "OBD", isObdStatusRecent() ? displayText("OBD") : "--",
+    drawMetricBox(214, 24, 100, 38, "OBD", isObdStatusRecent() ? textOrFallback("OBD", "WARTET") : "WARTET",
                   statusColorForValue(obdStatus));
     drawMetricBox(6, 68, 150, 38, "Update", ageText(runtime().lastReceivedAt),
                   isEspNowConnected() ? DisplayConfig::Ok : DisplayConfig::Error);
-    drawMetricBox(164, 68, 150, 38, "Heartbeat", heartbeat != nullptr ? heartbeat->value : "--",
+    drawMetricBox(164, 68, 150, 38, "Heartbeat", heartbeat != nullptr ? heartbeat->value : "0",
                   isFresh(heartbeat) ? DisplayConfig::Ok : DisplayConfig::Warn);
 
     tft.fillRoundRect(6, 112, 308, 38, 6, DisplayConfig::Panel);
@@ -651,36 +569,40 @@ namespace {
     const bool dtcFresh = isFresh(dtc);
     const bool hasFault = dtcFresh && dtc->status == "WARN" && dtc->value != "Keine";
 
-    drawMetricBox(6, 24, 100, 38, "UDS", displayText("UDS"), statusColorForValue(udsStatus));
-    drawMetricBox(110, 24, 100, 38, "ECUs", displayText("ReachableEcus"), valueColor("ReachableEcus"));
-    drawMetricBox(214, 24, 100, 38, "Pending", displayText("UdsPending"), valueColor("UdsPending"));
+    drawMetricBox(6, 24, 100, 38, "UDS", textOrFallback("UDS", "WARTET"), statusColorForValue(udsStatus));
+    drawMetricBox(110, 24, 100, 38, "ECUs", countOrZero("ReachableEcus"), valueColor("ReachableEcus"));
+    drawMetricBox(214, 24, 100, 38, "Pending", countOrZero("UdsPending"), valueColor("UdsPending"));
 
     tft.fillRoundRect(6, 68, 308, 80, 6, DisplayConfig::Panel);
     String vin = displayText("VIN");
-    if (vin == "--") vin = displayText("UDS_VIN");
+    if (vin == "--") vin = textOrFallback("UDS_VIN", "WARTET");
     String dtcText = displayText("DTC");
     String udsDtcText = displayText("UDS_DTC");
     String nrc = displayText("UDS_NRC");
-    if (nrc == "--") nrc = udsStatus != nullptr ? udsStatus->value : "--";
+    if (dtcText == "--") dtcText = "KEINE DATEN";
+    if (udsDtcText == "--") udsDtcText = "KEINE DATEN";
+    if (nrc == "--") nrc = udsStatus != nullptr ? udsStatus->value : "KEIN NRC";
     drawInfoLine(78, "VIN", vin);
     drawInfoLine(96, "OBD-DTC", dtcText, hasFault ? DisplayConfig::Warn : (dtcFresh ? DisplayConfig::Ok : DisplayConfig::Muted));
     drawInfoLine(114, "UDS-DTC", udsDtcText, statusColorForValue(udsDtc));
-    drawInfoLine(130, "NRC/Backoff", nrc + " / " + displayText("UdsBackoff"),
+    drawInfoLine(130, "NRC/Backoff", nrc + " / " + textOrFallback("UdsBackoff", "0s"),
                  nrc.indexOf("0x78") >= 0 ? DisplayConfig::Warn : DisplayConfig::Text);
   }
 
   void drawCanSnifferPageV2() {
     using namespace DisplayData;
-    drawMetricBox(6, 24, 100, 38, "Sniffer", displayText("CanSniffer"), valueColor("CanSniffer"));
-    drawMetricBox(110, 24, 100, 38, "Baseline", displayText("CanBaseline"), valueColor("CanBaseline"));
-    drawMetricBox(214, 24, 100, 38, "Frames", displayValue("CANCount", 0), valueColor("CANCount"));
+    const String raw = displayText("LastCAN");
+    const String hint = textOrFallback("CANHint", "NOCH KEIN HINWEIS");
+    drawMetricBox(6, 24, 100, 38, "Sniffer", textOrFallback("CanSniffer", isMissingDisplayValue(raw) ? "WARTET" : "RAW"),
+                  isMissingDisplayValue(raw) ? DisplayConfig::Muted : DisplayConfig::Ok);
+    drawMetricBox(110, 24, 100, 38, "Baseline", textOrFallback("CanBaseline", "LIVE"),
+                  isMissingDisplayValue(raw) ? DisplayConfig::Muted : DisplayConfig::Ok);
+    drawMetricBox(214, 24, 100, 38, "Frames", valueOrFallback("CANCount", 0, String(runtime().receivedPackets).c_str()), valueColor("CANCount"));
 
     tft.fillRoundRect(6, 68, 308, 80, 6, DisplayConfig::Panel);
-    drawInfoLine(78, "Kandidaten", displayText("CanCandidates"));
-    drawInfoLine(96, "CAN-ID", displayText("CanCandidateId"));
-    String raw = displayText("LastCAN");
-    String hint = displayText("CANHint");
-    drawInfoLine(114, "Letzter", raw);
+    drawInfoLine(78, "Kandidaten", textOrFallback("CanCandidates", "RAW-HEX AKTIV"));
+    drawInfoLine(96, "CAN-ID", textOrFallback("CanCandidateId", canIdFromRaw(raw).c_str()));
+    drawInfoLine(114, "Letzter", compactCanHex(raw));
     drawInfoLine(130, "Hinweis", hint, DisplayConfig::Accent);
   }
 
@@ -690,8 +612,8 @@ namespace {
     drawMetricBox(164, 24, 150, 48, "MAP", displayValue("ManifoldAbsolutePressure", 0), valueColor("ManifoldAbsolutePressure"));
     drawMetricBox(6, 78, 150, 48, "BARO", displayValue("BarometricPressure", 0), valueColor("BarometricPressure"));
     drawMetricBox(164, 78, 150, 48, "Aussentemp.", displayValue("AmbientTemp", 0), valueColor("AmbientTemp"));
-    drawSmallStatusCell(6, 134, 150, "Steuer V", displayValue("BatteryVoltage", 1), valueColor("BatteryVoltage"));
-    drawSmallStatusCell(164, 134, 150, "Runtime", displayValue("RunTime", 0), valueColor("RunTime"));
+    drawSmallStatusCell(6, 134, 150, "Steuer V", valueOrFallback("BatteryVoltage", 1, "WARTET"), valueColor("BatteryVoltage"));
+    drawSmallStatusCell(164, 134, 150, "Runtime", valueOrFallback("RunTime", 0, "WARTET"), valueColor("RunTime"));
   }
 
   void drawPowerPageV2() {
@@ -722,9 +644,8 @@ namespace {
       case 3: drawDiagnosticsPageV2(); break;
       case 4: drawUdsDtcPageV2(); break;
       case 5: drawCanSnifferPageV2(); break;
-      case 6: drawRpmGraphPage(); break;
-      case 7: drawAdditionalPageV2(); break;
-      case 8: drawPowerPageV2(); break;
+      case 6: drawAdditionalPageV2(); break;
+      case 7: drawPowerPageV2(); break;
     }
 
     drawFooter();

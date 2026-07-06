@@ -14,11 +14,14 @@
 
 namespace {
 uint32_t lastObdPollAt = 0;
+uint32_t lastFastLivePollAt = 0;
+uint32_t lastSlowLivePollAt = 0;
 uint32_t lastSupportedPidRefreshAt = 0;
 uint32_t lastDtcQueryAt = 0;
 uint32_t lastVinQueryAt = 0;
 bool supportedInitialized = false;
-std::size_t nextPidIndex = 0;
+std::size_t nextFastPidIndex = 0;
+std::size_t nextSlowPidIndex = 0;
 uint32_t supportedPids01_20 = 0;
 uint32_t supportedPids21_40 = 0;
 uint32_t supportedPids41_60 = 0;
@@ -69,6 +72,58 @@ bool isPidSupported(byte pid) {
     const byte offset = pid - rangeBase;
     if (offset == 0 || offset > 32) return false;
     return (mask & (1UL << (32 - offset))) != 0;
+}
+
+std::size_t requestedPidIndex(byte pid) {
+    for (std::size_t index = 0; index < ObdConfig::ObdPidCount; ++index) {
+        if (ObdConfig::RequestedPids[index] == pid) return index;
+    }
+    return ObdConfig::ObdPidCount;
+}
+
+void reportUnsupportedPidOnce(byte pid, SenderCallbacks::SendTelemetry sendTelemetry) {
+    const std::size_t pidIndex = requestedPidIndex(pid);
+    if (pidIndex >= ObdConfig::ObdPidCount || unsupportedPidReported[pidIndex]) return;
+
+    if (sendTelemetry != nullptr) {
+        char pidHex[4];
+        snprintf(pidHex, sizeof(pidHex), "%02X", pid);
+        sendTelemetry("OBD", pidHex, getPIDName(pid), "N/A", "", "UNSUPPORTED");
+    }
+    unsupportedPidReported[pidIndex] = true;
+}
+
+bool queryNextPidFromList(const uint8_t* pids,
+                          std::size_t count,
+                          std::size_t& nextIndex,
+                          uint32_t nowMs,
+                          uint32_t& lastCanMessageAt,
+                          uint32_t& lastObdResponseAt,
+                          bool& canBusActive,
+                          SenderCallbacks::SendTelemetry sendTelemetry) {
+    if (pids == nullptr || count == 0) return false;
+
+    std::size_t inspectedPids = 0;
+    while (inspectedPids < count) {
+        const std::size_t pidIndex = nextIndex;
+        nextIndex = (nextIndex + 1) % count;
+        ++inspectedPids;
+
+        const byte pid = pids[pidIndex];
+        if (!isPidSupported(pid)) {
+            reportUnsupportedPidOnce(pid, sendTelemetry);
+            continue;
+        }
+
+        if (OBD2Handler::requestAndSendPID(pid)) {
+            lastObdResponseAt = nowMs;
+            lastCanMessageAt = nowMs;
+            canBusActive = true;
+        }
+        return true;
+    }
+
+    return false;
 }
 
 void refreshSupportedPids(uint32_t nowMs,
@@ -197,11 +252,14 @@ namespace SenderObdScheduler {
 
 void reset() {
     lastObdPollAt = 0;
+    lastFastLivePollAt = 0;
+    lastSlowLivePollAt = 0;
     lastSupportedPidRefreshAt = 0;
     lastDtcQueryAt = 0;
     lastVinQueryAt = 0;
     supportedInitialized = false;
-    nextPidIndex = 0;
+    nextFastPidIndex = 0;
+    nextSlowPidIndex = 0;
     supportedPids01_20 = 0;
     supportedPids21_40 = 0;
     supportedPids41_60 = 0;
@@ -217,7 +275,7 @@ void tick(uint32_t nowMs,
           SenderCallbacks::SendTelemetry sendTelemetry,
           SenderCallbacks::SendStatus sendStatus) {
     if (!SenderConfig::EnableOBD2) return;
-    if (nowMs - lastObdPollAt < SenderConfig::ObdPollIntervalMs) return;
+    if (nowMs - lastObdPollAt < SenderConfig::PollingRateMs) return;
     lastObdPollAt = nowMs;
 
     canBusActive = (nowMs - lastCanMessageAt) <= SenderConfig::CanIdleTimeoutMs;
@@ -232,31 +290,31 @@ void tick(uint32_t nowMs,
     }
 
     if (supportedInitialized) {
-        std::size_t queriedPids = 0;
-        std::size_t inspectedPids = 0;
-        while (inspectedPids < ObdConfig::ObdPidCount &&
-               queriedPids < SenderConfig::MaxObdPidsPerTick) {
-            const std::size_t pidIndex = nextPidIndex;
-            nextPidIndex = (nextPidIndex + 1) % ObdConfig::ObdPidCount;
-            ++inspectedPids;
+        bool livePidQueried = false;
 
-            const byte pid = ObdConfig::RequestedPids[pidIndex];
-            if (!isPidSupported(pid)) {
-                if (!unsupportedPidReported[pidIndex] && sendTelemetry != nullptr) {
-                    char pidHex[4];
-                    snprintf(pidHex, sizeof(pidHex), "%02X", pid);
-                    sendTelemetry("OBD", pidHex, getPIDName(pid), "N/A", "", "UNSUPPORTED");
-                    unsupportedPidReported[pidIndex] = true;
-                }
-                continue;
-            }
+        if (nowMs - lastFastLivePollAt >= SenderConfig::FastLiveObdPollIntervalMs) {
+            livePidQueried = queryNextPidFromList(ObdConfig::FastLivePids,
+                                                  ObdConfig::FastLivePidCount,
+                                                  nextFastPidIndex,
+                                                  nowMs,
+                                                  lastCanMessageAt,
+                                                  lastObdResponseAt,
+                                                  canBusActive,
+                                                  sendTelemetry);
+            lastFastLivePollAt = nowMs;
+        }
 
-            if (OBD2Handler::requestAndSendPID(pid)) {
-                lastObdResponseAt = nowMs;
-                lastCanMessageAt = nowMs;
-                canBusActive = true;
-            }
-            ++queriedPids;
+        if (!livePidQueried &&
+            nowMs - lastSlowLivePollAt >= SenderConfig::SlowLiveObdPollIntervalMs) {
+            livePidQueried = queryNextPidFromList(ObdConfig::SlowLivePids,
+                                                  ObdConfig::SlowLivePidCount,
+                                                  nextSlowPidIndex,
+                                                  nowMs,
+                                                  lastCanMessageAt,
+                                                  lastObdResponseAt,
+                                                  canBusActive,
+                                                  sendTelemetry);
+            lastSlowLivePollAt = nowMs;
         }
     } else if (sendStatus != nullptr) {
         sendStatus("OBD", "PID_SUPPORT_TIMEOUT", "WARN");

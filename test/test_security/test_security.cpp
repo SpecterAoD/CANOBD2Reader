@@ -74,13 +74,25 @@ void test_ota_metadata_markers_can_be_found_in_binary_data() {
 
 void test_ota_metadata_accepts_new_version_marker() {
     const char* image =
-        "xxxxCANOBD2_FW_METADATA_BEGIN;target=sender;version=V9.9.9;protocol=2;CANOBD2_FW_METADATA_ENDxxxx";
+        "xxxxCANOBD2_FW_METADATA_BEGIN;target=sender;version=V9.9.9;schema=2;protocol=2;min_protocol=2;max_protocol=2;CANOBD2_FW_METADATA_ENDxxxx";
     const uint8_t* bytes = reinterpret_cast<const uint8_t*>(image);
     const size_t size = std::strlen(image);
 
     TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareBufferContainsTargetMarker(bytes, size, "sender"));
     TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareBufferContainsVersionMarker(bytes, size, ProjectConfig::FirmwareVersion));
+    TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareBufferContainsProtocolMarker(bytes, size, ProjectConfig::ProtocolVersion));
     TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareBufferContainsTargetMarker(bytes, size, "display"));
+}
+
+void test_ota_metadata_rejects_wrong_protocol_without_growing_version_list() {
+    const char* image =
+        "xxxxCANOBD2_FW_METADATA_BEGIN;target=sender;version=V99.99.99;schema=2;protocol=99;min_protocol=99;max_protocol=99;CANOBD2_FW_METADATA_ENDxxxx";
+    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(image);
+    const size_t size = std::strlen(image);
+
+    TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareBufferContainsTargetMarker(bytes, size, "sender"));
+    TEST_ASSERT_TRUE(WebRuntimeHandlers::firmwareBufferContainsVersionMarker(bytes, size, ProjectConfig::FirmwareVersion));
+    TEST_ASSERT_FALSE(WebRuntimeHandlers::firmwareBufferContainsProtocolMarker(bytes, size, ProjectConfig::ProtocolVersion));
 }
 
 int main(int, char**) {
@@ -92,5 +104,6 @@ int main(int, char**) {
     RUN_TEST(test_ota_target_filename_guard);
     RUN_TEST(test_ota_metadata_markers_can_be_found_in_binary_data);
     RUN_TEST(test_ota_metadata_accepts_new_version_marker);
+    RUN_TEST(test_ota_metadata_rejects_wrong_protocol_without_growing_version_list);
     return UNITY_END();
 }

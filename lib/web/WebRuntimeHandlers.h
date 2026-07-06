@@ -22,6 +22,7 @@ bool firmwareFilenameMatchesTarget(const char* filename, const char* expectedTar
 bool firmwareBufferContainsText(const uint8_t* data, size_t size, const char* text);
 bool firmwareBufferContainsTargetMarker(const uint8_t* data, size_t size, const char* expectedTarget);
 bool firmwareBufferContainsVersionMarker(const uint8_t* data, size_t size, const char* expectedVersion);
+bool firmwareBufferContainsProtocolMarker(const uint8_t* data, size_t size, uint8_t expectedProtocol);
 
 #if defined(ARDUINO)
 String updateErrorText(const char* prefix);
