@@ -13,6 +13,10 @@ constexpr UdsServiceProbe kServiceProbes[] = {
 
 } // namespace
 
+// NRC 0x78 ("ResponsePending") is a soft hold signal from the ECU, not a failure.
+// The ECU sends it while still computing a response and expects the tester to keep
+// the session alive and continue waiting. Treating 0x78 as an error would abort
+// diagnostics prematurely on slow or heavily loaded ECUs.
 bool isUdsResponsePending(uint8_t nrc) {
     return nrc == 0x78;
 }
@@ -22,11 +26,18 @@ bool isUdsUnsupportedNrc(uint8_t nrc) {
 }
 
 CapabilityStatus statusForNegativeResponse(uint8_t nrc) {
+    // Pending maps to its own status so the scan loop can decide whether to
+    // keep waiting rather than treating the service as definitively broken.
     if (isUdsResponsePending(nrc)) return CapabilityStatus::Pending;
+    // NRCs 0x11, 0x12 and 0x31 indicate the service or sub-function is simply
+    // not offered by this ECU; mark it Unsupported rather than as an error.
     if (isUdsUnsupportedNrc(nrc)) return CapabilityStatus::Unsupported;
     return CapabilityStatus::NegativeResponse;
 }
 
+// While the ECU continues sending 0x78 ResponsePending, we keep polling until
+// totalTimeoutMs elapses. The hard upper bound prevents indefinite waits if a
+// misbehaving ECU never delivers a final positive or negative response.
 bool shouldContinueWaitingForPending(uint32_t startMs, uint32_t nowMs, uint32_t totalTimeoutMs) {
     return nowMs - startMs < totalTimeoutMs;
 }
