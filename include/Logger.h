@@ -73,8 +73,10 @@ namespace Logger {
     inline void debugValue(const char* label, T value, const char* unit = "") {
         if (!LoggingConfig::GeneralDebugEnabled) return;
 
+        const String valueText = String(value);
+        const bool hasUnit = unit && unit[0] != '\0';
         char buf[128];
-        snprintf(buf, sizeof(buf), "%s: %s%s", label, String(value).c_str(), unit && unit[0] ? unit : "");
+        snprintf(buf, sizeof(buf), "%s: %s%s%s", label, valueText.c_str(), hasUnit ? " " : "", hasUnit ? unit : "");
         emit(buf);
 
         if (LoggingConfig::SerialEnabled) {
@@ -104,8 +106,10 @@ namespace Logger {
     inline void powerValue(const char* label, T value, const char* unit = "") {
         if (!LoggingConfig::PowerDebugEnabled) return;
 
+        const String valueText = String(value);
+        const bool hasUnit = unit && unit[0] != '\0';
         char buf[128];
-        snprintf(buf, sizeof(buf), "%s: %s%s", label, String(value).c_str(), unit && unit[0] ? unit : "");
+        snprintf(buf, sizeof(buf), "%s: %s%s%s", label, valueText.c_str(), hasUnit ? " " : "", hasUnit ? unit : "");
         emit(buf);
 
         if (LoggingConfig::SerialEnabled) {
@@ -204,12 +208,14 @@ namespace Logger {
     inline void obdValue(const char* label, T value, const char* unit = "") {
         if (!LoggingConfig::Obd2DebugEnabled) return;
 
+        const String valueText = String(value);
+        const bool hasUnit = unit && unit[0] != '\0';
         char buf[128];
         snprintf(buf, sizeof(buf), "[OBD2] %s: %s%s%s",
                  label,
-                 String(value).c_str(),
-                 unit && unit[0] ? " " : "",
-                 unit && unit[0] ? unit : "");
+                 valueText.c_str(),
+                 hasUnit ? " " : "",
+                 hasUnit ? unit : "");
         emit(buf);
 
         if (LoggingConfig::SerialEnabled) {
