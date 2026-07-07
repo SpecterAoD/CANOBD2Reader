@@ -175,6 +175,10 @@ uint8_t otaSearchTail[kOtaSearchTailSize] = {};
 size_t otaSearchTailLength = 0;
 mbedtls_sha256_context otaSha256Context;
 
+// SHA-256 is computed incrementally over each incoming chunk so that no
+// second-pass read of the flash image is required. The hash is finalized
+// only after Update.end() confirms the full write was accepted, ensuring
+// the digest covers exactly the bytes that were written to flash.
 void resetOtaValidationState() {
     mbedtls_sha256_free(&otaSha256Context);
     otaSessionMetadataSeen = false;
@@ -189,6 +193,11 @@ void resetOtaValidationState() {
     mbedtls_sha256_starts_ret(&otaSha256Context, 0);
 }
 
+// Firmware metadata markers (target, schema, version, protocol) can straddle
+// a chunk boundary because the HTTP upload handler delivers data in variable-
+// sized pieces. The sliding tail buffer retains the last kOtaSearchTailSize
+// bytes of the previous chunk so that a combined window spanning two chunks
+// can be searched, ensuring no marker is missed at the boundary.
 void updateOtaValidationState(const uint8_t* data, size_t size) {
     if (data == nullptr || size == 0) return;
 
@@ -204,6 +213,9 @@ void updateOtaValidationState(const uint8_t* data, size_t size) {
     std::memcpy(combined + combinedSize, data, copySize);
     combinedSize += copySize;
 
+    // Each validation flag is set once and never cleared within a session.
+    // Checking both the raw chunk and the combined window ensures detection
+    // even when a marker begins in one chunk and ends in the next.
     if (!otaSessionTargetSeen) {
         otaSessionTargetSeen =
             bufferContainsTargetMetadata(data, size, ProjectConfig::TargetName) ||
@@ -230,6 +242,8 @@ void updateOtaValidationState(const uint8_t* data, size_t size) {
             bufferContainsText(data, size, ProjectConfig::FirmwareVersion) ||
             bufferContainsText(combined, combinedSize, ProjectConfig::FirmwareVersion);
     }
+    // Protocol version must match exactly; accepting a mismatched protocol would
+    // allow incompatible display/sender pairs to silently exchange garbled telemetry.
     if (!otaSessionProtocolSeen) {
         otaSessionProtocolSeen =
             bufferContainsProtocolMetadata(data, size, ProjectConfig::ProtocolVersion) ||

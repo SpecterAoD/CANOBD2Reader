@@ -114,10 +114,18 @@ public:
         copyText(lastDtc_, sizeof(lastDtc_), dtc != nullptr && dtc[0] != '\0' ? dtc : "--");
     }
 
+    // Triggers only when consecutive timeouts have reached the threshold and a
+    // fallback has not already been activated. The streak guard prevents a single
+    // transient timeout from forcing a premature switch to physical addressing.
     static bool shouldSwitchToPhysicalFallback(uint8_t threshold) {
         return !physicalFallbackActive_ && threshold > 0 && timeoutStreak_ >= threshold;
     }
 
+    // Switching to physical addressing changes the CAN request ID from the
+    // OBD-II functional broadcast (0x7DF) to a unicast address (0x7E0). The
+    // change persists for the session; there is no automatic revert because
+    // reverting would restart the timeout streak cycle on vehicles that never
+    // supported functional addressing.
     static void setPhysicalFallbackActive(bool active) {
         physicalFallbackActive_ = active;
         requestCanId_ = active ? IsoTp::PhysicalRequestId : IsoTp::FunctionalRequestId;

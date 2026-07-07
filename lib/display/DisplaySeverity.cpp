@@ -24,14 +24,21 @@ DisplaySeverity severityForMetric(const char* metricName,
                                   float value,
                                   bool fresh,
                                   const char* status) {
+    // Staleness takes priority over all other checks. A reading that has not
+    // been refreshed within DisplayConfig::ValueTimeoutMs cannot be trusted
+    // regardless of its numeric value, so show Timeout instead of a stale Ok.
     if (!fresh || statusEquals(status, "TIMEOUT")) {
         return DisplaySeverity::Timeout;
     }
 
+    // Transport-level faults mean the value shown may be the last good reading,
+    // not a current measurement. Treat these as Critical to alert the driver.
     if (statusEquals(status, "ERROR") || statusEquals(status, "SEND_FAIL")) {
         return DisplaySeverity::Critical;
     }
 
+    // WARN and UNSUPPORTED indicate the ECU responded but the PID is unreliable
+    // or optional on this vehicle. Surface a visual hint without raising a critical alert.
     if (statusEquals(status, "WARN") || statusEquals(status, "UNSUPPORTED")) {
         return DisplaySeverity::Warning;
     }
@@ -76,6 +83,9 @@ DisplaySeverity severityForMetric(const char* metricName,
         return DisplaySeverity::Ok;
     }
 
+    // The following metrics have no meaningful warn/critical thresholds (speed, load,
+    // intake temp, fuel data, etc.). They are purely informational, so always
+    // return Ok when fresh and not carrying a status-level override.
     if (equalsAny(metricName, "Speed", "VehicleSpeed", "0D") ||
         equalsAny(metricName, "EngineLoad", "Load", "04") ||
         equalsAny(metricName, "IntakeTemp", "IntakeAirTemp", "0F") ||

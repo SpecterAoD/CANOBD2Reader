@@ -16,6 +16,11 @@ float lastBarometricKpa = Obd::DefaultBarometricPressureKpa;
 bool hasMapKpa = false;
 bool hasBarometricKpa = false;
 
+// Some vehicles ignore functional (broadcast) OBD requests on 0x7DF and only
+// respond to physical (point-to-point) requests addressed directly to the ECU
+// at 0x7E0. After a run of consecutive timeouts exceeds the configured threshold,
+// we switch permanently for the session to avoid repeatedly broadcasting on a
+// bus where only the unicast address reaches the ECU.
 void updatePhysicalFallbackAfterFailure() {
     if (!SenderConfig::EnablePhysicalObdFallback) return;
     if (!Obd::Diagnostics::shouldSwitchToPhysicalFallback(SenderConfig::FunctionalTimeoutsBeforePhysicalFallback)) return;
