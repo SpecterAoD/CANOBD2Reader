@@ -228,6 +228,16 @@ GitHub-Updates:
 
 Rollback ist manuell möglich, aber nie automatisch.
 
+Hinweis zu WLAN/Hotspot und ESP-NOW:
+
+Sender und Display nutzen ESP-NOW auf `NetworkConfig::EspNowChannel`.
+Station-WLAN für GitHub-Updates teilt sich denselben ESP32-Funkchip. Wenn ein
+Handy-Hotspot auf einem anderen Kanal liegt, kann ESP-NOW sonst scheinbar
+zufällig ausfallen. Deshalb trennt `WifiStationManager` Station-WLAN
+standardmäßig wieder, wenn der Hotspot-Kanal nicht zum ESP-NOW-Kanal passt.
+Das Web-JSON `/api/wifi/status` zeigt dafür `stationChannel`,
+`espNowChannel`, `channelMatchesEspNow` und `lastError`.
+
 ## Entwickler-Scripts
 
 Alle Scripts liegen unter [scripts/](scripts/). Wichtige Gruppen:

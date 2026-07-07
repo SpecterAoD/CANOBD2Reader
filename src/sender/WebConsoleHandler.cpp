@@ -20,6 +20,8 @@
 namespace {
     constexpr size_t MaxLogLineLength = 180;
     String webOtaStatus = "Bereit";
+    uint32_t lastApWatchdogAtMs = 0;
+    uint32_t apRestartCount = 0;
 
     String clipped(const String& value, size_t maxLength) {
         if (value.length() <= maxLength) return value;
@@ -34,6 +36,40 @@ namespace {
 
     void webConsoleLogCallback(const String& message) {
         WebConsoleHandler::log(message);
+    }
+
+    bool startManagementAp(const char* reason) {
+        WiFi.mode(WIFI_AP_STA);
+        WiFi.setSleep(false);
+        WiFi.setTxPower(WIFI_POWER_19_5dBm);
+        const bool ok = WiFi.softAP(NetworkConfig::SenderWebSsid,
+                                    NetworkConfig::SenderWebPassword,
+                                    NetworkConfig::EspNowChannel,
+                                    false,
+                                    NetworkConfig::ManagementApMaxConnections);
+        if (ok) {
+            WebConsoleHandler::log(String("[WebConsole] AP aktiv: ")
+                                   + WiFi.softAPIP().toString()
+                                   + " reason=" + String(reason == nullptr ? "manual" : reason));
+        } else {
+            WebConsoleHandler::log(String("[WebConsole] AP Start fehlgeschlagen reason=")
+                                   + String(reason == nullptr ? "manual" : reason));
+        }
+        return ok;
+    }
+
+    void ensureManagementAp() {
+        const uint32_t now = millis();
+        if (now - lastApWatchdogAtMs < NetworkConfig::ManagementApWatchdogIntervalMs) return;
+        lastApWatchdogAtMs = now;
+
+        const wifi_mode_t mode = WiFi.getMode();
+        const bool apModeActive = mode == WIFI_AP || mode == WIFI_AP_STA;
+        const bool ipValid = WiFi.softAPIP() != IPAddress(0, 0, 0, 0);
+        if (apModeActive && ipValid) return;
+
+        ++apRestartCount;
+        startManagementAp("watchdog");
     }
 
     String simpleGithubUpdatePage() {
@@ -85,17 +121,11 @@ void WebConsoleHandler::begin() {
         return;
     }
 
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.setSleep(false);
-    WiFi.softAP(NetworkConfig::SenderWebSsid,
-                NetworkConfig::SenderWebPassword,
-                NetworkConfig::EspNowChannel);
+    startManagementAp("boot");
 
     Logger::setSink([](const char* msg) {
         WebConsoleHandler::log(String(msg));
     });
-
-    log("[WebConsole] AP gestartet: " + WiFi.softAPIP().toString());
 
     static const char* authHeaders[] = {"X-API-Token", "Authorization"};
     server.collectHeaders(authHeaders, 2);
@@ -152,6 +182,7 @@ void WebConsoleHandler::handle() {
     return;
 #endif
     if (BuildConfig::SenderWebConsoleEnabled) {
+        ensureManagementAp();
         Network::WifiStationManager::handle();
         server.handleClient();
         FirmwareUpdate::FirmwareUpdateManager::handle();
@@ -211,6 +242,10 @@ String WebConsoleHandler::diagnosticSnapshotJson() {
     json += "\"protocol\":" + String(ProjectConfig::ProtocolVersion) + ",";
     json += "\"uptimeMs\":" + String(s.uptimeMs) + ",";
     json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
+    json += "\"managementAp\":{\"mode\":" + String(static_cast<int>(WiFi.getMode())) +
+            ",\"clients\":" + String(WiFi.softAPgetStationNum()) +
+            ",\"restarts\":" + String(apRestartCount) +
+            ",\"watchdogMs\":" + String(NetworkConfig::ManagementApWatchdogIntervalMs) + "},";
     json += "\"can\":{\"active\":" + String(s.canActive ? "true" : "false") +
             ",\"state\":\"" + jsonEscape(s.canState) +
             "\",\"lastAgeMs\":" + String(s.lastCanAgeMs) + "},";
@@ -433,7 +468,7 @@ bind('capCanAction',()=>runCapabilityAction('/api/capabilities/can/action/start'
 bind('capCanFinish',()=>runCapabilityAction('/api/capabilities/can/action/finish','CAN Aktion wird analysiert'))
 bind('capStop',()=>runCapabilityAction('/api/capabilities/stop','Scan wird gestoppt'))
 $('clearLog').onclick=async()=>{if(confirm('Diagnose-Log wirklich löschen?')){await fetch('/api/log/clear',{method:'POST'});refreshLog();refresh()}}
-setInterval(refresh,1000);setInterval(refreshLog,1500);setInterval(refreshSimulation,1000);setInterval(refreshCapabilities,1500);refresh();refreshLog();refreshSimulation();refreshCapabilities();
+setInterval(refresh,2500);setInterval(refreshSimulation,5000);setInterval(refreshCapabilities,5000);refresh();refreshSimulation();refreshCapabilities();
 </script>
 </body></html>
 )rawliteral";
@@ -492,6 +527,9 @@ void WebConsoleHandler::handleStatus() {
     WebRuntimeHandlers::appendDiagnosticLogJson(json, SenderConfig::DiagnosticLogMaxBytes);
     json += "\"started\":" + String(isStarted() ? "true" : "false") + ",";
     json += "\"ip\":\"" + jsonEscape(WiFi.softAPIP().toString()) + "\",";
+    json += "\"apMode\":\"" + jsonEscape(String(static_cast<int>(WiFi.getMode()))) + "\",";
+    json += "\"apClients\":" + String(WiFi.softAPgetStationNum()) + ",";
+    json += "\"apRestarts\":" + String(apRestartCount) + ",";
     json += "\"uptime\":" + String(s.uptimeMs) + ",";
     json += "\"canActive\":" + String(s.canActive ? "true" : "false") + ",";
     json += "\"obdActive\":" + String(s.obdActive ? "true" : "false") + ",";

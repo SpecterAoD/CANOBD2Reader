@@ -28,6 +28,8 @@ constexpr const char* DisplayOtaHostname = "CANOBD2_Display";
 
 constexpr uint16_t WebServerPort = 80;
 constexpr std::size_t WebConsoleMaxLines = 50;
+constexpr uint8_t ManagementApMaxConnections = 2;
+constexpr uint32_t ManagementApWatchdogIntervalMs = 1000;
 constexpr bool RequireWebStart = SenderConfig::RequireWebStart;
 
 constexpr const char* WifiSsid = Secrets::WifiSsid;
@@ -37,6 +39,11 @@ constexpr bool WifiEnable = EnableStationWifi && WifiSsid[0] != '\0';
 constexpr uint32_t WifiConnectTimeoutMs = 15000;
 
 constexpr uint8_t EspNowChannel = ProjectConfig::EspNowChannel;
+// ESP-NOW and infrastructure WiFi share one ESP32 radio. If the sender/display
+// joins a hotspot on a different channel, ESP-NOW telemetry can silently drop.
+// Keep this enabled for normal vehicle operation; disable only for dedicated
+// update/debug sessions where display telemetry interruption is acceptable.
+constexpr bool DisconnectStationWifiOnEspNowChannelMismatch = true;
 constexpr bool UseEspNowEncryption = true;
 constexpr const uint8_t* EspNowAesKey = Secrets::EspNowAesKey;
 constexpr const uint8_t* DisplayPeerMac = Secrets::DisplayPeerMac;

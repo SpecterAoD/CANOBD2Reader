@@ -42,7 +42,7 @@ constexpr uint32_t UdsResponseTimeoutMs = 350;
 constexpr uint32_t UdsResponsePendingTimeoutMs = 4000;
 constexpr bool EnablePhysicalObdFallback = true;
 constexpr uint8_t FunctionalTimeoutsBeforePhysicalFallback = 3;
-constexpr int CpuFrequency = 80;
+constexpr int CpuFrequency = 160;
 
 // Persistent sender diagnostic log. This is intentionally runtime-only data
 // stored in SPIFFS so OBD/CAN/ESP-NOW problems can be inspected after a drive.

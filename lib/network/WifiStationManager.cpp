@@ -19,8 +19,26 @@ void applyStableWifiMode() {
 #if defined(ARDUINO)
     WiFi.mode(WIFI_AP_STA);
     WiFi.setSleep(false);
+    WiFi.setTxPower(WIFI_POWER_19_5dBm);
 #endif
 }
+
+#if defined(ARDUINO)
+bool acceptConnectedStationChannel() {
+    lastStationChannel = WiFi.channel();
+    if (NetworkConfig::DisconnectStationWifiOnEspNowChannelMismatch
+        && lastStationChannel != 0
+        && lastStationChannel != NetworkConfig::EspNowChannel) {
+        lastError = "Hotspot-Kanal " + String(lastStationChannel)
+                  + " passt nicht zu ESP-NOW-Kanal "
+                  + String(NetworkConfig::EspNowChannel);
+        WiFi.disconnect(false, false);
+        return false;
+    }
+    lastError = "";
+    return true;
+}
+#endif
 }
 
 void WifiStationManager::begin() {
@@ -42,9 +60,7 @@ bool WifiStationManager::connect() {
     }
     if (WiFi.status() == WL_CONNECTED) {
         connectionInProgress = false;
-        lastStationChannel = WiFi.channel();
-        lastError = "";
-        return true;
+        return acceptConnectedStationChannel();
     }
     if (connectionInProgress) {
         return true;
@@ -67,8 +83,7 @@ void WifiStationManager::handle() {
 
     if (WiFi.status() == WL_CONNECTED) {
         connectionInProgress = false;
-        lastStationChannel = WiFi.channel();
-        lastError = "";
+        acceptConnectedStationChannel();
         return;
     }
 
