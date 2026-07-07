@@ -5,6 +5,14 @@
 #include <driver/twai.h>
 
 namespace Logger {
+    // Logging architecture:
+    // - Logger::* writes category-based runtime logs to Serial when enabled.
+    // - Logger::emit forwards the same line to an optional in-memory sink
+    //   (for example WebConsole buffering via Logger::setSink).
+    // - Persistent on-device diagnostics are written explicitly via
+    //   DiagnosticLog::append/appendf in lib/logging.
+    // - High-volume telemetry diagnostics use TraceSenderTelemetry /
+    //   TraceDisplayTelemetry and must stay disabled unless actively debugging.
     using Sink = void (*)(const char*);
     inline Sink sink = nullptr;
 
@@ -16,11 +24,11 @@ namespace Logger {
         if (sink) sink(msg);
     }
 
-    // ======== Initialisierung ========
+    // ======== Startup ========
     inline void initDebug() {
         if (LoggingConfig::SerialEnabled) {
             Serial.begin(ProjectConfig::Baudrate);
-            delay(100);  // USB stabilisieren
+            delay(100);  // Let USB serial settle before first output.
             Serial.println();
             Serial.print("Firmware: ");
             Serial.println(ProjectConfig::FirmwareVersion);
@@ -35,17 +43,18 @@ namespace Logger {
         }
     }
 
-    // ======== Allgemeines Debug ========
+    // ======== General debug ========
     inline void debug(const char* msg) {
+        if (!LoggingConfig::GeneralDebugEnabled) return;
         emit(msg);
-        if (LoggingConfig::GeneralDebugEnabled && LoggingConfig::SerialEnabled) {
+        if (LoggingConfig::SerialEnabled) {
             Serial.print("[DEBUG] ");
             Serial.println(msg);
         }
     }
 
     inline void debugf(const char* fmt, ...) {
-        if (!(LoggingConfig::GeneralDebugEnabled && LoggingConfig::SerialEnabled)) return;
+        if (!LoggingConfig::GeneralDebugEnabled) return;
 
         char buf[128];
         va_list args;
@@ -53,14 +62,22 @@ namespace Logger {
         vsnprintf(buf, sizeof(buf), fmt, args);
         va_end(args);
 
-        Serial.print("[DEBUG] ");
-        Serial.println(buf);
         emit(buf);
+        if (LoggingConfig::SerialEnabled) {
+            Serial.print("[DEBUG] ");
+            Serial.println(buf);
+        }
     }
 
     template<typename T>
     inline void debugValue(const char* label, T value, const char* unit = "") {
-        if (LoggingConfig::GeneralDebugEnabled && LoggingConfig::SerialEnabled) {
+        if (!LoggingConfig::GeneralDebugEnabled) return;
+
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%s: %s%s", label, String(value).c_str(), unit && unit[0] ? unit : "");
+        emit(buf);
+
+        if (LoggingConfig::SerialEnabled) {
             Serial.print("[DEBUG] ");
             Serial.print(label);
             Serial.print(": ");
@@ -70,16 +87,14 @@ namespace Logger {
                 Serial.print(unit);
             }
             Serial.println();
-            char buf[128];
-            snprintf(buf, sizeof(buf), "%s: %s%s", label, String(value).c_str(), unit && unit[0] ? unit : "");
-            emit(buf);
         }
     }
 
-    // ======== Power Debug ========
+    // ======== Power debug ========
     inline void power(const char* msg) {
+        if (!LoggingConfig::PowerDebugEnabled) return;
         emit(msg);
-        if (LoggingConfig::PowerDebugEnabled && LoggingConfig::SerialEnabled) {
+        if (LoggingConfig::SerialEnabled) {
             Serial.print("[POWER] ");
             Serial.println(msg);
         }
@@ -87,7 +102,13 @@ namespace Logger {
 
     template<typename T>
     inline void powerValue(const char* label, T value, const char* unit = "") {
-        if (LoggingConfig::PowerDebugEnabled && LoggingConfig::SerialEnabled) {
+        if (!LoggingConfig::PowerDebugEnabled) return;
+
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%s: %s%s", label, String(value).c_str(), unit && unit[0] ? unit : "");
+        emit(buf);
+
+        if (LoggingConfig::SerialEnabled) {
             Serial.print("[POWER] ");
             Serial.print(label);
             Serial.print(": ");
@@ -100,24 +121,28 @@ namespace Logger {
         }
     }
 
-    // ======== TWAI / CAN Debug ========
+    // ======== TWAI / CAN debug ========
     inline void twai(const char* msg) {
+        if (!LoggingConfig::TwaiDebugEnabled) return;
         emit(msg);
-        if (LoggingConfig::TwaiDebugEnabled && LoggingConfig::SerialEnabled) {
+        if (LoggingConfig::SerialEnabled) {
             Serial.print("[TWAI] ");
             Serial.println(msg);
         }
     }
 
     inline void can(const char* msg) {
+        if (!LoggingConfig::CanDebugEnabled) return;
         emit(msg);
-        if (LoggingConfig::CanDebugEnabled && LoggingConfig::SerialEnabled) {
+        if (LoggingConfig::SerialEnabled) {
             Serial.print("[CAN] ");
             Serial.println(msg);
         }
     }
 
     inline void canFrame(const twai_message_t& message) {
+        if (!LoggingConfig::CanDebugEnabled) return;
+
         char buf[160];
         int used = snprintf(buf, sizeof(buf), "[CAN] ID=0x%lX DLC=%u Data=",
                             static_cast<unsigned long>(message.identifier),
@@ -127,7 +152,7 @@ namespace Logger {
         }
         emit(buf);
 
-        if (LoggingConfig::CanDebugEnabled && LoggingConfig::SerialEnabled) {
+        if (LoggingConfig::SerialEnabled) {
             Serial.print("[CAN] ID=0x");
             Serial.print(message.identifier, HEX);
             Serial.print(" DLC=");
@@ -142,16 +167,19 @@ namespace Logger {
         }
     }
 
-    // ======== OBD2 Debug ========
+    // ======== OBD2 debug (high-volume, keep disabled by default) ========
     inline void obd(const char* msg) {
+        if (!LoggingConfig::Obd2DebugEnabled) return;
         emit(msg);
-        if (LoggingConfig::Obd2DebugEnabled && LoggingConfig::SerialEnabled) {
+        if (LoggingConfig::SerialEnabled) {
             Serial.print("[OBD2] ");
             Serial.println(msg);
         }
     }
 
     inline void obdFrame(uint8_t pid, const uint8_t* data, uint8_t len) {
+        if (!LoggingConfig::Obd2DebugEnabled) return;
+
         char buf[128];
         int used = snprintf(buf, sizeof(buf), "[OBD2] PID 0x%02X Data=", pid);
         for (uint8_t i = 0; i < len && used > 0 && used < static_cast<int>(sizeof(buf)); i++) {
@@ -159,7 +187,7 @@ namespace Logger {
         }
         emit(buf);
 
-        if (LoggingConfig::Obd2DebugEnabled && LoggingConfig::SerialEnabled) {
+        if (LoggingConfig::SerialEnabled) {
             Serial.print("[OBD2] PID 0x");
             Serial.print(pid, HEX);
             Serial.print(" Data=");
@@ -174,6 +202,8 @@ namespace Logger {
 
     template<typename T>
     inline void obdValue(const char* label, T value, const char* unit = "") {
+        if (!LoggingConfig::Obd2DebugEnabled) return;
+
         char buf[128];
         snprintf(buf, sizeof(buf), "[OBD2] %s: %s%s%s",
                  label,
@@ -182,7 +212,7 @@ namespace Logger {
                  unit && unit[0] ? unit : "");
         emit(buf);
 
-        if (LoggingConfig::Obd2DebugEnabled && LoggingConfig::SerialEnabled) {
+        if (LoggingConfig::SerialEnabled) {
             Serial.print("[OBD2] ");
             Serial.print(label);
             Serial.print(": ");
@@ -194,31 +224,31 @@ namespace Logger {
             Serial.println();
         }
     }
-    // ======== Warn Debug (immer wenn Serial aktive) ========
+    // ======== Warning level (always routed to sink, serial optional) ========
     inline void warn(const char* msg) {
         emit(msg);
         if (LoggingConfig::SerialEnabled) {
-            Serial.print(" [WARN] ");
+            Serial.print("[WARN] ");
             Serial.println(msg);
         }
-        // Optional: senden per ESP-NOW
+        // Optional: escalate through an external channel if needed.
     }
-    // ======== Alarm Debug (immer wenn Serial aktiv) ========
+    // ======== Alarm level (always routed to sink, serial optional) ========
     inline void alarm(const char* msg) {
         emit(msg);
         if (LoggingConfig::SerialEnabled) {
             Serial.print("[ALARM] ");
             Serial.println(msg);
         }
-        // Optional: hier könnte man noch ESP-NOW Versand ergänzen
+        // Optional: escalate through an external channel if needed.
     }
-    // ======== criticl Debug (immer wenn Serial aktiv) ========
+    // ======== Critical level (always routed to sink, serial optional) ========
     inline void critical(const char* msg) {
         emit(msg);
         if (LoggingConfig::SerialEnabled) {
             Serial.print("[CRITICAL] ");
             Serial.println(msg);
         }
-        // Optional: senden per ESP-NOW
+        // Optional: escalate through an external channel if needed.
     }
 }
