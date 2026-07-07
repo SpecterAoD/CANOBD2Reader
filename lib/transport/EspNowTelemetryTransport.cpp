@@ -2,6 +2,7 @@
 
 #if defined(ARDUINO)
 #include "config/NetworkConfig.h"
+#include "config/LoggingConfig.h"
 #include "DiagnosticLog.h"
 #endif
 
@@ -22,9 +23,11 @@ void logTelemetrySendResult(esp_err_t result, uint32_t sequence, const char* pay
 #if defined(ARDUINO)
     const char* safePayload = payload == nullptr ? "" : payload;
     if (result == ESP_OK) {
-        DiagnosticLog::appendf("[TX] seq=%lu %s",
-                               static_cast<unsigned long>(sequence),
-                               safePayload);
+        if (LoggingConfig::PersistTelemetryPayloadsToDiagnosticLog) {
+            DiagnosticLog::appendf("[TX] seq=%lu %s",
+                                   static_cast<unsigned long>(sequence),
+                                   safePayload);
+        }
     } else {
         DiagnosticLog::appendf("[TX] failed err=%d seq=%lu %s",
                                static_cast<int>(result),

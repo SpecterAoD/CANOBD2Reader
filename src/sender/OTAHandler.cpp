@@ -17,6 +17,7 @@ namespace OTAHandler {
 
         if (WiFi.status() != WL_CONNECTED && WiFi.getMode() != WIFI_AP && WiFi.getMode() != WIFI_AP_STA) {
             WiFi.mode(WIFI_AP_STA);
+            WiFi.setSleep(false);
             WiFi.softAP(NetworkConfig::SenderWebSsid,
                         NetworkConfig::SenderWebPassword,
                         NetworkConfig::EspNowChannel);

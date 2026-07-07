@@ -7,16 +7,16 @@ namespace LoggingConfig {
 
 constexpr bool SerialEnabled = true;
 constexpr bool GeneralDebugEnabled = true;
-constexpr bool TwaiDebugEnabled = true;
-constexpr bool PowerDebugEnabled = true;
-constexpr bool CanDebugEnabled = true;
-constexpr bool Obd2DebugEnabled = true;
-constexpr bool TraceSenderTelemetry = true;
-constexpr bool TraceDisplayTelemetry = true;
+constexpr bool TwaiDebugEnabled = false;
+constexpr bool PowerDebugEnabled = false;
+constexpr bool CanDebugEnabled = false;
+constexpr bool Obd2DebugEnabled = false;
+constexpr bool TraceSenderTelemetry = false;
+constexpr bool TraceDisplayTelemetry = false;
 constexpr uint32_t TraceSummaryIntervalMs = 1000;
 
 constexpr bool EnablePersistentDiagnosticLog = true;
-constexpr bool PersistTelemetryPayloadsToDiagnosticLog = true;
+constexpr bool PersistTelemetryPayloadsToDiagnosticLog = false;
 constexpr std::size_t DiagnosticLogMaxBytes = 64U * 1024U;
 
 constexpr const char* SenderDiagnosticLogPath = "/sender_diagnostic.log";

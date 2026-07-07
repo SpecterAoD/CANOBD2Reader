@@ -223,6 +223,7 @@ void begin() {
   // The station side is disconnected only from infrastructure WiFi; SoftAP
   // remains up on NetworkConfig::EspNowChannel.
   WiFi.mode(CANOBD2_ENABLE_DISPLAY_OTA ? WIFI_AP_STA : WIFI_STA);
+  WiFi.setSleep(false);
   WiFi.disconnect(false, false);
 
   if (esp_now_init() != ESP_OK) {

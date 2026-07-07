@@ -12,14 +12,21 @@ namespace {
 String currentSsid;
 String lastError;
 uint32_t lastConnectAttemptMs = 0;
+bool connectionInProgress = false;
+int lastStationChannel = 0;
+
+void applyStableWifiMode() {
+#if defined(ARDUINO)
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.setSleep(false);
+#endif
+}
 }
 
 void WifiStationManager::begin() {
     const auto credentials = WifiCredentialStore::load();
     currentSsid = credentials.ssid;
-#if defined(ARDUINO)
-    WiFi.mode(WIFI_AP_STA);
-#endif
+    applyStableWifiMode();
 }
 
 bool WifiStationManager::connect() {
@@ -33,27 +40,49 @@ bool WifiStationManager::connect() {
         lastError = "Keine WLAN-Zugangsdaten";
         return false;
     }
-    currentSsid = credentials.ssid;
-    lastConnectAttemptMs = millis();
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.begin(credentials.ssid.c_str(), credentials.password.c_str());
-    const uint32_t start = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start < NetworkConfig::WifiConnectTimeoutMs) {
-        delay(100);
-        yield();
-    }
     if (WiFi.status() == WL_CONNECTED) {
+        connectionInProgress = false;
+        lastStationChannel = WiFi.channel();
         lastError = "";
         return true;
     }
-    lastError = "WLAN-Verbindung fehlgeschlagen";
-    return false;
+    if (connectionInProgress) {
+        return true;
+    }
+    currentSsid = credentials.ssid;
+    lastConnectAttemptMs = millis();
+    connectionInProgress = true;
+    lastError = "WLAN-Verbindung laeuft";
+    applyStableWifiMode();
+    WiFi.begin(credentials.ssid.c_str(), credentials.password.c_str());
+    return true;
 #else
     return false;
 #endif
 }
 
+void WifiStationManager::handle() {
+#if defined(ARDUINO)
+    if (!connectionInProgress) return;
+
+    if (WiFi.status() == WL_CONNECTED) {
+        connectionInProgress = false;
+        lastStationChannel = WiFi.channel();
+        lastError = "";
+        return;
+    }
+
+    if (millis() - lastConnectAttemptMs >= NetworkConfig::WifiConnectTimeoutMs) {
+        connectionInProgress = false;
+        lastError = "WLAN-Verbindung Timeout";
+        WiFi.disconnect(false, false);
+    }
+#endif
+}
+
 void WifiStationManager::disconnect() {
+    connectionInProgress = false;
+    lastStationChannel = 0;
 #if defined(ARDUINO)
     WiFi.disconnect(false, false);
 #endif
@@ -65,6 +94,10 @@ bool WifiStationManager::connected() {
 #else
     return false;
 #endif
+}
+
+bool WifiStationManager::connecting() {
+    return connectionInProgress;
 }
 
 String WifiStationManager::ip() {
@@ -95,11 +128,18 @@ bool WifiStationManager::forget() {
 }
 
 String WifiStationManager::statusJson() {
+#if defined(ARDUINO)
+    if (connectionInProgress) {
+        handle();
+    }
+#endif
     String json = "{";
     json += "\"enabled\":";
     json += NetworkConfig::EnableStationWifi ? "true" : "false";
     json += ",\"connected\":";
     json += connected() ? "true" : "false";
+    json += ",\"connecting\":";
+    json += connecting() ? "true" : "false";
     json += ",\"ssid\":\"";
     json += ssid();
     json += "\",\"ip\":\"";
@@ -109,9 +149,25 @@ String WifiStationManager::statusJson() {
     json += "\",\"lastConnectAttemptMs\":";
 #if defined(ARDUINO)
     json += String(static_cast<unsigned long>(lastConnectAttemptMs));
+    const int currentChannel = connected() ? WiFi.channel() : lastStationChannel;
 #else
     json += std::to_string(static_cast<unsigned long>(lastConnectAttemptMs));
+    const int currentChannel = 0;
 #endif
+    json += ",\"stationChannel\":";
+#if defined(ARDUINO)
+    json += String(currentChannel);
+#else
+    json += std::to_string(currentChannel);
+#endif
+    json += ",\"espNowChannel\":";
+#if defined(ARDUINO)
+    json += String(NetworkConfig::EspNowChannel);
+#else
+    json += std::to_string(NetworkConfig::EspNowChannel);
+#endif
+    json += ",\"channelMatchesEspNow\":";
+    json += (currentChannel == 0 || currentChannel == NetworkConfig::EspNowChannel) ? "true" : "false";
     json += "}";
     return json;
 }

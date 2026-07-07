@@ -410,6 +410,7 @@ namespace DisplayOta {
     }
 
     WiFi.mode(WIFI_AP_STA);
+    WiFi.setSleep(false);
     WiFi.softAP(NetworkConfig::DisplayWebSsid,
                 NetworkConfig::DisplayWebPassword,
                 NetworkConfig::EspNowChannel);
@@ -471,6 +472,7 @@ namespace DisplayOta {
 
   void handle() {
 #if CANOBD2_ENABLE_DISPLAY_OTA
+    Network::WifiStationManager::handle();
     ArduinoOTA.handle();
     server.handleClient();
     FirmwareUpdate::FirmwareUpdateManager::handle();

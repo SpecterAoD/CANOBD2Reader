@@ -86,6 +86,7 @@ void WebConsoleHandler::begin() {
     }
 
     WiFi.mode(WIFI_AP_STA);
+    WiFi.setSleep(false);
     WiFi.softAP(NetworkConfig::SenderWebSsid,
                 NetworkConfig::SenderWebPassword,
                 NetworkConfig::EspNowChannel);
@@ -151,6 +152,7 @@ void WebConsoleHandler::handle() {
     return;
 #endif
     if (BuildConfig::SenderWebConsoleEnabled) {
+        Network::WifiStationManager::handle();
         server.handleClient();
         FirmwareUpdate::FirmwareUpdateManager::handle();
     }
@@ -709,7 +711,7 @@ void WebConsoleHandler::handleWifiConfigure() {
 void WebConsoleHandler::handleWifiConnect() {
     if (!WebSecurity::requireAuthentication(server)) return;
     const bool ok = Network::WifiStationManager::connect();
-    log(ok ? "[UPDATE] WLAN verbunden" : "[UPDATE] WLAN Verbindung fehlgeschlagen");
+    log(ok ? "[UPDATE] WLAN-Verbindung gestartet" : "[UPDATE] WLAN Verbindung fehlgeschlagen");
     server.send(ok ? 200 : 500, "application/json", Network::WifiStationManager::statusJson());
 }
 

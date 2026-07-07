@@ -13,8 +13,10 @@ class WifiStationManager {
 public:
     static void begin();
     static bool connect();
+    static void handle();
     static void disconnect();
     static bool connected();
+    static bool connecting();
     static String ip();
     static String ssid();
     static String statusJson();
@@ -23,4 +25,3 @@ public:
 };
 
 } // namespace Network
-
