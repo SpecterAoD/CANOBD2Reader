@@ -4,7 +4,7 @@
 #include "DisplayRuntimeState.h"
 
 namespace DisplayData {
-  extern DisplayTelemetryValue values[34];
+  extern DisplayTelemetryValue values[DisplayConfig::TelemetryValueCapacity];
   extern uint8_t valueCount;
   extern uint8_t currentPage;
   extern uint8_t lastRenderedPage;

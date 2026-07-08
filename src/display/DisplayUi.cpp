@@ -121,7 +121,9 @@ namespace {
     tft.drawString(connected ? "ESP-NOW OK" : "VERBINDUNG VERLOREN", 4, 10);
 
     tft.setTextDatum(MR_DATUM);
-    String right = "S" + String(currentPage + 1) + "/" + String(DisplayConfig::PageCount);
+    const uint8_t visiblePages = runtime().diagnosticPagesEnabled ? DisplayConfig::PageCount : DisplayConfig::NormalPageCount;
+    String right = "S" + String(currentPage + 1) + "/" + String(visiblePages);
+    if (runtime().diagnosticPagesEnabled) right += " DIAG";
     if (DisplayConfig::EnableStartupValueOverlay && millis() < DisplayConfig::StartupValueOverlayMs) {
       right += " DIAG";
     }
@@ -371,7 +373,9 @@ namespace {
     return normalized.length() == 0 ||
            normalized == "--" ||
            normalized == "N/A" ||
-           normalized == "NA";
+           normalized == "NA" ||
+           normalized == "UNKNOWN" ||
+           normalized == "UNBEKANNT";
   }
 
   String textOrFallback(const char* name, const char* fallback) {
@@ -431,7 +435,7 @@ namespace {
       return;
     }
 
-    String textValue = missing ? "N/A" : shownValue;
+    String textValue = missing ? "WARTET" : shownValue;
     const uint16_t valueTextColor = missing ? DisplayConfig::Muted : effectiveColor;
     int valueScale = 2;
     int maxChars = (valueBgW - 8) / (6 * valueScale);
@@ -459,7 +463,7 @@ namespace {
     tft.drawRoundRect(x, y, w, cellHeight, 5, effectiveColor);
     String text = String(label == nullptr ? "" : label);
     text += ":";
-    text += missing ? "N/A" : value;
+    text += missing ? "WARTET" : value;
     text.toUpperCase();
     const int maxChars = (w - 8) / 6;
     if (maxChars > 3 && text.length() > static_cast<size_t>(maxChars)) {
@@ -492,6 +496,27 @@ namespace {
     if (status == "ERROR" || status == "TIMEOUT" || status == "SEND_FAIL") return DisplayConfig::Error;
     if (status == "WARN" || status == "UNSUPPORTED") return DisplayConfig::Warn;
     return DisplayConfig::Ok;
+  }
+
+  uint8_t visiblePageCount() {
+    return DisplayData::runtime().diagnosticPagesEnabled ? DisplayConfig::PageCount : DisplayConfig::NormalPageCount;
+  }
+
+  uint8_t pageIdForCurrentPage() {
+    const uint8_t count = visiblePageCount();
+    if (count == 0) return DisplayConfig::MainPageIndex;
+    if (DisplayData::currentPage >= count) DisplayData::currentPage = DisplayConfig::MainPageIndex;
+    return DisplayData::currentPage;
+  }
+
+  void setDiagnosticPagesEnabled(bool enabled) {
+    DisplayData::runtime().diagnosticPagesEnabled = enabled;
+    if (!enabled && DisplayData::currentPage >= DisplayConfig::NormalPageCount) {
+      DisplayData::currentPage = DisplayConfig::MainPageIndex;
+    }
+    DisplayData::lastRenderedPage = 255;
+    DisplayData::markDirty();
+    DiagnosticLog::appendf("[display-ui] diagnostic pages %s", enabled ? "enabled" : "disabled");
   }
 
   void drawMainPageV2() {
@@ -612,7 +637,7 @@ namespace {
     drawMetricBox(164, 24, 150, 48, "MAP", displayValue("ManifoldAbsolutePressure", 0), valueColor("ManifoldAbsolutePressure"));
     drawMetricBox(6, 78, 150, 48, "BARO", displayValue("BarometricPressure", 0), valueColor("BarometricPressure"));
     drawMetricBox(164, 78, 150, 48, "Aussentemp.", displayValue("AmbientTemp", 0), valueColor("AmbientTemp"));
-    drawSmallStatusCell(6, 134, 150, "Steuer V", valueOrFallback("BatteryVoltage", 1, "WARTET"), valueColor("BatteryVoltage"));
+    drawSmallStatusCell(6, 134, 150, "ECU V", valueOrFallback("EcuVoltage", 1, "WARTET"), valueColor("EcuVoltage"));
     drawSmallStatusCell(164, 134, 150, "Runtime", valueOrFallback("RunTime", 0, "WARTET"), valueColor("RunTime"));
   }
 
@@ -637,7 +662,7 @@ namespace {
     }
     drawStatusBar();
 
-    switch (currentPage) {
+    switch (pageIdForCurrentPage()) {
       case 0: drawMainPageV2(); break;
       case 1: drawEnginePageV2(); break;
       case 2: drawConsumptionPageV2(); break;
@@ -696,24 +721,25 @@ namespace DisplayUi {
         buttonPressedAt = now;
         longPressHandled = false;
       } else if (!longPressHandled && now - buttonPressedAt >= DisplayConfig::ButtonDebounceMs) {
-        currentPage = (currentPage + 1) % DisplayConfig::PageCount;
+        const uint32_t pressDuration = now - buttonPressedAt;
+        if (pressDuration >= DisplayConfig::VeryLongPressMs) {
+          setDiagnosticPagesEnabled(!runtime().diagnosticPagesEnabled);
+          currentPage = DisplayConfig::MainPageIndex;
+        } else if (pressDuration >= DisplayConfig::LongPressMs) {
+          currentPage = DisplayConfig::MainPageIndex;
+          lastRenderedPage = 255;
+          markDirty();
+          DiagnosticLog::appendf("[display-ui] long press page -> %u", static_cast<unsigned int>(currentPage));
+        } else {
+          currentPage = (currentPage + 1) % visiblePageCount();
+          lastRenderedPage = 255;
+          markDirty();
+          DiagnosticLog::appendf("[display-ui] page -> %u", static_cast<unsigned int>(currentPage));
+        }
         lastRenderedPage = 255;
         lastButtonAt = now;
         markDirty();
-        DiagnosticLog::appendf("[display-ui] page -> %u", static_cast<unsigned int>(currentPage));
       }
-    }
-
-    if (pressed &&
-        !longPressHandled &&
-        now - buttonPressedAt >= DisplayConfig::LongPressMs &&
-        now - lastButtonAt > DisplayConfig::ButtonDebounceMs) {
-      currentPage = DisplayConfig::MainPageIndex;
-      lastRenderedPage = 255;
-      lastButtonAt = now;
-      longPressHandled = true;
-      markDirty();
-      DiagnosticLog::appendf("[display-ui] long press page -> %u", static_cast<unsigned int>(currentPage));
     }
   }
 

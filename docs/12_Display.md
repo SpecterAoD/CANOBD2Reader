@@ -19,15 +19,21 @@ Display code lives in `src/display/`. Shared severity logic lives in `lib/displa
 
 ## Pages
 
-Current intended page set:
+Current intended page set is split into a normal driving mode and a diagnostic
+mode. The diagnostic mode is runtime-only and is reset on reboot.
+
+Normal driving mode:
 
 1. Main / driving values.
 2. Engine values.
 3. Consumption / trip.
 4. Compact diagnostics.
+
+Diagnostic mode additionally exposes:
+
 5. UDS / DTC.
 6. CAN sniffer.
-7. Additional values.
+7. Additional values, including ECU voltage from OBD PID `0x42`.
 8. Power management.
 
 The dedicated boost page and the dedicated RPM graph page have been removed. RPM remains on the main page. MAP, BARO and MAF belong on the additional values page or engine diagnostics. This keeps the page list compact and leaves more room for useful diagnostic/CAN information.
@@ -46,6 +52,8 @@ The dedicated boost page and the dedicated RPM graph page have been removed. RPM
 
 - Short button press: next page.
 - Long button press: return to `DisplayConfig::MainPageIndex`.
+- Very long button press: toggle diagnostic pages until the next reboot.
+- Display web UI: `Diagnose-Seiten umschalten` toggles the same runtime state.
 - Long press must not also trigger short press.
 
 ## Target state

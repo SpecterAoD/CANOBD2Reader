@@ -420,8 +420,8 @@ Timeouts: <span id="udsTimeouts">--</span> · Negative: <span id="udsNeg">--</sp
 <div class="card wide"><div class="label">Rohdaten</div><pre id="capRaw">Noch kein Scan geladen.</pre></div>
 </div></section>
 <section id="log" class="page"><div class="grid">
-<div class="card wide"><div class="label">Diagnose-Log</div><div class="small">Persistent: <span id="diaglog">--</span></div><div class="actions"><button id="loadFileLog" class="primary">Persistenten Log laden</button><a class="btn primary" href="/log/download">Log herunterladen</a><button id="clearLog" class="danger">Log löschen</button></div></div>
-<div class="card wide"><div class="label">Live-Log</div><pre id="logs">Lade Log...</pre></div>
+<div class="card wide"><div class="label">Diagnose-Log</div><div class="small">Persistent: <span id="diaglog">--</span></div><div class="actions"><button id="loadLiveLog" class="primary">Live-Log laden</button><button id="loadFileLog" class="primary">Persistenten Log laden</button><a class="btn primary" href="/log/download">Log herunterladen</a><button id="clearLog" class="danger">Log löschen</button></div></div>
+<div class="card wide"><div class="label">Live-Log</div><pre id="logs">Live-Log wird nicht automatisch geladen. Button drücken, damit das Diagnose-WLAN nicht unnötig belastet wird.</pre></div>
 </div></section>
 <section id="ota" class="page"><div class="card wide"><div class="label">Firmware über Web hochladen</div><div class="small">Nur passende <code>sender.bin</code> für <b>env:sender</b> verwenden. Dateien mit Display-Firmware werden abgelehnt. Gerät startet nach erfolgreichem Update neu.</div></div>
 <div class="card wide"><div class="label">OTA Status</div><div id="otastatus" class="value">--</div><div class="small">Frei: <span id="freeota">--</span> · Sketch: <span id="sketch">--</span> · Flash: <span id="flash">--</span></div></div>
@@ -457,6 +457,7 @@ $('simToggle').onclick=async()=>{await fetch('/api/simulation/toggle',{method:'P
 $('simOn').onclick=async()=>{await fetch('/api/simulation/on',{method:'POST'});refreshSimulation()}
 $('simOff').onclick=async()=>{await fetch('/api/simulation/off',{method:'POST'});refreshSimulation()}
 $('scenarioSelect').onchange=async()=>{await fetch('/api/simulation/scenario?scenario='+encodeURIComponent($('scenarioSelect').value),{method:'POST'});refreshSimulation()}
+$('loadLiveLog').onclick=refreshLog
 $('loadFileLog').onclick=loadPersistentLog
 $('loadSnapshot').onclick=loadSnapshot
 async function runCapabilityAction(url,label){$('capMsg').textContent=label+'...';try{await apiPost(url);await refreshCapabilities()}catch(e){$('capState').textContent='Fehler';$('capState').className='value errText';$('capMsg').textContent=e.message||'Aktion fehlgeschlagen'}}

@@ -13,8 +13,10 @@ constexpr uint8_t BacklightOn = 255;
 constexpr uint8_t BacklightSleep = 0;
 constexpr uint8_t NextPageButtonPin = 0;
 constexpr uint8_t PageCount = 8;
+constexpr uint8_t NormalPageCount = 4;
 constexpr uint8_t MainPageIndex = 0;
 constexpr uint32_t LongPressMs = 1200;
+constexpr uint32_t VeryLongPressMs = 3000;
 constexpr bool EnableGraphPages = false;
 
 constexpr uint32_t ScreenRefreshMs = 80;
@@ -32,6 +34,7 @@ constexpr uint32_t ObdTimeoutMs = 5000;
 constexpr uint32_t CanTimeoutMs = 5000;
 constexpr uint32_t ButtonDebounceMs = 250;
 constexpr std::size_t TelemetryQueueLength = 16;
+constexpr std::size_t TelemetryValueCapacity = 64;
 
 constexpr float CoolantWarnC = 95.0f;
 constexpr float CoolantCriticalC = 105.0f;

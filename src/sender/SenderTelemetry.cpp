@@ -83,7 +83,9 @@ void send(const char* type,
     if (sendResult == ESP_OK) {
         ++sendOk;
         lastSendErrorText = "";
-        if (strcmp(type, "STATUS") == 0 && strcmp(key, "HEARTBEAT") == 0) {
+        if (LoggingConfig::TraceSenderTelemetry &&
+            strcmp(type, "STATUS") == 0 &&
+            strcmp(key, "HEARTBEAT") == 0) {
             WebConsoleHandler::log("[ESP-NOW] Heartbeat sent seq=" +
                                    String(static_cast<unsigned long>(currentSequence)));
         }

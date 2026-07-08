@@ -151,6 +151,7 @@ button{border:0;border-radius:14px;padding:13px 10px;background:#075985;color:va
 <div class="card"><div class="label">OTA Speicher</div><div id="ota" class="value">--</div><div class="small">Sketch: <span id="sketch">--</span> · Flash: <span id="flash">--</span></div></div>
 <div class="card"><div class="label">Diagnose-Log</div><div id="diaglog" class="value">--</div><button id="loadLog" type="button">Log anzeigen</button><a href="/log/download"><button type="button">Log herunterladen</button></a><button id="clearLog" class="danger" type="button">Log löschen</button><pre id="logs" style="white-space:pre-wrap;word-break:break-word;background:#020617;color:#86efac;border-radius:12px;padding:10px;max-height:260px;overflow:auto;font-size:12px;display:none"></pre></div>
 <div class="card"><div class="label">Simulation</div><div id="sim" class="value">--</div><div class="small">Szenario: <span id="scenario">--</span></div><select id="scenarioSelect" style="width:100%;padding:11px;border-radius:12px;background:#0f172a;color:#f8fafc;border:1px solid #263244;margin-top:10px"></select><button id="simToggle" type="button">Simulation umschalten</button><button id="simOn" type="button">Simulation einschalten</button><button id="simOff" type="button">Simulation ausschalten</button></div>
+<div class="card"><div class="label">Display-Seiten</div><div id="diagPages" class="value">--</div><div class="small">Normal: Fahrseiten 1-4. Diagnose: UDS, CAN-Sniffer, Rohwerte und Power Management bis zum Neustart sichtbar.</div><button id="diagPagesToggle" type="button">Diagnose-Seiten umschalten</button></div>
 <div class="card"><div class="label">Status</div><div id="status" class="value">--</div><div id="detail" class="small">--</div></div>
 <button class="danger" id="restart">Display neu starten</button>
 </div>
@@ -161,6 +162,7 @@ scenarios.forEach(x=>{let o=document.createElement('option');o.value=x;o.textCon
 function bytes(v){return Math.round((v||0)/1024)+' KB'}
 async function refresh(){try{let s=await fetch('/status',{cache:'no-store'}).then(r=>r.json());$('ip').textContent=s.ip+' · '+Math.floor(s.uptime/1000)+'s';$('fw').textContent=s.firmware;$('target').textContent=s.target;$('proto').textContent=s.protocol;$('build').textContent=s.buildTime;$('ota').textContent=bytes(s.freeSketchSpace)+' frei';$('sketch').textContent=bytes(s.sketchSize);$('flash').textContent=bytes(s.flashSize);$('diaglog').textContent=(s.diagnosticLogMounted?'bereit':'nicht gemountet')+' · '+bytes(s.diagnosticLogSize)+' / '+bytes(s.diagnosticLogMaxSize);$('status').textContent=s.update?'Update läuft':'Bereit';$('detail').textContent=(s.securityWarning||s.otaStatus)+' · '+(s.lastError||'Keine Fehler');$('state').textContent=s.update?'Update':(s.securityReady?'OK':'Warnung');$('state').className='pill '+(s.update?'err':(s.securityReady?'ok':'err'))}catch(e){$('state').textContent='offline';$('state').className='pill err'}}
 async function refreshSimulation(){try{let s=await fetch('/api/simulation',{cache:'no-store'}).then(r=>r.json());$('sim').textContent=s.simulation?'aktiv':'inaktiv';$('scenario').textContent=s.scenario||'--';$('scenarioSelect').value=s.scenario||'NormalSingleFrame'}catch(e){}}
+async function refreshDisplayPages(){try{let s=await fetch('/api/display/diagnostic-pages',{cache:'no-store'}).then(r=>r.json());$('diagPages').textContent=s.diagnosticPagesEnabled?'Diagnose aktiv':'Fahrmodus'}catch(e){}}
 async function loadLog(){try{let p=$('logs');p.style.display='block';p.textContent=await fetch('/log/file',{cache:'no-store'}).then(r=>r.text())}catch(e){}}
 $('restart').onclick=async()=>{if(confirm('Display wirklich neu starten?'))await fetch('/api/restart',{method:'POST'})}
 $('loadLog').onclick=loadLog
@@ -169,7 +171,8 @@ $('simToggle').onclick=async()=>{await fetch('/api/simulation/toggle',{method:'P
 $('simOn').onclick=async()=>{await fetch('/api/simulation/on',{method:'POST'});refreshSimulation()}
 $('simOff').onclick=async()=>{await fetch('/api/simulation/off',{method:'POST'});refreshSimulation()}
 $('scenarioSelect').onchange=async()=>{await fetch('/api/simulation/scenario?scenario='+encodeURIComponent($('scenarioSelect').value),{method:'POST'});refreshSimulation()}
-setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshSimulation();
+$('diagPagesToggle').onclick=async()=>{await fetch('/api/display/diagnostic-pages/toggle',{method:'POST'});refreshDisplayPages()}
+setInterval(refresh,1000);setInterval(refreshSimulation,1000);setInterval(refreshDisplayPages,1000);refresh();refreshSimulation();refreshDisplayPages();
 </script>
 </body></html>
 )rawliteral";
@@ -190,6 +193,8 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     json += "\"update\":" + String(webUpdateInProgress ? "true" : "false") + ",";
     json += "\"simulation\":" + String(Simulation::RuntimeSimulation::enabled() ? "true" : "false") + ",";
     json += "\"simulationScenario\":\"" + WebRuntimeHandlers::jsonEscape(Simulation::RuntimeSimulation::scenarioName()) + "\",";
+    json += "\"diagnosticPagesEnabled\":" + String(DisplayData::runtime().diagnosticPagesEnabled ? "true" : "false") + ",";
+    json += "\"visiblePageCount\":" + String(DisplayData::runtime().diagnosticPagesEnabled ? DisplayConfig::PageCount : DisplayConfig::NormalPageCount) + ",";
     json += "\"espNowConnected\":" + String(DisplayData::isEspNowConnected() ? "true" : "false") + ",";
     json += "\"canStatusRecent\":" + String(DisplayData::isCanStatusRecent() ? "true" : "false") + ",";
     json += "\"obdStatusRecent\":" + String(DisplayData::isObdStatusRecent() ? "true" : "false") + ",";
@@ -344,6 +349,47 @@ setInterval(refresh,1000);setInterval(refreshSimulation,1000);refresh();refreshS
     server.send(200, "application/json", simulationJson());
   }
 
+  String diagnosticPagesJson() {
+    String json = "{";
+    json += "\"diagnosticPagesEnabled\":";
+    json += DisplayData::runtime().diagnosticPagesEnabled ? "true" : "false";
+    json += ",\"visiblePageCount\":";
+    json += String(DisplayData::runtime().diagnosticPagesEnabled ? DisplayConfig::PageCount : DisplayConfig::NormalPageCount);
+    json += "}";
+    return json;
+  }
+
+  void setDiagnosticPagesEnabled(bool enabled) {
+    DisplayData::runtime().diagnosticPagesEnabled = enabled;
+    DisplayData::currentPage = DisplayConfig::MainPageIndex;
+    DisplayData::lastRenderedPage = 255;
+    DisplayData::markDirty();
+    DiagnosticLog::appendf("[display-web] diagnostic pages %s", enabled ? "enabled" : "disabled");
+  }
+
+  void handleDiagnosticPagesStatus() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    server.send(200, "application/json", diagnosticPagesJson());
+  }
+
+  void handleDiagnosticPagesOn() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    setDiagnosticPagesEnabled(true);
+    server.send(200, "application/json", diagnosticPagesJson());
+  }
+
+  void handleDiagnosticPagesOff() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    setDiagnosticPagesEnabled(false);
+    server.send(200, "application/json", diagnosticPagesJson());
+  }
+
+  void handleDiagnosticPagesToggle() {
+    if (!WebSecurity::requireAuthentication(server)) return;
+    setDiagnosticPagesEnabled(!DisplayData::runtime().diagnosticPagesEnabled);
+    server.send(200, "application/json", diagnosticPagesJson());
+  }
+
   void handleUpdateFinished() {
     if (!WebSecurity::requireAuthentication(server, SecurityConfig::RequireOtaAuthentication)) return;
     const bool ok = !Update.hasError();
@@ -455,6 +501,10 @@ namespace DisplayOta {
     server.on("/api/simulation/toggle", HTTP_POST, handleSimulationToggle);
     server.on("/api/simulation/scenario", HTTP_GET, handleSimulationStatus);
     server.on("/api/simulation/scenario", HTTP_POST, handleSimulationScenario);
+    server.on("/api/display/diagnostic-pages", HTTP_GET, handleDiagnosticPagesStatus);
+    server.on("/api/display/diagnostic-pages/on", HTTP_POST, handleDiagnosticPagesOn);
+    server.on("/api/display/diagnostic-pages/off", HTTP_POST, handleDiagnosticPagesOff);
+    server.on("/api/display/diagnostic-pages/toggle", HTTP_POST, handleDiagnosticPagesToggle);
     server.on("/github-update", HTTP_GET, handleGithubUpdatePage);
     server.on("/api/wifi/status", HTTP_GET, handleWifiStatus);
     server.on("/api/wifi/configure", HTTP_POST, handleWifiConfigure);

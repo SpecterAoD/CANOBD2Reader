@@ -63,7 +63,8 @@ namespace {
     if (n == "Speed") return findAlias("Speed", "VehicleSpeed", "0D");
     if (n == "RPM") return findAlias("RPM", "EngineRPM", "0C");
     if (n == "CoolantTemp") return findAlias("CoolantTemp", "EngineCoolantTemp", "05");
-    if (n == "BatteryVoltage") return findAlias("BatteryVoltage", "ControlVoltage", "VOLTAGE");
+    if (n == "BatteryVoltage") return findAlias("BatteryVoltage", "VOLTAGE");
+    if (n == "EcuVoltage") return findAlias("ControlVoltage", "42");
     if (n == "OilTemp") return findAlias("OilTemp", "EngineOilTemp", "5C");
     if (n == "EngineLoad") return findAlias("EngineLoad", "Load", "04");
     if (n == "IntakeTemp") return findAlias("IntakeTemp", "IntakeAirTemp", "0F");
@@ -103,7 +104,7 @@ namespace {
 }
 
 namespace DisplayData {
-  DisplayTelemetryValue values[34];
+  DisplayTelemetryValue values[DisplayConfig::TelemetryValueCapacity];
   uint8_t valueCount = 0;
   uint8_t currentPage = 0;
   uint8_t lastRenderedPage = 255;

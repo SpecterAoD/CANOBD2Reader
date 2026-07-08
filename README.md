@@ -174,16 +174,28 @@ Fast-PIDs laufen deutlich häufiger als Zusatzwerte, damit Hauptanzeigen nicht v
 
 ## Display
 
-Aktuelle Seiten:
+Aktuelle Seiten sind in zwei Modi aufgeteilt.
+
+Normaler Fahrmodus nach jedem Neustart:
 
 1. Hauptseite: Geschwindigkeit, Drehzahl, Kühlmittel, Bordspannung, ESP/CAN/OBD/DTC.
 2. Motorseite: Öltemperatur, Kühlmittel, Last, Ansaugluft, MAP/MAF/Drossel.
 3. Verbrauch/Trip: Momentan, Durchschnitt, Kraftstoffrate, Geschwindigkeit, Laufzeit, Tank.
 4. Diagnose kompakt: ESP-NOW, CAN, OBD, Update-Alter, Heartbeat, Pakete, Firmware.
+
+Diagnosemodus bis zum nächsten Neustart oder bis zum erneuten Umschalten:
+
 5. UDS/DTC: VIN, OBD-/UDS-DTC, NRC, Backoff.
 6. CAN-Sniffer/RAW-CAN: Snifferstatus, Baseline, Frames, CAN-ID, letzter HEX-Frame, Hinweis.
-7. Zusatzwerte: MAF, MAP, BARO, Außentemperatur, Steuergerätspannung, Runtime.
+7. Zusatzwerte: MAF, MAP, BARO, Außentemperatur, ECU-Spannung aus OBD PID `0x42`, Runtime.
 8. Power Management: VehicleState, ActivityScore, PowerCommand, DisplayState, Last CAN/OBD.
+
+Bedienung:
+
+- kurzer Tastendruck: nächste sichtbare Seite.
+- langer Tastendruck: zur Hauptseite.
+- sehr langer Tastendruck: Diagnosemodus ein/aus.
+- Weboberfläche Display: Button `Diagnose-Seiten umschalten`.
 
 Fehlende Werte erscheinen grau und beschriftet, nicht mehr als grüne leere Box.
 
@@ -288,6 +300,7 @@ Startpunkt:
 - [docs/01_Architecture.md](docs/01_Architecture.md)
 - [docs/02_Project_Structure.md](docs/02_Project_Structure.md)
 - [docs/26_Developer_Guide.md](docs/26_Developer_Guide.md)
+- [docs/29_LED_States.md](docs/29_LED_States.md)
 
 Auto-generierte Referenzen:
 

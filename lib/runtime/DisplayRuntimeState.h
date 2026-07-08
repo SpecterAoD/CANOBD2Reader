@@ -23,6 +23,7 @@ struct DisplayRuntimeState {
     String vehicleState = "Booting";
     String powerCommand = "None";
     uint8_t activityScore = 0;
+    bool diagnosticPagesEnabled = false;
     bool displaySleepRequested = false;
     uint32_t lastPowerStatusAt = 0;
     String lastRawPayload = "";

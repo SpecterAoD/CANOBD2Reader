@@ -54,6 +54,7 @@ Each chapter uses this structure where useful:
 | [26](26_Developer_Guide.md) | Developer setup and contribution workflow |
 | [27](27_Scripts.md) | Local helper scripts, checks, flashing and generated docs |
 | [28](28_Audit_Work_Items.md) | Audit findings and issue-ready work items |
+| [29](29_LED_States.md) | Sender LED states, blink patterns and troubleshooting |
 
 Additional older documents are kept for context:
 
