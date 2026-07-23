@@ -8,13 +8,13 @@
 
 namespace DiagnosticLog {
 
-/// Mounts the persistent diagnostic log storage.
+/// Mounts the persistent on-device diagnostic log storage.
 bool begin();
 
-/// Appends one already formatted line. The function never logs recursively.
+/// Appends one already formatted diagnostic line. Avoid high-rate telemetry here.
 void append(const char* line);
 
-/// Appends a timestamped printf-style line.
+/// Appends a timestamped printf-style diagnostic line.
 void appendf(const char* format, ...);
 
 /// Removes current and archived diagnostic log files.
