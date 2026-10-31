@@ -3,8 +3,9 @@
 
 Usage:
   python scripts/make_secrets.py --sender-mac 8C:4B:14:xx:xx:xx --display-mac F0:F5:BD:xx:xx:xx
-  python scripts/make_secrets.py ... --out /pfad/secrets.h --dry-run   # nur anzeigen
+  python scripts/make_secrets.py ... --out /pfad/secrets.h
 
+Credentials are only written to the file, never printed.
 The MAC addresses are printed by `esptool read_mac` or in the boot log
 ("[BOOT] mac=..."). An existing file is never overwritten.
 """
@@ -72,7 +73,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--wifi-ssid", default="", help="optional: hotspot/home WiFi for GitHub updates")
     parser.add_argument("--wifi-password", default="")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     try:
         for value in (args.wifi_ssid, args.wifi_password):
@@ -82,9 +82,6 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    if args.dry_run:
-        print(text)
-        return 0
     if args.out.exists():
         print(f"error: {args.out} exists - refusing to overwrite", file=sys.stderr)
         return 1
