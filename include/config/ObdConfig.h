@@ -27,7 +27,6 @@ inline constexpr uint8_t RequestedPids[] = {
 };
 
 inline constexpr std::size_t ObdPidCount = sizeof(RequestedPids) / sizeof(RequestedPids[0]);
-inline constexpr std::size_t PidCount = ObdPidCount;
 
 // Fast live values are the driver-facing values that must feel "live" on the
 // display. They are queried in their own short round-robin so slow optional PIDs
@@ -58,7 +57,6 @@ inline constexpr uint8_t SlowLivePids[] = {
 inline constexpr std::size_t SlowLivePidCount = sizeof(SlowLivePids) / sizeof(SlowLivePids[0]);
 
 constexpr float DefaultBarometricPressureKpa = SenderConfig::DefaultBarometricPressureKpa;
-constexpr uint32_t SupportedPidRefreshIntervalMs = SenderConfig::SupportedPidRefreshMs;
 constexpr uint32_t DtcQueryIntervalMs = SenderConfig::DtcQueryIntervalMs;
 constexpr uint32_t VinQueryIntervalMs = SenderConfig::VinQueryIntervalMs;
 

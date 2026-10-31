@@ -1,0 +1,54 @@
+name: CI
+
+# Tests and builds every push / pull request. Artifacts are UNSIGNED and only
+# meant for inspection; devices accept signed release images only.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('platformio.ini') }}
+
+      - name: Install tools
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: No secrets in the repository
+        run: |
+          test ! -f include/secrets.h || { echo "include/secrets.h must not be committed"; exit 1; }
+          python scripts/check_secrets.py
+
+      - name: Python tests
+        run: python -m pytest -q test/python
+
+      - name: Native unit tests
+        run: pio test -e native
+
+      - name: Build release and developer firmware
+        run: pio run -e sender -e display -e sender_dev -e display_dev
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-unsigned-${{ github.sha }}
+          path: |
+            .pio/build/sender/firmware.bin
+            .pio/build/display/firmware.bin
+          retention-days: 14

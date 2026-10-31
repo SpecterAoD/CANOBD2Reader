@@ -5,11 +5,9 @@
 #include "config/LoggingConfig.h"
 
 namespace SenderConfig {
-constexpr bool EnableCAN = true;
 constexpr bool EnableOBD2 = true;
 constexpr bool EnableUDS = true;
 constexpr bool SendRawData = true;
-constexpr bool SendRawDataOnly = false;
 constexpr bool RequireWebStart = false;
 
 constexpr int LedPin1 = 26;
@@ -19,7 +17,6 @@ constexpr int CanRxPin = 4;
 constexpr int CanTxPin = 5;
 constexpr int VoltageDividerPin = 32;
 
-constexpr uint32_t CanBitrate = 500000;
 constexpr int PollingRateMs = 10;
 constexpr int CanIdleTimeoutMs = 500;
 // Target refresh per PID (see Obd::PidPollPlanner). The planner always asks
@@ -64,5 +61,4 @@ constexpr std::size_t CanRxQueueLength = 32;
 constexpr std::size_t CanTxQueueLength = 4;
 constexpr uint8_t IsoTpBlockSize = 0;
 constexpr uint8_t IsoTpStMinMs = 0;
-constexpr uint32_t IsoTpConsecutiveFrameTimeoutMs = 300;
 }

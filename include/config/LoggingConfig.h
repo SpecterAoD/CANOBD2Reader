@@ -12,7 +12,6 @@ constexpr bool PowerDebugEnabled = false;
 constexpr bool CanDebugEnabled = false;
 constexpr bool Obd2DebugEnabled = false;
 constexpr bool TraceSenderTelemetry = false;
-constexpr bool TraceDisplayTelemetry = false;
 constexpr uint32_t TraceSummaryIntervalMs = 1000;
 
 constexpr bool EnablePersistentDiagnosticLog = true;

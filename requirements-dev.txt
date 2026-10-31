@@ -1,0 +1,4 @@
+# Host tools: build, signing, release manifest, tests
+platformio==6.2.0
+cryptography>=42
+pytest>=8

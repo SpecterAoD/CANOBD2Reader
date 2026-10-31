@@ -41,7 +41,6 @@ constexpr float VoltageWarnHigh = 14.8f;
 constexpr float VoltageCriticalHigh = 15.2f;
 constexpr uint16_t RpmWarn = 4200;
 constexpr uint16_t RpmCritical = 5000;
-constexpr uint16_t RpmMin = 0;
 constexpr uint16_t RpmMax = 6000;
 constexpr float BoostWarnBar = 0.8f;
 constexpr float BoostCriticalBar = 1.2f;
