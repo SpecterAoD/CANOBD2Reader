@@ -34,6 +34,14 @@ des Repositorys (Rechte 700). Der Ordner enthält die Zugangsdaten.
 
 ## 3. Flashen (beliebiger Linux-Rechner mit `esptool`)
 
+Das offizielle esptool verwenden. Debian-/Kali-Pakete (`esptool …+dfsg`) enthalten
+keine Flash-Stubs und scheitern beim Löschen. `flash.sh` nimmt automatisch
+`~/.venv-esptool`, wenn vorhanden:
+
+```bash
+python3 -m venv ~/.venv-esptool && ~/.venv-esptool/bin/pip install "esptool>=4.8,<5"
+```
+
 Paket kopieren (z. B. `scp -r`), Board per USB anschließen, dann:
 
 ```bash

@@ -84,13 +84,20 @@ FLASH_SH = r'''#!/usr/bin/env bash
 #   ./flash.sh aufraeumen               Paket (enthält Zugangsdaten) löschen
 #
 # Ausgabe zusätzlich in /tmp/canobd2-flash.log
-set -Euo pipefail
+set -Eeuo pipefail   # jeder Fehler bricht ab
 cd "$(dirname "$(readlink -f "$0")")"
 LOG=/tmp/canobd2-flash.log
 exec > >(tee -a "$LOG") 2>&1
 trap 'chmod 644 "$LOG" 2>/dev/null || true' EXIT
-ESPTOOL=$(command -v esptool || command -v esptool.py || true)
-[[ -n "$ESPTOOL" ]] || { echo "esptool fehlt (sudo apt install esptool)"; exit 1; }
+trap 'echo "!! ABBRUCH in Zeile $LINENO – Gerät nicht fertig geflasht, bitte Ausgabe prüfen."' ERR
+# Debian/Kali-Pakete ("dfsg") enthalten keine Flash-Stubs -> offizielles esptool
+# aus einer venv bevorzugen: python3 -m venv ~/.venv-esptool && ~/.venv-esptool/bin/pip install esptool
+ESPTOOL=""
+for c in "$HOME/.venv-esptool/bin/esptool.py" "$(command -v esptool.py || true)" "$(command -v esptool || true)"; do
+  [[ -n "$c" && -x "$c" ]] && { ESPTOOL=$c; break; }
+done
+[[ -n "$ESPTOOL" ]] || { echo "esptool fehlt (siehe Kommentar oben)"; exit 1; }
+echo "esptool: $ESPTOOL"
 
 declare -A CHIP=(%(chip)s) USB=(%(usb)s) MAC=(%(mac)s) BAUD=(%(baud)s) BOOT=(%(boot)s)
 OTADATA=%(otadata)s; APP=%(app)s; PART=%(part)s
