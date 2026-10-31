@@ -248,13 +248,15 @@ void tick(uint32_t nowMs,
     if (nowMs - lastObdPollAt < SenderConfig::PollingRateMs) return;
     lastObdPollAt = nowMs;
 
+    // CAN/OBD state reaches the display with the 1 s heartbeat; sending it here
+    // (every 10 ms) flooded the radio link.
     canBusActive = (nowMs - lastCanMessageAt) <= SenderConfig::CanIdleTimeoutMs;
-    if (sendStatus != nullptr) {
-        sendStatus("CAN", canBusActive ? "ACTIVE" : "IDLE", canBusActive ? "OK" : "TIMEOUT");
-    }
 
-    if (!supportedInitialized ||
-        nowMs - lastSupportedPidRefreshAt >= SenderConfig::SupportedPidRefreshMs) {
+    // Without ECU (ignition off) every attempt blocks for the response timeout,
+    // so retry the supported-PID query only every SupportedPidRetryMs.
+    const uint32_t refreshInterval = supportedInitialized ? SenderConfig::SupportedPidRefreshMs
+                                                          : SenderConfig::SupportedPidRetryMs;
+    if (lastSupportedPidRefreshAt == 0 || nowMs - lastSupportedPidRefreshAt >= refreshInterval) {
         refreshSupportedPids(nowMs, lastCanMessageAt, lastObdResponseAt, canBusActive, sendStatus);
         lastSupportedPidRefreshAt = nowMs;
     }
@@ -270,8 +272,13 @@ void tick(uint32_t nowMs,
             }
             planner.markPolled(pid, millis());
         }
-    } else if (sendStatus != nullptr) {
-        sendStatus("OBD", "PID_SUPPORT_TIMEOUT", "WARN");
+        // ECU gone (ignition off): stop polling every PID into a timeout and
+        // fall back to the slow supported-PID retry above.
+        if (Obd::Diagnostics::timeoutStreak() >= SenderConfig::TimeoutsBeforeObdIdle) {
+            supportedInitialized = false;
+            lastSupportedPidRefreshAt = nowMs;
+            WebConsoleHandler::log("[OBD] ECU antwortet nicht mehr, Abfrage pausiert");
+        }
     }
 
     if (nowMs - lastDtcQueryAt >= SenderConfig::DtcQueryIntervalMs) {

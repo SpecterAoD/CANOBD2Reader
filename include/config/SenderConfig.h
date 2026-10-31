@@ -35,6 +35,9 @@ constexpr std::size_t SimulationStatusFramesPerTick = 2;
 constexpr uint32_t RawCanTelemetryIntervalMs = 250;
 constexpr uint32_t LedTestDebounceMs = 50;
 constexpr uint32_t SupportedPidRefreshMs = 60000;
+constexpr uint32_t SupportedPidRetryMs = 2000;
+// Consecutive OBD timeouts after which live polling pauses (ECU asleep).
+constexpr uint32_t TimeoutsBeforeObdIdle = 10;
 constexpr uint32_t DtcQueryIntervalMs = 30000;
 constexpr uint32_t VinQueryIntervalMs = 120000;
 constexpr uint32_t UdsQueryIntervalMs = 60000;

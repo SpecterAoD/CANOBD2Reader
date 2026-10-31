@@ -392,6 +392,9 @@ void appendCommonStatusJson(String& json) {
     field("target", ProjectConfig::TargetName);
     number("protocol", ProjectConfig::ProtocolVersion);
     field("buildTime", String(__DATE__) + " " + __TIME__);
+    // Also keeps the metadata record linked into the image: OTA validation of
+    // the *next* firmware relies on every image carrying it.
+    field("metadata", FirmwareMetadata::text());
     field("otaStatus", uploadStatus);
     flag("otaInProgress", uploadInProgress);
     flag("signedUpdatesOnly", true);

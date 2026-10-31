@@ -45,6 +45,11 @@ jobs:
       - name: Build release and developer firmware
         run: pio run -e sender -e display -e sender_dev -e display_dev
 
+      - name: OTA metadata present in images
+        run: |
+          python scripts/check_firmware_image.py .pio/build/sender/firmware.bin sender
+          python scripts/check_firmware_image.py .pio/build/display/firmware.bin display
+
       - uses: actions/upload-artifact@v4
         with:
           name: firmware-unsigned-${{ github.sha }}

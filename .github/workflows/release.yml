@@ -82,6 +82,8 @@ jobs:
           set -euo pipefail
           mkdir -p output
           for target in sender display; do
+            python scripts/check_firmware_image.py ".pio/build/${target}/firmware.bin" "$target" \
+              --version "V${{ steps.meta.outputs.version }}"
             python scripts/sign_firmware.py sign ".pio/build/${target}/firmware.bin" "output/${target}.bin"
             python scripts/sign_firmware.py verify "output/${target}.bin"
           done
