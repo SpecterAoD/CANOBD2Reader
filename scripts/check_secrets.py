@@ -44,7 +44,8 @@ def git_files() -> list[str]:
 
 def allowed(value: str) -> bool:
     lower = value.lower()
-    return value.strip() == "" or any(item in lower for item in ALLOWLIST)
+    template = value.startswith("{") and value.endswith("}")  # f-string in a generator
+    return value.strip() == "" or template or any(item in lower for item in ALLOWLIST)
 
 
 def main() -> int:

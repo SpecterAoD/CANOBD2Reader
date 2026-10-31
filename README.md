@@ -14,10 +14,13 @@ Stand: `V2.1.0-beta.1`, Telemetrie-Protokoll 3.
 
 ```bash
 pip install -r requirements-dev.txt
-cp include/secrets.example.h include/secrets.h   # alle Werte ersetzen!
+python scripts/make_secrets.py --sender-mac <MAC> --display-mac <MAC>
 pio run -e sender -t upload
 pio run -e display -t upload
 ```
+
+Ausführlich, auch für das Flashen von einem anderen Linux-Rechner aus:
+[docs/PROVISIONING.md](docs/PROVISIONING.md).
 
 Danach mit dem WLAN `CANOBD2_Sender` bzw. `CANOBD2_Display` verbinden und
 `http://192.168.4.1` öffnen.
@@ -41,7 +44,8 @@ Danach mit dem WLAN `CANOBD2_Sender` bzw. `CANOBD2_Display` verbinden und
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Aufbau, Datenfluss, Verzeichnisse |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | Funkprotokoll v3 |
-| [docs/SECURITY.md](docs/SECURITY.md) | Provisionierung, Signaturen, Schlüssel, Rollback |
+| [docs/PROVISIONING.md](docs/PROVISIONING.md) | Erstinstallation / Umstieg per USB |
+| [docs/SECURITY.md](docs/SECURITY.md) | Zugangsdaten, Signaturen, Schlüssel, Rollback |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | Pins, LEDs, Display-Seiten, Inbetriebnahme |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Build, Tests, Release |
 

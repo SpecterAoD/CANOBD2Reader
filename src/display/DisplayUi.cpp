@@ -74,7 +74,8 @@ constexpr InitCommand PanelInit[] = {
 void applyPanelInit() {
   for (const InitCommand& entry : PanelInit) {
     tft.writecommand(entry.command);
-    for (uint8_t index = 0; index < (entry.length & 0x7F); ++index) tft.writedata(entry.data[index]);
+    const unsigned count = entry.length & 0x7Fu;
+    for (unsigned index = 0; index < count; ++index) tft.writedata(entry.data[index]);
     if (entry.length & 0x80) delay(120);
   }
 }

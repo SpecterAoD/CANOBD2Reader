@@ -8,8 +8,10 @@ oder in Release-Images**, und **nur signierte Firmware wird installiert**.
 Jedes Gerät speichert AP-Passwort, Web-Login, API-Token, ESP-NOW-Schlüssel und
 die Partner-MAC im NVS (`lib/security/DeviceSecrets`).
 
-1. `include/secrets.example.h` nach `include/secrets.h` kopieren (von Git
-   ignoriert) und **alle** Werte ersetzen. Passwörter ≥ 8 Zeichen, API-Token
+Schritt für Schritt: [PROVISIONING.md](PROVISIONING.md).
+
+1. `include/secrets.h` mit `scripts/make_secrets.py` erzeugen oder aus
+   `include/secrets.example.h` kopieren (von Git ignoriert) und **alle** Werte ersetzen. Passwörter ≥ 8 Zeichen, API-Token
    ≥ 16 Zeichen, ESP-NOW-Schlüssel zufällig erzeugen.
 2. MAC-Adressen eintragen: Sie stehen nach dem Booten im Diagnose-Log bzw. auf
    der seriellen Konsole (`[BOOT] mac=...`).
