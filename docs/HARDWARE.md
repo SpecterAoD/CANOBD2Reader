@@ -27,10 +27,10 @@ Timeouts physisch an `0x7E0`. Nach Bus-Off startet der Treiber automatisch neu.
 ## Display – LilyGO T-Display S3
 
 ST7789 170×320 an 8-Bit-Parallelbus (Pins in `platformio.ini`), Hintergrundbeleuchtung GPIO 38,
-Displayversorgung GPIO 15, Taster GPIO 0.
+Displayversorgung GPIO 15, Tasten GPIO 0 (BOOT) und GPIO 14.
 
-Taster: kurz = nächste Seite, lang (1,2 s) = Hauptseite,
-sehr lang (3 s) = Diagnoseseiten ein/aus.
+Tasten: BOOT (GPIO 0) kurz = nächste Seite, zweite Taste (GPIO 14) kurz = vorherige
+Seite, eine der beiden lang (1,2 s) = Hauptseite, BOOT sehr lang (3 s) = Diagnoseseiten ein/aus.
 
 | Seite | Inhalt |
 |---|---|

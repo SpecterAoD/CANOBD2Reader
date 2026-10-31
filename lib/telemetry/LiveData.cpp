@@ -8,8 +8,8 @@ namespace {
 constexpr MetricInfo Table[MetricCount] = {
     {Metric::Rpm, "RPM", "Drehzahl", "rpm", 0, 0x0C},
     {Metric::Speed, "Speed", "Tempo", "km/h", 0, 0x0D},
-    {Metric::CoolantTemp, "CoolantTemp", "Kuehlmittel", "C", 0, 0x05},
-    {Metric::BatteryVoltage, "BatteryVoltage", "Bordnetz", "V", 1, -1},
+    {Metric::CoolantTemp, "CoolantTemp", "Kuehlung", "C", 0, 0x05},
+    {Metric::BatteryVoltage, "BatteryVoltage", "Batterie", "V", 1, -1},
     {Metric::EcuVoltage, "EcuVoltage", "ECU-Spannung", "V", 1, 0x42},
     {Metric::EngineLoad, "EngineLoad", "Last", "%", 0, 0x04},
     {Metric::IntakeTemp, "IntakeTemp", "Ansaugluft", "C", 0, 0x0F},

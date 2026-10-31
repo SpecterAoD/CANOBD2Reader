@@ -5,8 +5,9 @@
 // ever cleared on the visible screen. Values that miss an update are greyed
 // out instead of being replaced by placeholders (see LiveValueView).
 //
-// Pages (button: short = next page, long = main page, very long = toggle
-// diagnostic pages):
+// Buttons: BOOT (GPIO0) short = next page, GPIO14 short = previous page,
+// either long = main page, BOOT very long = toggle diagnostic pages.
+// Pages:
 //   0 Fahren  1 Motor  2 Verbrauch  3 Verbindung
 //   4 DTC/UDS 5 CAN-Sniffer (dev builds) 6 Weitere Werte 7 Power
 #include "DisplayUi.h"
@@ -15,6 +16,7 @@
 
 #include "DiagnosticLog.h"
 #include "DisplayData.h"
+#include "ButtonGesture.h"
 #include "DisplaySeverity.h"
 #include "LiveData.h"
 #include "LiveValueView.h"
@@ -36,9 +38,10 @@ constexpr int StatusBarHeight = 18;
 
 uint32_t lastRenderMs = 0;
 bool sleeping = false;
-bool lastButtonPressed = false;
-bool longPressHandled = false;
-uint32_t buttonPressedAt = 0;
+DisplayLogic::ButtonGesture nextButton(DisplayConfig::ButtonDebounceMs, DisplayConfig::LongPressMs,
+                                       DisplayConfig::VeryLongPressMs);
+DisplayLogic::ButtonGesture previousButton(DisplayConfig::ButtonDebounceMs, DisplayConfig::LongPressMs,
+                                           DisplayConfig::VeryLongPressMs);
 
 DisplayLogic::Smoother speedSmoother(DisplayConfig::FastValueSmoothingMs);
 DisplayLogic::Smoother rpmSmoother(DisplayConfig::FastValueSmoothingMs);
@@ -175,10 +178,17 @@ void metricCard(int x, int y, int w, int h, Metric metric, bool big, const Value
   const LiveData::MetricInfo& info = LiveData::info(metric);
   panel(x, y, w, h, view.state == ValueState::Fresh ? color : DisplayConfig::Panel);
 
-  label(x + 8, y + 4, info.label);
-  frame.setTextDatum(TR_DATUM);
+  const bool narrow = w < 120;
+  label(x + 8, y + 4, fitText(info.label, w - 16, 2).c_str());
   frame.setTextColor(DisplayConfig::Muted);
-  frame.drawString(info.unit, x + w - 8, y + 4, 2);
+  if (narrow) {
+    // Not enough room beside the label: unit goes bottom left, value bottom right.
+    frame.setTextDatum(BL_DATUM);
+    frame.drawString(info.unit, x + 8, y + h - 8, 2);
+  } else {
+    frame.setTextDatum(TR_DATUM);
+    frame.drawString(info.unit, x + w - 8, y + 4, 2);
+  }
 
   const String text = formatValue(metric, view);
   // Font 7 (7-segment, 48 px) only has digits, '.', '-' and ':'.
@@ -186,7 +196,8 @@ void metricCard(int x, int y, int w, int h, Metric metric, bool big, const Value
   const uint8_t font = segmentFont ? 7 : 4;
   frame.setTextDatum(BR_DATUM);
   frame.setTextColor(color);
-  frame.drawString(fitText(text, w - 16, font), x + w - 8, y + h - 7, font);
+  const int unitSpace = narrow ? frame.textWidth(info.unit, 2) + 4 : 0;
+  frame.drawString(fitText(text, w - 16 - unitSpace, font), x + w - 8, y + h - 7, font);
 }
 
 void textCell(int x, int y, int w, int h, const char* title, const String& value, uint16_t color) {
@@ -399,6 +410,7 @@ namespace DisplayUi {
 
 void begin() {
   pinMode(DisplayConfig::NextPageButtonPin, INPUT_PULLUP);
+  pinMode(DisplayConfig::PreviousPageButtonPin, INPUT_PULLUP);
   if (DisplayConfig::PowerPin >= 0) {
     pinMode(DisplayConfig::PowerPin, OUTPUT);
     digitalWrite(DisplayConfig::PowerPin, DisplayConfig::PowerOnLevel);
@@ -415,27 +427,22 @@ void begin() {
 void handleButton() {
   using namespace DisplayData;
   const uint32_t now = millis();
-  const bool pressed = digitalRead(DisplayConfig::NextPageButtonPin) == LOW;
+  const uint8_t pages = visiblePageCount();
+  const auto next = nextButton.update(digitalRead(DisplayConfig::NextPageButtonPin) == LOW, now);
+  const auto previous = previousButton.update(digitalRead(DisplayConfig::PreviousPageButtonPin) == LOW, now);
+  if (next == DisplayLogic::ButtonEvent::None && previous == DisplayLogic::ButtonEvent::None) return;
 
-  // Very long press is handled while still holding, so the user gets feedback.
-  if (pressed && !longPressHandled && now - buttonPressedAt >= DisplayConfig::VeryLongPressMs && lastButtonPressed) {
-    longPressHandled = true;
+  runtime().displaySleepRequested = false;  // any press wakes the display
+  if (next == DisplayLogic::ButtonEvent::VeryLong) {
     setDiagnosticPagesEnabled(!runtime().diagnosticPagesEnabled);
     currentPage = DisplayConfig::MainPageIndex;
+  } else if (next == DisplayLogic::ButtonEvent::Long || previous == DisplayLogic::ButtonEvent::Long) {
+    currentPage = DisplayConfig::MainPageIndex;
+  } else if (next == DisplayLogic::ButtonEvent::Short) {
+    currentPage = static_cast<uint8_t>((currentPage + 1) % pages);
+  } else if (previous == DisplayLogic::ButtonEvent::Short) {
+    currentPage = static_cast<uint8_t>((currentPage + pages - 1) % pages);
   }
-  if (pressed == lastButtonPressed) return;
-  lastButtonPressed = pressed;
-
-  if (pressed) {
-    buttonPressedAt = now;
-    longPressHandled = false;
-    runtime().displaySleepRequested = false;  // any press wakes the display
-    return;
-  }
-  const uint32_t duration = now - buttonPressedAt;
-  if (longPressHandled || duration < DisplayConfig::ButtonDebounceMs) return;
-  currentPage = duration >= DisplayConfig::LongPressMs ? DisplayConfig::MainPageIndex
-                                                       : static_cast<uint8_t>((currentPage + 1) % visiblePageCount());
   lastRenderMs = 0;  // render the new page immediately
 }
 

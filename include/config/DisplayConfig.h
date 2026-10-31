@@ -11,7 +11,9 @@ constexpr uint16_t PowerStabilizeMs = 60;
 constexpr uint8_t BacklightPin = 38;
 constexpr uint8_t BacklightOn = 255;
 constexpr uint8_t BacklightSleep = 0;
+// T-Display S3: GPIO0 = BOOT button (next page), GPIO14 = second button (previous page).
 constexpr uint8_t NextPageButtonPin = 0;
+constexpr uint8_t PreviousPageButtonPin = 14;
 constexpr uint8_t PageCount = 8;
 constexpr uint8_t NormalPageCount = 4;
 constexpr uint8_t MainPageIndex = 0;
@@ -27,7 +29,8 @@ constexpr uint32_t StatusTimeoutMs = 150000;
 constexpr uint32_t EspNowTimeoutMs = 3000;
 constexpr uint32_t ObdTimeoutMs = 5000;
 constexpr uint32_t CanTimeoutMs = 5000;
-constexpr uint32_t ButtonDebounceMs = 250;
+// Input must be stable this long; normal taps (50-200 ms) count as presses.
+constexpr uint32_t ButtonDebounceMs = 30;
 constexpr std::size_t TelemetryQueueLength = 16;
 constexpr std::size_t TelemetryValueCapacity = 64;
 
