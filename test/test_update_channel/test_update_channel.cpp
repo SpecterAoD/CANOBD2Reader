@@ -6,8 +6,9 @@
 void setUp() {}
 void tearDown() {}
 
-void test_default_channel_is_development() {
-    TEST_ASSERT_EQUAL(FirmwareUpdate::UpdateChannel::Development, UpdateConfig::DefaultChannel);
+// Devices only offer stable releases unless the user picks another channel.
+void test_default_channel_is_stable() {
+    TEST_ASSERT_EQUAL(FirmwareUpdate::UpdateChannel::Stable, UpdateConfig::DefaultChannel);
 }
 
 void test_channel_filtering() {
@@ -27,7 +28,7 @@ void test_channel_filtering() {
 
 int main(int, char**) {
     UNITY_BEGIN();
-    RUN_TEST(test_default_channel_is_development);
+    RUN_TEST(test_default_channel_is_stable);
     RUN_TEST(test_channel_filtering);
     return UNITY_END();
 }

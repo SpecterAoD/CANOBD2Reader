@@ -6,8 +6,9 @@
 
 namespace TelemetryProtocol {
 
-constexpr size_t MaxPayloadLength = 160;
-constexpr uint8_t Version = 2;
+// Text payload of status/diagnostic packets:
+//   "TYPE,KEY,NAME,VALUE,UNIT,STATUS,SEQ"
+// Live values are binary (lib/telemetry/LiveData.h).
 
 void buildPayload(char* out,
                   size_t outSize,

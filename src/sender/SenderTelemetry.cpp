@@ -108,8 +108,17 @@ void send(const char* type,
     if (status != nullptr && strcmp(status, "OK") != 0) {
         lastErrorText = String(type == nullptr ? "" : type) + "/" + (key == nullptr ? "" : key) + ": " + status;
     }
-    if (type != nullptr && status != nullptr && strcmp(type, "OBD") == 0 && strcmp(status, "OK") == 0) {
-        lastObdResponse = millis();
+}
+
+void sendBinary(Telemetry::PacketType type, const uint8_t* data, std::size_t length) {
+    currentSequence = Telemetry::nextSequence();
+    if (!Telemetry::TelemetryCodec::encode(frame, type, currentSequence, millis(), data, length)) return;
+    if (Transport::sendTelemetryPacket(frame) == ESP_OK) {
+        ++sendOk;
+        lastSendErrorText = "";
+    } else {
+        ++sendFail;
+        lastSendErrorText = "ESP-NOW Sendefehler (binaer)";
     }
 }
 

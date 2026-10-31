@@ -37,12 +37,11 @@
   #define CANOBD2_MAX_COMPAT_PROTOCOL_VERSION CANOBD2_PROTOCOL_VERSION
 #endif
 
-// OTA bleibt pro Environment aktiviert; die konkrete Nutzung/Upload-Methode wird
-// nicht im Code erzwungen, sondern ueber PlatformIO upload_protocol gesteuert.
-#define CANOBD2_OTA_COMPATIBLE 1
-
-#ifndef CANOBD2_ENABLE_BLUETOOTH
-#define CANOBD2_ENABLE_BLUETOOTH 0
+// Developer tools: simulation, OBD/UDS capability scanner, CAN signal finder,
+// raw CAN telemetry and the display's CAN sniffer page. Off in release builds;
+// enabled by the PlatformIO environments sender_dev / display_dev.
+#ifndef CANOBD2_DEV_TOOLS
+#define CANOBD2_DEV_TOOLS 0
 #endif
 
 #ifndef CANOBD2_ENABLE_SENDER_WEBCONSOLE

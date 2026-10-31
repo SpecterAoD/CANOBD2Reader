@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "FirmwareVersion.h"
 #include "UpdateChannel.h"
 
 namespace FirmwareUpdate {
@@ -21,7 +22,6 @@ enum class InstallEligibility {
     Rollback,
     WrongTarget,
     IncompatibleProtocol,
-    MissingSha256,
     MissingUrl,
     ChannelBlocked
 };
@@ -30,7 +30,7 @@ struct FirmwareVersionEntry {
     std::string version;
     UpdateChannel channel = UpdateChannel::Development;
     std::string url;
-    std::string sha256;
+    std::string sha256; // informational; authenticity comes from the image signature
     uint8_t protocol = 0;
     std::string target;
     std::string createdAt;
@@ -44,7 +44,6 @@ struct UpdateManifest {
 };
 
 bool parseManifest(const std::string& json, UpdateManifest& manifest);
-int compareVersions(const std::string& left, const std::string& right);
 VersionRelation relationToInstalled(const std::string& installed, const std::string& candidate);
 bool targetMatches(const FirmwareVersionEntry& entry, const char* expectedTarget);
 InstallEligibility evaluateEntry(const FirmwareVersionEntry& entry,

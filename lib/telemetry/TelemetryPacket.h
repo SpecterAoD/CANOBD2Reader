@@ -11,7 +11,9 @@ enum class PacketType : uint8_t {
     Status = 2,
     Obd = 3,
     Can = 4,
-    Diagnostic = 5
+    Diagnostic = 5,
+    // Binary LiveData::Snapshot with all live values (protocol v3).
+    LiveSnapshot = 6
 };
 
 struct TelemetryPacket {

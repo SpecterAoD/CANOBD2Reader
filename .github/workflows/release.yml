@@ -1,114 +1,130 @@
-name: Release Firmware
+name: Release
 
+# Builds, signs and publishes a firmware release and updates the device update
+# index (release "firmware-index"). Requires the repository secret
+# FIRMWARE_SIGNING_KEY (Ed25519 private key, PEM, see docs/SECURITY.md).
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version, for example 1.0.15 or V1.0.15"
+        description: "SemVer version, e.g. 2.1.0 or 2.1.0-beta.1"
         required: true
         type: string
-      target:
-        description: "Firmware target to build"
+      channel:
+        description: "Update channel shown to devices"
         required: true
-        default: all
+        default: beta
         type: choice
-        options:
-          - all
-          - sender
-          - display
-      draft:
-        description: "Create the GitHub release as draft"
-        required: true
-        default: false
-        type: boolean
-      prerelease:
-        description: "Mark the GitHub release as prerelease"
-        required: true
-        default: false
-        type: boolean
+        options: [stable, beta, development]
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-24.04
-
+    environment: release
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      - name: Normalize release version
-        id: version
-        shell: bash
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install tools
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Validate inputs
+        id: meta
         env:
           RAW_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          version="${RAW_VERSION#v}"
-          version="${version#V}"
-          version="${version/Beta/beta}"
-          version="${version/BETA/beta}"
-          echo "VERSION=${version}" >> "${GITHUB_ENV}"
-          echo "VERSION_TAG=V${version}" >> "${GITHUB_ENV}"
-          echo "RELEASE_TAG=firmware-V${version}" >> "${GITHUB_ENV}"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          echo "version_tag=V${version}" >> "${GITHUB_OUTPUT}"
-          echo "release_tag=firmware-V${version}" >> "${GITHUB_OUTPUT}"
-          echo "Normalized release version: V${version}"
+          version="${RAW_VERSION#[vV]}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$ ]]; then
+            echo "Version '$RAW_VERSION' is not SemVer" >&2; exit 1
+          fi
+          tag="firmware-V${version}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
+            echo "Tag ${tag} already exists" >&2; exit 1
+          fi
+          protocol="$(grep -m1 -oP 'CANOBD2_PROTOCOL_VERSION=\K[0-9]+' platformio.ini)"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "protocol=${protocol}" >> "$GITHUB_OUTPUT"
 
-      - name: Validate version input and release tag
-        shell: bash
+      - name: Signing key present
+        env:
+          FIRMWARE_SIGNING_KEY: ${{ secrets.FIRMWARE_SIGNING_KEY }}
+        run: test -n "$FIRMWARE_SIGNING_KEY" || { echo "Secret FIRMWARE_SIGNING_KEY missing" >&2; exit 1; }
+
+      - name: Tests
+        run: |
+          python scripts/check_secrets.py
+          python -m pytest -q test/python
+          pio test -e native
+
+      - name: Build
+        env:
+          CANOBD2_FIRMWARE_VERSION: V${{ steps.meta.outputs.version }}
+        run: pio run -e sender -e display
+
+      - name: Sign and verify
+        env:
+          FIRMWARE_SIGNING_KEY: ${{ secrets.FIRMWARE_SIGNING_KEY }}
         run: |
           set -euo pipefail
-          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9]+)*$ ]]; then
-            echo "Invalid version '${VERSION}'. Use values like 1.0.15 or 1.0.15.test1." >&2
-            exit 1
-          fi
-          if git rev-parse "${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "Release tag '${RELEASE_TAG}' already exists." >&2
-            exit 1
-          fi
+          mkdir -p output
+          for target in sender display; do
+            python scripts/check_firmware_image.py ".pio/build/${target}/firmware.bin" "$target" \
+              --version "V${{ steps.meta.outputs.version }}"
+            python scripts/sign_firmware.py sign ".pio/build/${target}/firmware.bin" "output/${target}.bin"
+            python scripts/sign_firmware.py verify "output/${target}.bin"
+          done
 
-      - name: Build firmware artifacts
-        uses: ./.github/actions/firmware-build
-        with:
-          version: ${{ steps.version.outputs.version }}
-          target: ${{ inputs.target }}
-          run_tests: "true"
-          release_type: release
-          release_tag: ${{ steps.version.outputs.release_tag }}
-
-      - name: Create release tag
-        shell: bash
+      - name: Update manifest
+        env:
+          BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.meta.outputs.tag }}
+          INDEX_URL: https://github.com/${{ github.repository }}/releases/download/firmware-index/update_manifest.json
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "${RELEASE_TAG}" -m "CAN OBD2 Firmware ${VERSION_TAG}"
-          git push origin "${RELEASE_TAG}"
+          curl -fsSL "$INDEX_URL" -o previous_manifest.json || echo '{}' > previous_manifest.json
+          python scripts/release_manifest.py --previous previous_manifest.json \
+            --out output/update_manifest.json --version "${{ steps.meta.outputs.version }}" \
+            --channel "${{ inputs.channel }}" --protocol "${{ steps.meta.outputs.protocol }}" \
+            --base-url "$BASE_URL" --sender output/sender.bin --display output/display.bin
+          (cd output && sha256sum sender.bin display.bin > SHA256SUMS.txt)
 
-      - name: Create GitHub release
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.release_tag }}
-          name: CAN OBD2 Firmware ${{ steps.version.outputs.version_tag }}
-          files: output/*
-          body_path: output/RELEASE_NOTES.md
-          draft: ${{ inputs.draft }}
-          prerelease: ${{ inputs.prerelease }}
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: CANOBD2 Firmware V${{ steps.meta.outputs.version }}
+          prerelease: ${{ inputs.channel != 'stable' }}
           generate_release_notes: true
+          body: |
+            Channel: ${{ inputs.channel }} - telemetry protocol ${{ steps.meta.outputs.protocol }}.
+            `sender.bin` / `display.bin` are signed (Ed25519). Install them via the device web UI
+            ("Firmware-Update") or let the device fetch them from GitHub. Sender and display must
+            run the same telemetry protocol.
+          files: |
+            output/sender.bin
+            output/display.bin
+            output/SHA256SUMS.txt
 
-      - name: Publish GitHub update index
+      - name: Publish update index
         uses: softprops/action-gh-release@v2
         with:
           tag_name: firmware-index
-          name: CAN OBD2 Firmware Update Index
-          files: output/update_manifest.json
-          body: Machine-readable update index for device-side GitHub OTA.
-          draft: false
+          name: CANOBD2 Firmware Update Index
+          body: Machine-readable update index read by the devices.
           prerelease: true
           make_latest: false
-          overwrite_files: true
+          files: output/update_manifest.json

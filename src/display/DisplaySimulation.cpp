@@ -1,4 +1,8 @@
 #include "DisplaySimulation.h"
+
+#include "common_config.h"
+#if CANOBD2_DEV_TOOLS
+#include "LiveData.h"
 #include "DisplayData.h"
 #include "RuntimeSimulation.h"
 #include "ObdSimulation.h"
@@ -30,33 +34,31 @@ namespace DisplaySimulation {
 
   void update() {
     using namespace DisplayData;
+    static uint32_t lastUpdateMs = 0;
+    static uint32_t tickCount = 0;
     if (!Simulation::RuntimeSimulation::enabled()) return;
-    if (millis() - lastInternalSimulationUpdate < DisplayConfig::ScreenRefreshMs) return;
+    const uint32_t now = millis();
+    if (now - lastUpdateMs < 100) return;
+    lastUpdateMs = now;
+    if (tickCount == 0) DiagnosticLog::appendf("[display-sim] interne Simulation aktiv");
+    ++tickCount;
+    const uint32_t internalSimulationIndex = tickCount;
 
-    if (internalSimulationIndex == 0) {
-      DiagnosticLog::appendf("[display-sim] internal simulation active");
-    }
-
-    lastInternalSimulationUpdate = millis();
-
+    // Same data path as real telemetry: fill a table and apply its snapshot.
     const auto scenario = Simulation::RuntimeSimulation::scenario();
-    for (size_t sampleIndex = 0; sampleIndex < Simulation::simulatedPidCount(); ++sampleIndex) {
-      const auto sample = Simulation::simulatedPidValue(sampleIndex, millis(), scenario);
-
-      char value[16];
-      snprintf(value, sizeof(value), sample.decimals == 0 ? "%.0f" : "%.1f", static_cast<double>(sample.value));
-      upsertValue(sample.type,
-                  sample.key,
-                  sample.name,
-                  strcmp(sample.status, "OK") == 0 ? value : "N/A",
-                  sample.unit,
-                  sample.status,
-                  static_cast<uint32_t>(internalSimulationIndex + sampleIndex + 1));
+    static LiveData::LiveValueTable table;
+    table.setSimulated(true);
+    for (std::size_t sampleIndex = 0; sampleIndex < Simulation::simulatedPidCount(); ++sampleIndex) {
+      const auto sample = Simulation::simulatedPidValue(sampleIndex, now, scenario);
+      LiveData::Metric metric;
+      if (!LiveData::metricForName(sample.name, metric)) continue;
+      if (std::strcmp(sample.status, "OK") == 0) table.update(metric, sample.value, now);
+      else if (std::strcmp(sample.status, "UNSUPPORTED") == 0) table.markUnsupported(metric);
     }
+    live().apply(table.snapshot(now), now);
 
-    internalSimulationIndex += Simulation::simulatedPidCount();
-    runtime().lastReceivedAt = millis();
-    runtime().lastHeartbeatAt = millis();
+    runtime().lastReceivedAt = now;
+    runtime().lastHeartbeatAt = now;
     runtime().lastHeartbeatSequence = static_cast<uint32_t>(internalSimulationIndex);
     const auto isoTp = Simulation::buildIsoTpSequence(scenario);
     upsertValue("STATUS", "CAN", "CAN", "SIMULATED", "", "OK", internalSimulationIndex);
@@ -104,3 +106,8 @@ namespace DisplaySimulation {
                 internalSimulationIndex + 6);
   }
 }
+#else
+namespace DisplaySimulation {
+void update() {}
+}
+#endif

@@ -18,7 +18,9 @@ void test_buffer_limits() {
 }
 
 void test_sender_timing() {
-    TEST_ASSERT_TRUE(SenderConfig::ObdPollIntervalMs >= 50);
+    TEST_ASSERT_TRUE(SenderConfig::FastPidIntervalMs >= 50);
+    TEST_ASSERT_TRUE(SenderConfig::SlowPidIntervalMs > SenderConfig::FastPidIntervalMs);
+    TEST_ASSERT_TRUE(SenderConfig::LiveSnapshotIntervalMs <= 250);
     TEST_ASSERT_TRUE(SenderConfig::ObdResponseTimeoutMs >= SenderConfig::ObdTxTimeoutMs);
     TEST_ASSERT_TRUE(SenderConfig::PollingRateMs <= 50);
     TEST_ASSERT_TRUE(SenderConfig::MaxCanFramesPerTick > 0);

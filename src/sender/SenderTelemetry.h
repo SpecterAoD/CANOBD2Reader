@@ -1,7 +1,14 @@
 #pragma once
 
+// Single ESP-NOW send path of the sender. Text packets carry status and
+// diagnostic messages ("TYPE,KEY,NAME,VALUE,UNIT,STATUS"), binary packets the
+// live snapshot. Every packet gets the next sequence number.
+
 #include <Arduino.h>
+#include <cstddef>
 #include <cstdint>
+
+#include "TelemetryPacket.h"
 
 namespace SenderTelemetry {
 
@@ -15,6 +22,9 @@ void send(const char* type,
           const char* status);
 
 void sendStatus(const char* key, const char* value, const char* status);
+
+// Binary payload (e.g. LiveData snapshot); shares sequence and statistics.
+void sendBinary(Telemetry::PacketType type, const uint8_t* data, std::size_t length);
 
 uint32_t sequence();
 uint32_t sendOkCount();

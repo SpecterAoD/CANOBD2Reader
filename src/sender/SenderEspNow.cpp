@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include "Logger.h"
-#include "AuthHelpers.h"
+#include "DeviceSecrets.h"
 #include "config/NetworkConfig.h"
 
 namespace {
@@ -34,11 +34,12 @@ bool begin() {
     readyState = false;
     Logger::debug("[ESP-NOW] Initialisiere Sender-Transport");
 
-    const String securityWarning = WebSecurity::espNowSecurityWarning();
-    if (SecurityConfig::BlockNetworkFeaturesOnPlaceholderSecrets && securityWarning.length() > 0) {
-        Logger::alarm(("[ESP-NOW] Start blockiert: " + securityWarning).c_str());
+    // Never run the link with a publicly known key or without a peer MAC.
+    if (!Security::provisioned()) {
+        Logger::alarm((String("[ESP-NOW] Start blockiert: ") + Security::problemText()).c_str());
         return false;
     }
+    const Security::DeviceSecrets& secrets = Security::secrets();
 
     // Keep the management SoftAP alive while ESP-NOW is active. Switching back
     // to WIFI_STA here can make the sender web network disappear after boot.
@@ -52,13 +53,13 @@ bool begin() {
     }
 
     memset(&peerInfo, 0, sizeof(peerInfo));
-    memcpy(peerAddress, NetworkConfig::DisplayPeerMac, sizeof(peerAddress));
+    memcpy(peerAddress, secrets.displayMac, sizeof(peerAddress));
     memcpy(peerInfo.peer_addr, peerAddress, sizeof(peerAddress));
     peerInfo.channel = NetworkConfig::EspNowChannel;
     peerInfo.encrypt = NetworkConfig::UseEspNowEncryption;
 
     if (NetworkConfig::UseEspNowEncryption) {
-        memcpy(peerInfo.lmk, NetworkConfig::EspNowAesKey, sizeof(peerInfo.lmk));
+        memcpy(peerInfo.lmk, secrets.espNowKey, sizeof(peerInfo.lmk));
     }
 
     if (esp_now_add_peer(&peerInfo) != ESP_OK) {

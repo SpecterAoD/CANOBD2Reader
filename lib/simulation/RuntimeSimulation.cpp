@@ -1,4 +1,6 @@
 #include "RuntimeSimulation.h"
+
+#include "common_config.h"
 #include "config/SimulationConfig.h"
 
 namespace Simulation {
@@ -9,7 +11,7 @@ Scenario scenarioState = SimulationConfig::DefaultScenario;
 }
 
 void RuntimeSimulation::resetForBoot() {
-    enabledState = SimulationConfig::EnableSimulationByDefault;
+    enabledState = CANOBD2_DEV_TOOLS && SimulationConfig::EnableSimulationByDefault;
     scenarioState = SimulationConfig::DefaultScenario;
 }
 
@@ -17,12 +19,13 @@ bool RuntimeSimulation::enabled() {
     return enabledState;
 }
 
+// Release builds (CANOBD2_DEV_TOOLS=0) can never switch to simulated data.
 void RuntimeSimulation::setEnabled(bool value) {
-    enabledState = value;
+    enabledState = CANOBD2_DEV_TOOLS && value;
 }
 
 bool RuntimeSimulation::toggle() {
-    enabledState = !enabledState;
+    setEnabled(!enabledState);
     return enabledState;
 }
 

@@ -1,7 +1,7 @@
 #include "SenderSimulationScheduler.h"
 
 #include <Arduino.h>
-#include <string.h>
+#include <cstring>
 
 #include "IsoTpSimulation.h"
 #include "ObdSimulation.h"
@@ -12,11 +12,12 @@
 #endif
 #include "RuntimeSimulation.h"
 #include "SenderTelemetry.h"
+#include "LiveData.h"
+#include "SenderLiveData.h"
 #include "config/SenderConfig.h"
 
 namespace {
 uint32_t lastSimulationSendAt = 0;
-size_t simulationSampleIndex = 0;
 size_t simulationStatusIndex = 0;
 
 const char* simulatedPowerState(Simulation::Scenario scenario) {
@@ -144,7 +145,6 @@ namespace SenderSimulationScheduler {
 
 void reset() {
     lastSimulationSendAt = 0;
-    simulationSampleIndex = 0;
     simulationStatusIndex = 0;
 }
 
@@ -153,28 +153,19 @@ void tick(uint32_t nowMs) {
     lastSimulationSendAt = nowMs;
 
     const auto scenario = Simulation::RuntimeSimulation::scenario();
-    const size_t simulatedPidCount = Simulation::simulatedPidCount();
-    const size_t valuesPerTick = SenderConfig::SimulationValuesPerTick == 0 ? 1 : SenderConfig::SimulationValuesPerTick;
-
-    for (size_t index = 0; index < valuesPerTick; ++index) {
-        const auto simulated = Simulation::simulatedPidValue(simulationSampleIndex, nowMs, scenario);
-
-        char value[16];
-        snprintf(value, sizeof(value),
-                 simulated.decimals == 0 ? "%.0f" : "%.1f",
-                 static_cast<double>(simulated.value));
-
-        SenderTelemetry::send(simulated.type,
-                              simulated.key,
-                              simulated.name,
-                              strcmp(simulated.status, "OK") == 0 ? value : "N/A",
-                              simulated.unit,
-                              simulated.status);
-
-        ++simulationSampleIndex;
-        if (simulatedPidCount > 0) {
-            simulationSampleIndex %= simulatedPidCount;
+    // Simulated live values go into the same table the OBD poller fills, so
+    // the display path is identical to a real drive.
+    SenderLiveData::setSimulated(true);
+    for (std::size_t index = 0; index < Simulation::simulatedPidCount(); ++index) {
+        const auto simulated = Simulation::simulatedPidValue(index, nowMs, scenario);
+        LiveData::Metric metric;
+        if (!LiveData::metricForName(simulated.name, metric)) continue;
+        if (std::strcmp(simulated.status, "OK") == 0) {
+            SenderLiveData::update(metric, simulated.value);
+        } else if (std::strcmp(simulated.status, "UNSUPPORTED") == 0) {
+            SenderLiveData::markUnsupported(metric);
         }
+        // TIMEOUT: value is simply not refreshed and ages on the display.
     }
 
     // Status frames are sent as a round-robin instead of one large burst. This

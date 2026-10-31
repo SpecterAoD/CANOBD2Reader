@@ -1,18 +1,10 @@
-/*============================================================================
-	 CAN_OBD2_Gateway
-	 Version: 0.0.1 
-	 
-	 Dieses Projekt basiert auf dem CAN-Bus Gateway von MrDIY.ca.
-   Die Originalversion wurde als Grundlage verwendet und anschließend an die 
-   spezifischen Anforderungen des Projekts angepasst.
-
-   Ursprüngliches Repository:
-   MrDIY CAN-Bus Gateway https://gitlab.com/MrDIYca/canabus
-
-============================================================================= */
+// CANOBD2 sender: reads OBD-II/UDS over CAN (TWAI) and sends live values and
+// status to the display via encrypted ESP-NOW.
+// Originally based on the MrDIY CAN-Bus Gateway (https://gitlab.com/MrDIYca/canabus).
 
 // region ================================== Includes ==================================
 #include <Arduino.h>
+#include <WiFi.h>
 #include "SenderApp.h"
 #include <string.h>
 #include "common_config.h"
@@ -23,7 +15,9 @@
 #include "RuntimeSimulation.h"
 #include "CANHandler.h"
 #include "CanRouterHub.h"
-#include "OTAHandler.h"
+#include "BootValidation.h"
+#include "DeviceSecrets.h"
+#include "SenderLiveData.h"
 #include "SenderPower.h"
 #include "WebConsoleHandler.h"
 #include "DiagnosticLog.h"
@@ -144,7 +138,6 @@ void tickPower(const Runtime::SenderLoopState& runtimeState) {
 
 Runtime::SenderRuntimeCoordinator::Services makeCoordinatorServices() {
   Runtime::SenderRuntimeCoordinator::Services services{};
-  services.handleOta = OTAHandler::handleOTA;
   services.handleWeb = WebConsoleHandler::handle;
   services.updateWebStatus = updateWebConsoleStatus;
   services.updateLedTestButton = updateLedTestButton;
@@ -173,8 +166,10 @@ Runtime::SenderRuntimeCoordinator coordinator(
 void SenderApp::begin() {
   Simulation::RuntimeSimulation::resetForBoot();
   Serial.begin(ProjectConfig::Baudrate);
-  debugln(ProjectConfig::Baudrate);
   DiagnosticLog::begin();
+  Security::begin(true);
+  DiagnosticLog::appendf("[BOOT] mac=%s secrets=%s %s", WiFi.macAddress().c_str(),
+                         Security::sourceName(Security::source()), Security::problemText());
   DiagnosticLog::appendf("[BOOT] Sender firmware=%s protocol=%u target=%s",
                          ProjectConfig::FirmwareVersion,
                          ProjectConfig::ProtocolVersion,
@@ -187,24 +182,18 @@ void SenderApp::begin() {
   SenderSimulationScheduler::reset();
   SenderTelemetry::reset();
   SenderUdsScheduler::reset();
+  SenderLiveData::reset();
 
   SenderLedButton::begin();
   pinMode(kVoltageDividerPin, INPUT);
-
-  debugln("\n------------------------");
-  debugln("         SpecterAoD");
-  debugln("       CAN OBD2 SHIELD");
-  debugln("      based on MrDiy.ca");
-  debugln("https://gitlab.com/MrDIYca/canabus");
-  debugln("------------------------");
 
   const bool espNowReady = SenderEspNow::begin();
   const bool canDriverReady = Simulation::RuntimeSimulation::enabled() || CANHandler::init();
   CanRouting::setFramePump(CANHandler::processIncoming);
   coordinator.resetForBoot(millis(), kCanIdleTimeoutMs, espNowReady, canDriverReady);
 
+  WebConsoleHandler::setInstallBlocker(SenderPower::isCarRunning);
   WebConsoleHandler::begin();
-  OTAHandler::initOTA();
 
   if (!espNowReady) {
     SenderTelemetry::setLastError("ESP-NOW Initialisierung fehlgeschlagen");
@@ -240,7 +229,12 @@ void SenderApp::begin() {
 
 // region ================================== loop ==================================
 void SenderApp::tick() {
-  coordinator.tick(millis());
-  SenderCapabilityScanner::tick(millis());
+  const uint32_t now = millis();
+  coordinator.tick(now);
+  SenderLiveData::tick(now);
+  BootValidation::tick(now);
+#if CANOBD2_DEV_TOOLS
+  SenderCapabilityScanner::tick(now);
+#endif
 }
 // End region ================================== loop ==================================

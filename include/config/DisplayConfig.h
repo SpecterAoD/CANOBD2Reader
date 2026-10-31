@@ -11,28 +11,26 @@ constexpr uint16_t PowerStabilizeMs = 60;
 constexpr uint8_t BacklightPin = 38;
 constexpr uint8_t BacklightOn = 255;
 constexpr uint8_t BacklightSleep = 0;
+// T-Display S3: GPIO0 = BOOT button (next page), GPIO14 = second button (previous page).
 constexpr uint8_t NextPageButtonPin = 0;
+constexpr uint8_t PreviousPageButtonPin = 14;
 constexpr uint8_t PageCount = 8;
 constexpr uint8_t NormalPageCount = 4;
 constexpr uint8_t MainPageIndex = 0;
 constexpr uint32_t LongPressMs = 1200;
 constexpr uint32_t VeryLongPressMs = 3000;
-constexpr bool EnableGraphPages = false;
-
-constexpr uint32_t ScreenRefreshMs = 80;
-constexpr uint32_t RefreshMs = ScreenRefreshMs;
-constexpr uint32_t ForceFullRenderMs = 1200;
-constexpr bool UseSegmentValueRenderer = false;
-constexpr bool EnableStartupValueOverlay = false;
-constexpr uint32_t StartupValueOverlayMs = 10000;
-constexpr float SpeedSmoothingAlpha = 0.65f;
-constexpr float RpmSmoothingAlpha = 0.60f;
-constexpr uint32_t ValueTimeoutMs = 3000;
-constexpr uint32_t ConnectionTimeoutMs = 3000;
+// Frame rate of the sprite renderer. Every frame is drawn off-screen and
+// pushed in one go, so a higher rate does not cause flicker.
+constexpr uint32_t RenderIntervalMs = 50;
+// Smoothing of the big RPM/speed numbers (time constant).
+constexpr float FastValueSmoothingMs = 120.0f;
+// Status/diagnostic texts (DTC, VIN, UDS ...) are sent rarely (30 s - 2 min).
+constexpr uint32_t StatusTimeoutMs = 150000;
 constexpr uint32_t EspNowTimeoutMs = 3000;
 constexpr uint32_t ObdTimeoutMs = 5000;
 constexpr uint32_t CanTimeoutMs = 5000;
-constexpr uint32_t ButtonDebounceMs = 250;
+// Input must be stable this long; normal taps (50-200 ms) count as presses.
+constexpr uint32_t ButtonDebounceMs = 30;
 constexpr std::size_t TelemetryQueueLength = 16;
 constexpr std::size_t TelemetryValueCapacity = 64;
 
@@ -46,7 +44,6 @@ constexpr float VoltageWarnHigh = 14.8f;
 constexpr float VoltageCriticalHigh = 15.2f;
 constexpr uint16_t RpmWarn = 4200;
 constexpr uint16_t RpmCritical = 5000;
-constexpr uint16_t RpmMin = 0;
 constexpr uint16_t RpmMax = 6000;
 constexpr float BoostWarnBar = 0.8f;
 constexpr float BoostCriticalBar = 1.2f;

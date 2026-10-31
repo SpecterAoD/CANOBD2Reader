@@ -11,21 +11,20 @@
 #include "VinDecoder.h"
 #include "IsoTpTypes.h"
 #include "WebConsoleHandler.h"
+#include "LiveData.h"
+#include "PidPollPlanner.h"
+#include "SenderLiveData.h"
 
 namespace {
 uint32_t lastObdPollAt = 0;
-uint32_t lastFastLivePollAt = 0;
-uint32_t lastSlowLivePollAt = 0;
 uint32_t lastSupportedPidRefreshAt = 0;
 uint32_t lastDtcQueryAt = 0;
 uint32_t lastVinQueryAt = 0;
 bool supportedInitialized = false;
-std::size_t nextFastPidIndex = 0;
-std::size_t nextSlowPidIndex = 0;
+Obd::PidPollPlanner planner;
 uint32_t supportedPids01_20 = 0;
 uint32_t supportedPids21_40 = 0;
 uint32_t supportedPids41_60 = 0;
-bool unsupportedPidReported[ObdConfig::ObdPidCount] = {false};
 String dtcText = "--";
 String vinText = "--";
 
@@ -74,56 +73,30 @@ bool isPidSupported(byte pid) {
     return (mask & (1UL << (32 - offset))) != 0;
 }
 
-std::size_t requestedPidIndex(byte pid) {
-    for (std::size_t index = 0; index < ObdConfig::ObdPidCount; ++index) {
-        if (ObdConfig::RequestedPids[index] == pid) return index;
+void buildPlanner() {
+    planner.clear();
+    for (std::size_t index = 0; index < ObdConfig::FastLivePidCount; ++index) {
+        planner.add(ObdConfig::FastLivePids[index], SenderConfig::FastPidIntervalMs);
     }
-    return ObdConfig::ObdPidCount;
+    for (std::size_t index = 0; index < ObdConfig::SlowLivePidCount; ++index) {
+        planner.add(ObdConfig::SlowLivePids[index], SenderConfig::SlowPidIntervalMs);
+    }
 }
 
-void reportUnsupportedPidOnce(byte pid, SenderCallbacks::SendTelemetry sendTelemetry) {
-    const std::size_t pidIndex = requestedPidIndex(pid);
-    if (pidIndex >= ObdConfig::ObdPidCount || unsupportedPidReported[pidIndex]) return;
-
-    if (sendTelemetry != nullptr) {
-        char pidHex[4];
-        snprintf(pidHex, sizeof(pidHex), "%02X", pid);
-        sendTelemetry("OBD", pidHex, getPIDName(pid), "N/A", "", "UNSUPPORTED");
-    }
-    unsupportedPidReported[pidIndex] = true;
-}
-
-bool queryNextPidFromList(const uint8_t* pids,
-                          std::size_t count,
-                          std::size_t& nextIndex,
-                          uint32_t nowMs,
-                          uint32_t& lastCanMessageAt,
-                          uint32_t& lastObdResponseAt,
-                          bool& canBusActive,
-                          SenderCallbacks::SendTelemetry sendTelemetry) {
-    if (pids == nullptr || count == 0) return false;
-
-    std::size_t inspectedPids = 0;
-    while (inspectedPids < count) {
-        const std::size_t pidIndex = nextIndex;
-        nextIndex = (nextIndex + 1) % count;
-        ++inspectedPids;
-
-        const byte pid = pids[pidIndex];
-        if (!isPidSupported(pid)) {
-            reportUnsupportedPidOnce(pid, sendTelemetry);
-            continue;
+// Applies the ECU's supported-PID masks: unsupported PIDs are no longer polled
+// and shown as "nicht unterstuetzt" on the display instead of "wartet".
+void applySupportMasks() {
+    auto apply = [](const uint8_t* pids, std::size_t count) {
+        for (std::size_t index = 0; index < count; ++index) {
+            const byte pid = pids[index];
+            const bool supported = isPidSupported(pid);
+            planner.setSupported(pid, supported);
+            LiveData::Metric metric;
+            if (!supported && LiveData::metricForPid(pid, metric)) SenderLiveData::markUnsupported(metric);
         }
-
-        if (OBD2Handler::requestAndSendPID(pid)) {
-            lastObdResponseAt = nowMs;
-            lastCanMessageAt = nowMs;
-            canBusActive = true;
-        }
-        return true;
-    }
-
-    return false;
+    };
+    apply(ObdConfig::FastLivePids, ObdConfig::FastLivePidCount);
+    apply(ObdConfig::SlowLivePids, ObdConfig::SlowLivePidCount);
 }
 
 void refreshSupportedPids(uint32_t nowMs,
@@ -145,6 +118,7 @@ void refreshSupportedPids(uint32_t nowMs,
     }
 
     supportedInitialized = ok;
+    if (ok) applySupportMasks();
     Obd::Diagnostics::setSupportedPidMasks(supportedPids01_20,
                                            supportedPids21_40,
                                            supportedPids41_60,
@@ -252,20 +226,16 @@ namespace SenderObdScheduler {
 
 void reset() {
     lastObdPollAt = 0;
-    lastFastLivePollAt = 0;
-    lastSlowLivePollAt = 0;
     lastSupportedPidRefreshAt = 0;
     lastDtcQueryAt = 0;
     lastVinQueryAt = 0;
     supportedInitialized = false;
-    nextFastPidIndex = 0;
-    nextSlowPidIndex = 0;
+    buildPlanner();
     supportedPids01_20 = 0;
     supportedPids21_40 = 0;
     supportedPids41_60 = 0;
     dtcText = "--";
     vinText = "--";
-    for (bool& reported : unsupportedPidReported) reported = false;
 }
 
 void tick(uint32_t nowMs,
@@ -278,46 +248,37 @@ void tick(uint32_t nowMs,
     if (nowMs - lastObdPollAt < SenderConfig::PollingRateMs) return;
     lastObdPollAt = nowMs;
 
+    // CAN/OBD state reaches the display with the 1 s heartbeat; sending it here
+    // (every 10 ms) flooded the radio link.
     canBusActive = (nowMs - lastCanMessageAt) <= SenderConfig::CanIdleTimeoutMs;
-    if (sendStatus != nullptr) {
-        sendStatus("CAN", canBusActive ? "ACTIVE" : "IDLE", canBusActive ? "OK" : "TIMEOUT");
-    }
 
-    if (!supportedInitialized ||
-        nowMs - lastSupportedPidRefreshAt >= SenderConfig::SupportedPidRefreshMs) {
+    // Without ECU (ignition off) every attempt blocks for the response timeout,
+    // so retry the supported-PID query only every SupportedPidRetryMs.
+    const uint32_t refreshInterval = supportedInitialized ? SenderConfig::SupportedPidRefreshMs
+                                                          : SenderConfig::SupportedPidRetryMs;
+    if (lastSupportedPidRefreshAt == 0 || nowMs - lastSupportedPidRefreshAt >= refreshInterval) {
         refreshSupportedPids(nowMs, lastCanMessageAt, lastObdResponseAt, canBusActive, sendStatus);
         lastSupportedPidRefreshAt = nowMs;
     }
 
     if (supportedInitialized) {
-        bool livePidQueried = false;
-
-        if (nowMs - lastFastLivePollAt >= SenderConfig::FastLiveObdPollIntervalMs) {
-            livePidQueried = queryNextPidFromList(ObdConfig::FastLivePids,
-                                                  ObdConfig::FastLivePidCount,
-                                                  nextFastPidIndex,
-                                                  nowMs,
-                                                  lastCanMessageAt,
-                                                  lastObdResponseAt,
-                                                  canBusActive,
-                                                  sendTelemetry);
-            lastFastLivePollAt = nowMs;
+        // One live PID per tick keeps the loop responsive (web, ESP-NOW).
+        byte pid = 0;
+        if (planner.next(nowMs, pid)) {
+            if (OBD2Handler::requestAndSendPID(pid)) {
+                lastObdResponseAt = nowMs;
+                lastCanMessageAt = nowMs;
+                canBusActive = true;
+            }
+            planner.markPolled(pid, millis());
         }
-
-        if (!livePidQueried &&
-            nowMs - lastSlowLivePollAt >= SenderConfig::SlowLiveObdPollIntervalMs) {
-            livePidQueried = queryNextPidFromList(ObdConfig::SlowLivePids,
-                                                  ObdConfig::SlowLivePidCount,
-                                                  nextSlowPidIndex,
-                                                  nowMs,
-                                                  lastCanMessageAt,
-                                                  lastObdResponseAt,
-                                                  canBusActive,
-                                                  sendTelemetry);
-            lastSlowLivePollAt = nowMs;
+        // ECU gone (ignition off): stop polling every PID into a timeout and
+        // fall back to the slow supported-PID retry above.
+        if (Obd::Diagnostics::timeoutStreak() >= SenderConfig::TimeoutsBeforeObdIdle) {
+            supportedInitialized = false;
+            lastSupportedPidRefreshAt = nowMs;
+            WebConsoleHandler::log("[OBD] ECU antwortet nicht mehr, Abfrage pausiert");
         }
-    } else if (sendStatus != nullptr) {
-        sendStatus("OBD", "PID_SUPPORT_TIMEOUT", "WARN");
     }
 
     if (nowMs - lastDtcQueryAt >= SenderConfig::DtcQueryIntervalMs) {

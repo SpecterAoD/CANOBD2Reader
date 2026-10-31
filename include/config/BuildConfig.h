@@ -17,8 +17,5 @@ constexpr LogLevel CompileTimeLogLevel = LogLevel::Info;
 constexpr LogLevel CompileTimeLogLevel = static_cast<LogLevel>(CANOBD2_LOG_LEVEL);
 #endif
 
-constexpr bool BluetoothEnabled = CANOBD2_ENABLE_BLUETOOTH;
 constexpr bool SenderWebConsoleEnabled = CANOBD2_ENABLE_SENDER_WEBCONSOLE;
-constexpr bool DisplayOtaEnabled = CANOBD2_ENABLE_DISPLAY_OTA;
-constexpr bool OtaCompatible = CANOBD2_OTA_COMPATIBLE;
 }

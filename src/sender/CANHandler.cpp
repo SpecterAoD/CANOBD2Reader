@@ -1,6 +1,7 @@
 #include "CANHandler.h"
 #include "config/SenderConfig.h"
-#include "Utils.h"
+#include "SenderTelemetry.h"
+#include "Logger.h"
 #include "CANDecoder.h"
 
 bool CANHandler::driverInstalled = false;
@@ -62,8 +63,8 @@ bool CANHandler::init() {
 }
 
 bool CANHandler::configureAlerts() {
-    uint32_t alerts = TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS |
-                      TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL;
+    const uint32_t alerts = TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR |
+                            TWAI_ALERT_RX_QUEUE_FULL | TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED;
 
     if (twai_reconfigure_alerts(alerts, nullptr) != ESP_OK) {
         Logger::debug(" CAN....Alerts.....FAIL");
@@ -103,13 +104,13 @@ void CANHandler::handleMessage(twai_message_t& message) {
     // Raw CAN traffic can be extremely busy on a real vehicle. Keep it behind
     // the explicit sender flag so OBD polling and heartbeat telemetry do not
     // get starved by unrelated bus frames.
-    if (SenderConfig::SendRawData) {
+    if (SenderConfig::SendRawData && CANOBD2_DEV_TOOLS) {
         const uint32_t now = millis();
         if (now - lastRawCanTelemetryAtMs >= SenderConfig::RawCanTelemetryIntervalMs) {
             lastRawCanTelemetryAtMs = now;
             CANDecoder::DecodedFrame decoded = CANDecoder::decode(message);
-            Utils::sendTelemetry("CAN", "RAW", "LastCAN", decoded.raw, "", "OK");
-            Utils::sendTelemetry("CAN", "HINT", "CANHint", decoded.hint, "", "OK");
+            SenderTelemetry::send("CAN", "RAW", "LastCAN", decoded.raw, "", "OK");
+            SenderTelemetry::send("CAN", "HINT", "CANHint", decoded.hint, "", "OK");
         }
         Logger::canFrame(message);
     }
