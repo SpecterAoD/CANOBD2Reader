@@ -17,18 +17,13 @@ constexpr uint8_t NormalPageCount = 4;
 constexpr uint8_t MainPageIndex = 0;
 constexpr uint32_t LongPressMs = 1200;
 constexpr uint32_t VeryLongPressMs = 3000;
-constexpr bool EnableGraphPages = false;
-
-constexpr uint32_t ScreenRefreshMs = 80;
-constexpr uint32_t RefreshMs = ScreenRefreshMs;
-constexpr uint32_t ForceFullRenderMs = 1200;
-constexpr bool UseSegmentValueRenderer = false;
-constexpr bool EnableStartupValueOverlay = false;
-constexpr uint32_t StartupValueOverlayMs = 10000;
-constexpr float SpeedSmoothingAlpha = 0.65f;
-constexpr float RpmSmoothingAlpha = 0.60f;
-constexpr uint32_t ValueTimeoutMs = 3000;
-constexpr uint32_t ConnectionTimeoutMs = 3000;
+// Frame rate of the sprite renderer. Every frame is drawn off-screen and
+// pushed in one go, so a higher rate does not cause flicker.
+constexpr uint32_t RenderIntervalMs = 50;
+// Smoothing of the big RPM/speed numbers (time constant).
+constexpr float FastValueSmoothingMs = 120.0f;
+// Status/diagnostic texts (DTC, VIN, UDS ...) are sent rarely (30 s - 2 min).
+constexpr uint32_t StatusTimeoutMs = 150000;
 constexpr uint32_t EspNowTimeoutMs = 3000;
 constexpr uint32_t ObdTimeoutMs = 5000;
 constexpr uint32_t CanTimeoutMs = 5000;

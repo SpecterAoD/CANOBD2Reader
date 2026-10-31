@@ -22,6 +22,8 @@ constexpr uint32_t WakeupDebounceMs = 2000;
 constexpr bool DimDisplayWhileIdle = true;
 constexpr uint8_t IdleBrightnessPercent = 25;
 constexpr bool EnableActivityScore = true;
+// A button press counts as user activity for this long.
+constexpr uint32_t UserActivityWindowMs = 3000;
 
 // The user's current vehicle is a VW Tiguan III / MQB Evo. These cars can keep
 // ECUs and bus traffic alive for several minutes after ignition-off, and they

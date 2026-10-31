@@ -1,10 +1,17 @@
 #pragma once
 
+// Static web assets shared by sender and display.
 namespace WebAssets {
 
-/// Shared scenario list used by sender and display web pages.
-/// Keeping it in one place prevents the browser UI from drifting away from the
-/// simulation enum names used by the firmware.
+// Scenario names for the simulation selector. Must match Simulation::Scenario.
 const char* simulationScenariosJsonArray();
+
+// GitHub update / WiFi / firmware upload page. "%%DEVICE%%" is replaced by
+// the device name. All dynamic values are inserted via textContent or an
+// escaping helper, never as raw HTML.
+const char* githubUpdatePage();
+
+// Small JS helper block (esc(), api()) included by the device main pages.
+const char* commonScript();
 
 } // namespace WebAssets

@@ -35,8 +35,7 @@ void test_display_config_page_bounds() {
 void test_network_config_esp_now() {
     TEST_ASSERT_GREATER_THAN(0, NetworkConfig::EspNowChannel);
     TEST_ASSERT_LESS_OR_EQUAL(14, NetworkConfig::EspNowChannel);
-    TEST_ASSERT_NOT_NULL(NetworkConfig::DisplayPeerMac);
-    TEST_ASSERT_NOT_NULL(NetworkConfig::SenderAllowedMac);
+    TEST_ASSERT_TRUE(NetworkConfig::UseEspNowEncryption);
 }
 
 void test_simulation_is_off_by_default() {

@@ -1,34 +1,28 @@
 #pragma once
 
+// HTTP authentication for the management web servers (sender and display).
+// Accepts HTTP Basic auth (browser) or the API token (scripts) via the
+// "X-API-Token" header or "Authorization: Bearer <token>". Tokens in the URL
+// are not accepted because they end up in browser history and logs.
+
 #include <cstddef>
-#include "config/SecurityConfig.h"
 
 #if defined(ARDUINO)
   #include <Arduino.h>
   #include <WebServer.h>
-#else
-  #include <string>
-  using String = std::string;
 #endif
 
 namespace WebSecurity {
 
+// Compares without early exit so response timing does not leak the secret.
 bool constantTimeEquals(const char* left, const char* right);
-bool authenticationEnabled();
-const char* username();
-const char* password();
-const char* apiToken();
 bool isConfiguredToken(const char* token);
-String senderManagementSecurityWarning();
-String displayManagementSecurityWarning();
-String espNowSecurityWarning();
-String targetSecurityWarning(const char* target, bool includeEspNow = true);
-bool senderManagementConfigurationSafe();
-bool displayManagementConfigurationSafe();
-bool espNowConfigurationSafe();
 
 #if defined(ARDUINO)
+// Headers the WebServer must collect for token authentication.
+void collectAuthHeaders(WebServer& server);
+// Returns true if the request may proceed; otherwise a 401 was already sent.
 bool requireAuthentication(WebServer& server, bool protectEndpoint = true);
 #endif
 
-}
+} // namespace WebSecurity

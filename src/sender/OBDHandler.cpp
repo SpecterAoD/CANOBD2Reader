@@ -1,5 +1,6 @@
 #include "OBDHandler.h"
-#include "Utils.h"
+#include "LiveData.h"
+#include "SenderLiveData.h"
 #include "PIDs.h"
 #include "PID_Converter.h"
 #include "IsoTpHandler.h"
@@ -30,15 +31,10 @@ void updatePhysicalFallbackAfterFailure() {
     Logger::warn("[OBD] Functional requests timed out repeatedly; switching to physical request id=0x7E0");
 }
 
-void sendBoostPressureIfReady() {
+void updateBoostPressureIfReady() {
     if (!hasMapKpa) return;
-
-    const float boostBar = Obd::calculateBoostPressureBarWithFallback(lastMapKpa,
-                                                                      hasBarometricKpa,
-                                                                      lastBarometricKpa);
-    char valueText[16];
-    snprintf(valueText, sizeof(valueText), "%.2f", static_cast<double>(boostBar));
-    Utils::sendTelemetry("OBD", "BOOST", "BoostPressureBar", valueText, "bar", "OK");
+    SenderLiveData::update(LiveData::Metric::BoostPressure,
+                           Obd::calculateBoostPressureBarWithFallback(lastMapKpa, hasBarometricKpa, lastBarometricKpa));
 }
 }
 
@@ -106,13 +102,19 @@ void OBD2Handler::calcConsumption(uint8_t pid, float value) {
     if (pid == VEHICLE_SPEED) Runtime::SenderRuntimeState::updateSpeed(value);
     if (pid == ENGINE_FUEL_RATE) Runtime::SenderRuntimeState::updateFuelRate(value);
 
-    if (!Runtime::SenderRuntimeState::hasConsumptionInput()) return;
+    // Instantaneous consumption only makes sense while moving.
+    if (SenderLiveData::has(LiveData::Metric::FuelRate) && SenderLiveData::has(LiveData::Metric::Speed)) {
+        const float speed = SenderLiveData::value(LiveData::Metric::Speed);
+        if (speed >= 5.0f) {
+            SenderLiveData::update(LiveData::Metric::InstantConsumption,
+                                   SenderLiveData::value(LiveData::Metric::FuelRate) * 100.0f / speed);
+        }
+    }
 
+    if (!Runtime::SenderRuntimeState::hasConsumptionInput()) return;
     float avg = 0.0f;
     if (Runtime::SenderRuntimeState::addConsumptionSample(avg)) {
-        char avgText[16];
-        snprintf(avgText, sizeof(avgText), "%.2f", static_cast<double>(avg));
-        Utils::sendTelemetry("FUEL", "AVG", "AverageConsumption", avgText, "L/100km", "OK");
+        SenderLiveData::update(LiveData::Metric::AverageConsumption, avg);
     }
 }
 
@@ -130,67 +132,47 @@ void OBD2Handler::updateBoostPressure(uint8_t pid, float value) {
     if (pid == INTAKE_MANIFOLD_ABS_PRESSURE) {
         lastMapKpa = value;
         hasMapKpa = true;
-        sendBoostPressureIfReady();
+        updateBoostPressureIfReady();
         return;
     }
 
     if (pid == ABS_BAROMETRIC_PRESSURE) {
         lastBarometricKpa = value;
         hasBarometricKpa = true;
-        sendBoostPressureIfReady();
+        updateBoostPressureIfReady();
     }
 }
 
 bool OBD2Handler::requestAndSendPID(uint8_t pid) {
     if (!sendRequest(read_LiveData, pid)) {
-        const String message = String("[OBD] Timeout waiting for ECU response pid=0x") +
-                               String(pid, HEX) + " send failed";
-        Logger::warn(message.c_str());
-        Utils::sendOBDError(pid, getPIDName(pid));
+        Logger::warn((String("[OBD] Senden fehlgeschlagen pid=0x") + String(pid, HEX)).c_str());
         return false;
     }
 
     uint8_t responseData[8];
     uint8_t responseLen = 0;
-
-    if (receiveResponse(read_LiveData, pid, responseData, responseLen)) {
-        Logger::obdFrame(pid, responseData, responseLen);
-        if constexpr (SenderConfig::SendRawDataOnly) {
-            Utils::sendRawOBDData(pid, responseData, responseLen);
-        } else {
-            PIDResult result = convertPID(pid, responseData, responseLen);
-            updateActivityMetrics(pid, result.value);
-
-            if (pid == VEHICLE_SPEED || pid == ENGINE_FUEL_RATE) {
-                calcConsumption(pid, result.value);
-            }
-
-            if (pid == INTAKE_MANIFOLD_ABS_PRESSURE || pid == ABS_BAROMETRIC_PRESSURE) {
-                updateBoostPressure(pid, result.value);
-            }
-
-            Logger::obdValue(getPIDName(pid), result.value, result.unit);
-            Utils::sendOBDValue(pid, getPIDName(pid), result.value, result.unit);
-        }
-        return true;
-    } else {
+    if (!receiveResponse(read_LiveData, pid, responseData, responseLen)) {
+        // No text packet: the display sees a stale value via the snapshot age,
+        // details are in the OBD diagnostics counters and the log.
         const String message = lastResponseWasNegative()
-            ? String("[OBD] Negative response pid=0x") + String(pid, HEX) +
-              " service=0x" + String(lastNegativeService(), HEX) +
-              " nrc=0x" + String(lastNegativeCode(), HEX)
-            : String("[OBD] Timeout waiting for ECU response pid=0x") + String(pid, HEX);
+            ? String("[OBD] Negative Antwort pid=0x") + String(pid, HEX) + " nrc=0x" + String(lastNegativeCode(), HEX)
+            : String("[OBD] Timeout pid=0x") + String(pid, HEX);
         Logger::warn(message.c_str());
-        if (lastResponseWasNegative()) {
-            char pidHex[4];
-            char nrcText[24];
-            snprintf(pidHex, sizeof(pidHex), "%02X", pid);
-            snprintf(nrcText, sizeof(nrcText), "NRC 0x%02X", lastNegativeCode());
-            Utils::sendTelemetry("OBD", pidHex, getPIDName(pid), nrcText, "", "ERROR");
-        } else {
-            Utils::sendOBDError(pid, getPIDName(pid));
-        }
         return false;
     }
+
+    Logger::obdFrame(pid, responseData, responseLen);
+    const PIDResult result = convertPID(pid, responseData, responseLen);
+    updateActivityMetrics(pid, result.value);
+
+    LiveData::Metric metric;
+    if (LiveData::metricForPid(pid, metric)) SenderLiveData::update(metric, result.value);
+
+    if (pid == VEHICLE_SPEED || pid == ENGINE_FUEL_RATE) calcConsumption(pid, result.value);
+    if (pid == INTAKE_MANIFOLD_ABS_PRESSURE || pid == ABS_BAROMETRIC_PRESSURE) updateBoostPressure(pid, result.value);
+
+    Logger::obdValue(getPIDName(pid), result.value, result.unit);
+    return true;
 }
 
 bool OBD2Handler::lastResponseWasNegative() {

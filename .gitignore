@@ -59,3 +59,6 @@ dist/
 
 # Folder
 ino/
+
+# Python venv (scripts/tests)
+.venv/

@@ -7,7 +7,7 @@
   #include <WiFi.h>
 #endif
 
-namespace Network {
+namespace WifiNet {
 namespace {
 String currentSsid;
 String lastError;
@@ -187,4 +187,4 @@ String WifiStationManager::statusJson() {
     return json;
 }
 
-} // namespace Network
+} // namespace WifiNet

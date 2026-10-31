@@ -1,5 +1,7 @@
 #include "UpdateManifest.h"
 
+#include "FirmwareVersion.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -9,10 +11,6 @@ namespace FirmwareUpdate {
 
 namespace {
 
-std::string trimVersion(std::string value) {
-    if (!value.empty() && (value[0] == 'V' || value[0] == 'v')) value.erase(value.begin());
-    return value;
-}
 
 bool equalsIgnoreCase(const char* a, const char* b) {
     if (a == nullptr || b == nullptr) return false;
@@ -135,23 +133,6 @@ void parseEntries(const std::string& json, const char* key, const char* target, 
     }
 }
 
-std::vector<int> numericParts(const std::string& value) {
-    std::string v = trimVersion(value);
-    std::vector<int> parts;
-    size_t pos = 0;
-    while (pos < v.size() && parts.size() < 4) {
-        if (!std::isdigit(static_cast<unsigned char>(v[pos]))) break;
-        char* end = nullptr;
-        long n = std::strtol(v.c_str() + pos, &end, 10);
-        parts.push_back(static_cast<int>(n));
-        pos = static_cast<size_t>(end - v.c_str());
-        if (pos < v.size() && v[pos] == '.') ++pos;
-        else break;
-    }
-    while (parts.size() < 4) parts.push_back(0);
-    return parts;
-}
-
 } // namespace
 
 bool parseManifest(const std::string& json, UpdateManifest& manifest) {
@@ -161,19 +142,6 @@ bool parseManifest(const std::string& json, UpdateManifest& manifest) {
     parseEntries(json, "sender", "sender", manifest.sender);
     parseEntries(json, "display", "display", manifest.display);
     return manifest.manifestVersion > 0 && (!manifest.sender.empty() || !manifest.display.empty());
-}
-
-int compareVersions(const std::string& left, const std::string& right) {
-    const auto a = numericParts(left);
-    const auto b = numericParts(right);
-    for (size_t i = 0; i < a.size(); ++i) {
-        if (a[i] < b[i]) return -1;
-        if (a[i] > b[i]) return 1;
-    }
-    const std::string la = trimVersion(left);
-    const std::string rb = trimVersion(right);
-    if (la == rb) return 0;
-    return la < rb ? -1 : 1;
 }
 
 VersionRelation relationToInstalled(const std::string& installed, const std::string& candidate) {
@@ -196,7 +164,6 @@ InstallEligibility evaluateEntry(const FirmwareVersionEntry& entry,
     if (!targetMatches(entry, expectedTarget)) return InstallEligibility::WrongTarget;
     if (!channelAllows(selectedChannel, entry.channel)) return InstallEligibility::ChannelBlocked;
     if (entry.protocol != protocolVersion) return InstallEligibility::IncompatibleProtocol;
-    if (entry.sha256.empty()) return InstallEligibility::MissingSha256;
     if (entry.url.empty()) return InstallEligibility::MissingUrl;
 
     const auto relation = relationToInstalled(installedVersion == nullptr ? "" : installedVersion, entry.version);
@@ -228,9 +195,9 @@ const FirmwareVersionEntry* findVersion(const UpdateManifest& manifest,
                                         const char* target,
                                         const char* version) {
     const auto& list = equalsIgnoreCase(target, "display") ? manifest.display : manifest.sender;
-    const std::string requested = trimVersion(version == nullptr ? "" : version);
+    const std::string requested = version == nullptr ? "" : version;
     for (const auto& entry : list) {
-        if (entry.version == version || trimVersion(entry.version) == requested) return &entry;
+        if (entry.version == requested || compareVersions(entry.version, requested) == 0) return &entry;
     }
     return nullptr;
 }
@@ -242,7 +209,6 @@ const char* eligibilityName(InstallEligibility value) {
         case InstallEligibility::Rollback: return "rollback";
         case InstallEligibility::WrongTarget: return "wrong_target";
         case InstallEligibility::IncompatibleProtocol: return "incompatible_protocol";
-        case InstallEligibility::MissingSha256: return "missing_sha256";
         case InstallEligibility::MissingUrl: return "missing_url";
         case InstallEligibility::ChannelBlocked: return "channel_blocked";
     }

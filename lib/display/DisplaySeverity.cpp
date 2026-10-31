@@ -25,7 +25,7 @@ DisplaySeverity severityForMetric(const char* metricName,
                                   bool fresh,
                                   const char* status) {
     // Staleness takes priority over all other checks. A reading that has not
-    // been refreshed within DisplayConfig::ValueTimeoutMs cannot be trusted
+    // been refreshed recently (see LiveValueView::freshLimitMs) cannot be trusted
     // regardless of its numeric value, so show Timeout instead of a stale Ok.
     if (!fresh || statusEquals(status, "TIMEOUT")) {
         return DisplaySeverity::Timeout;

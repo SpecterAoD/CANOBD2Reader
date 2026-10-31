@@ -7,7 +7,7 @@
   using String = std::string;
 #endif
 
-namespace Network {
+namespace WifiNet {
 
 class WifiStationManager {
 public:
@@ -24,4 +24,4 @@ public:
     static bool forget();
 };
 
-} // namespace Network
+} // namespace WifiNet

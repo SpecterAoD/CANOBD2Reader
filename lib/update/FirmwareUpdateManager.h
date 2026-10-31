@@ -1,5 +1,8 @@
 #pragma once
 
+// GitHub release based firmware updates: manifest check, channel selection,
+// signed download via OtaSession. All installs are signature-checked.
+
 #include <string>
 
 #if defined(ARDUINO)
@@ -19,13 +22,19 @@ public:
     using LogCallback = void (*)(const String& message);
 #endif
 
+    // Returns true while an update must not be installed (e.g. engine running).
+    using InstallBlocker = bool (*)();
+
     static void begin(const char* targetName, const char* firmwareVersion, uint8_t protocolVersion);
+    // Periodic hook: checks the manifest once per WiFi connection.
     static void handle();
     static void setChannel(UpdateChannel channel);
     static UpdateChannel channel();
+    static void setInstallBlocker(InstallBlocker blocker);
     static bool checkNow();
-    static bool installLatest(bool manual);
-    static bool installVersion(const char* version, bool manual, bool rollbackConfirmed = false);
+    // Both install functions restart the device on success.
+    static bool installLatest();
+    static bool installVersion(const char* version, bool rollbackConfirmed = false);
     static String statusJson();
     static String versionsJson();
 #if defined(ARDUINO)

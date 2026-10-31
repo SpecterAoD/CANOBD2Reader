@@ -1,7 +1,7 @@
 #include "EspNowTelemetryTransport.h"
 
 #if defined(ARDUINO)
-#include "config/NetworkConfig.h"
+#include "DeviceSecrets.h"
 #include "config/LoggingConfig.h"
 #include "DiagnosticLog.h"
 #endif
@@ -10,7 +10,7 @@ namespace Transport {
 
 esp_err_t sendTelemetryPacket(const Telemetry::TelemetryPacket& packet) {
 #if defined(ARDUINO)
-    return esp_now_send(NetworkConfig::DisplayPeerMac,
+    return esp_now_send(Security::secrets().displayMac,
                         reinterpret_cast<const uint8_t*>(&packet),
                         sizeof(packet));
 #else

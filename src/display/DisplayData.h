@@ -1,37 +1,35 @@
 #pragma once
 
+// Display data model:
+//   * live()      typed live values from the binary snapshot (protocol v3)
+//   * status table text values from status/diagnostic packets (CAN, OBD, DTC,
+//                 VIN, UDS, power, CAN hints) keyed by KEY or NAME
+//   * runtime()   link statistics and power state
+
 #include "DisplayTypes.h"
 #include "DisplayRuntimeState.h"
+#include "LiveValueView.h"
 
 namespace DisplayData {
-  extern DisplayTelemetryValue values[DisplayConfig::TelemetryValueCapacity];
-  extern uint8_t valueCount;
-  extern uint8_t currentPage;
-  extern uint8_t lastRenderedPage;
-  extern uint32_t lastScreenRefresh;
-  extern uint32_t lastButtonAt;
-  extern uint32_t lastInternalSimulationUpdate;
-  extern size_t internalSimulationIndex;
-  extern bool renderDirty;
 
-  Runtime::DisplayRuntimeState& runtime();
-  DisplayTelemetryValue* findValue(const String& name);
-  DisplayTelemetryValue* upsertValue(const String& type,
-                                     const String& key,
-                                     const String& name,
-                                     const String& value,
-                                     const String& unit,
-                                     const String& status,
-                                     uint32_t sequence);
-  bool isConnected();
-  bool isEspNowConnected();
-  bool isCanStatusRecent();
-  bool isObdStatusRecent();
-  bool isFresh(const DisplayTelemetryValue* value);
-  DisplayLogic::DisplaySeverity severityForValue(const char* name);
-  uint16_t colorForSeverity(DisplayLogic::DisplaySeverity severity);
-  String displayValue(const char* name, uint8_t decimals = 0);
-  String displayText(const char* name);
-  uint16_t valueColor(const char* name);
-  void markDirty();
-}
+extern uint8_t currentPage;
+
+Runtime::DisplayRuntimeState& runtime();
+DisplayLogic::LiveValueView& live();
+
+DisplayTelemetryValue* findValue(const String& keyOrName);
+void upsertValue(const String& type, const String& key, const String& name, const String& value,
+                 const String& unit, const String& status, uint32_t sequence);
+
+// Text of a status value, "--" when unknown or older than StatusTimeoutMs.
+String displayText(const char* keyOrName);
+bool isStatusFresh(const DisplayTelemetryValue* value);
+
+bool isEspNowConnected();
+bool isCanStatusRecent();
+bool isObdStatusRecent();
+
+uint8_t visiblePageCount();
+void setDiagnosticPagesEnabled(bool enabled);
+
+} // namespace DisplayData

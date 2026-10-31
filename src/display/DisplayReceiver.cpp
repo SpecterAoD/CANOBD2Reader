@@ -1,3 +1,8 @@
+// ESP-NOW receiver of the display.
+//
+// The ESP-NOW callback runs in the WiFi task: it only filters by sender MAC
+// and copies the raw bytes into a FreeRTOS queue. Decoding and all state
+// updates happen in loop() via processQueuedPackets().
 #include "DisplayReceiver.h"
 
 #include <WiFi.h>
@@ -5,257 +10,183 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
-#include "common_config.h"
-#include "config/ProjectConfig.h"
-#include "config/DisplayConfig.h"
-#include "config/NetworkConfig.h"
-#include "config/SecurityConfig.h"
-#include "config/LoggingConfig.h"
-#include "AuthHelpers.h"
-#include "DisplayData.h"
-#include "TelemetryCodec.h"
-#include "StatusLogic.h"
+#include "DeviceSecrets.h"
 #include "DiagnosticLog.h"
+#include "DisplayData.h"
+#include "LiveData.h"
+#include "StatusLogic.h"
+#include "TelemetryCodec.h"
+#include "config/NetworkConfig.h"
 
 namespace {
 
-struct QueuedTelemetryPacket {
-  uint8_t senderMac[6]{};
+struct QueuedPacket {
   uint16_t length = 0;
   uint8_t bytes[sizeof(Telemetry::TelemetryPacket)]{};
 };
 
-QueueHandle_t telemetryQueue = nullptr;
-
-uint32_t rx_packets = 0;
-uint32_t rx_crc_errors = 0;
-uint32_t rx_invalid_length = 0;
-uint32_t rx_mac_filtered = 0;
-uint32_t rx_queue_drops = 0;
-uint32_t rx_parse_errors = 0;
-uint32_t rx_last_summary_ms = 0;
-
-void maybeLogRxSummary() {
-  if (!(LoggingConfig::TraceDisplayTelemetry && LoggingConfig::SerialEnabled)) return;
-
-  const uint32_t now = millis();
-  if (rx_last_summary_ms == 0) {
-    rx_last_summary_ms = now;
-    return;
-  }
-  if (now - rx_last_summary_ms < LoggingConfig::TraceSummaryIntervalMs) return;
-
-  DiagnosticLog::appendf("[display-rx] packets=%lu crc=%lu badlen=%lu macdrop=%lu queuedrop=%lu parse=%lu lastSeq=%lu",
-                         static_cast<unsigned long>(rx_packets),
-                         static_cast<unsigned long>(rx_crc_errors),
-                         static_cast<unsigned long>(rx_invalid_length),
-                         static_cast<unsigned long>(rx_mac_filtered),
-                         static_cast<unsigned long>(rx_queue_drops),
-                         static_cast<unsigned long>(rx_parse_errors),
-                         static_cast<unsigned long>(DisplayData::runtime().lastSequence));
-  rx_last_summary_ms = now;
-}
+QueueHandle_t queue = nullptr;
+uint32_t macFiltered = 0;
+uint32_t queueDrops = 0;
 
 String fieldAt(const String& raw, uint8_t index) {
   int start = 0;
-  for (uint8_t i = 0; i < index; i++) {
+  for (uint8_t i = 0; i < index; ++i) {
     start = raw.indexOf(',', start);
     if (start < 0) return "";
-    start++;
+    ++start;
   }
   int end = raw.indexOf(',', start);
   if (end < 0) end = raw.length();
   return raw.substring(start, end);
 }
 
-uint8_t countFields(const String& raw) {
-  uint8_t fields = raw.length() > 0 ? 1 : 0;
-  for (uint16_t i = 0; i < raw.length(); i++) {
-    if (raw[i] == ',') fields++;
-  }
-  return fields;
-}
-
-void parseTelemetryPayload(const char* payload, uint32_t sequence) {
+// Text packet: "TYPE,KEY,NAME,VALUE,UNIT,STATUS[,SEQ]" (TelemetryProtocol).
+void handleStatusText(const String& raw, uint32_t sequence) {
   using namespace DisplayData;
-
-  const String raw(payload == nullptr ? "" : payload);
-  const uint8_t fields = countFields(raw);
-  if (fields < 3) {
-    ++rx_parse_errors;
+  const String type = fieldAt(raw, 0);
+  const String key = fieldAt(raw, 1);
+  const String name = fieldAt(raw, 2);
+  const String value = fieldAt(raw, 3);
+  const String unit = fieldAt(raw, 4);
+  String status = fieldAt(raw, 5);
+  if (type.length() == 0 || key.length() == 0) {
     runtime().droppedPackets++;
-    runtime().lastError = "Ungueltiges Paket";
-    maybeLogRxSummary();
     return;
   }
+  if (status.length() == 0) status = "OK";
 
-  String type = fieldAt(raw, 0);
-  String key = fieldAt(raw, 1);
-  String name = fieldAt(raw, 2);
-  String value = fields > 3 ? fieldAt(raw, 3) : "";
-  String unit = fields > 4 ? fieldAt(raw, 4) : "";
-  String status = fields > 5 ? fieldAt(raw, 5) : "OK";
-  // The packet header is authoritative. The CSV sequence is kept for human
-  // diagnostics, but packet-loss detection must use the CRC-protected header.
-  uint32_t payloadSequence = sequence;
-
-  if (type == "BATTERY" && key == "VOLTAGE" && fields == 4) {
-    name = "BatteryVoltage";
-    value = fieldAt(raw, 2);
-    unit = fieldAt(raw, 3);
-    status = "OK";
-  }
-
-  if (fields == 3) {
-    type = "OBD";
-    key = fieldAt(raw, 0);
-    name = fieldAt(raw, 1);
-    value = fieldAt(raw, 2);
-    unit = "";
-    status = value == "N/A" ? "TIMEOUT" : "OK";
-  }
-
-  if (payloadSequence > 0) {
-    runtime().droppedPackets += StatusLogic::packetLossFromSequence(runtime().lastSequence, payloadSequence);
-  }
-  if (payloadSequence > 0) runtime().lastSequence = payloadSequence;
-
-  upsertValue(type, key, name, value, unit, status, payloadSequence);
-  if (type == "STATUS") {
-    if (key == "HEARTBEAT") {
-      runtime().lastHeartbeatAt = millis();
-      runtime().lastHeartbeatSequence = payloadSequence;
-      DiagnosticLog::appendf("[DISPLAY] Heartbeat received seq=%lu",
-                             static_cast<unsigned long>(payloadSequence));
-    } else if (key == "CAN") {
-      runtime().lastCanStatusAt = millis();
-    } else if (key == "OBD") {
-      runtime().lastObdStatusAt = millis();
-    } else if (key == "POWER_STATE") {
-      runtime().vehicleState = value;
-      runtime().lastPowerStatusAt = millis();
-    } else if (key == "ACTIVITY_SCORE") {
-      runtime().activityScore = static_cast<uint8_t>(value.toInt());
-      runtime().lastPowerStatusAt = millis();
-    } else if (key == "POWER_COMMAND") {
-      runtime().powerCommand = value;
-      runtime().displaySleepRequested = value == "Sleep";
-      if (value == "Wakeup") runtime().displaySleepRequested = false;
-      runtime().lastPowerStatusAt = millis();
-    }
-  }
+  upsertValue(type, key, name, value, unit, status, sequence);
   runtime().lastRawPayload = raw;
-  runtime().lastError = status == "OK" ? "" : status;
-  maybeLogRxSummary();
+  if (type != "STATUS") return;
+
+  const uint32_t now = millis();
+  if (key == "HEARTBEAT") {
+    runtime().lastHeartbeatAt = now;
+    runtime().lastHeartbeatSequence = sequence;
+  } else if (key == "CAN") {
+    runtime().lastCanStatusAt = now;
+  } else if (key == "OBD") {
+    runtime().lastObdStatusAt = now;
+  } else if (key == "POWER_STATE") {
+    runtime().vehicleState = value;
+    runtime().lastPowerStatusAt = now;
+  } else if (key == "ACTIVITY_SCORE") {
+    runtime().activityScore = static_cast<uint8_t>(value.toInt());
+    runtime().lastPowerStatusAt = now;
+  } else if (key == "POWER_COMMAND") {
+    runtime().powerCommand = value;
+    if (value == "Sleep") runtime().displaySleepRequested = true;
+    if (value == "Wakeup") runtime().displaySleepRequested = false;
+    runtime().lastPowerStatusAt = now;
+  }
 }
 
-void processQueuedPacket(const QueuedTelemetryPacket& queued) {
+void processPacket(const QueuedPacket& queued) {
   using namespace DisplayData;
-
   Telemetry::TelemetryPacket packet{};
-  const auto status = Telemetry::TelemetryCodec::decode(queued.bytes, queued.length, packet);
-  if (status != Telemetry::DecodeStatus::Ok) {
-    if (status == Telemetry::DecodeStatus::CrcMismatch) {
-      ++rx_crc_errors;
+  const auto result = Telemetry::TelemetryCodec::decode(queued.bytes, queued.length, packet);
+  if (result != Telemetry::DecodeStatus::Ok) {
+    if (result == Telemetry::DecodeStatus::CrcMismatch) {
       runtime().crcErrors++;
-      runtime().lastError = "CRC-Fehler";
     } else {
-      ++rx_invalid_length;
       runtime().droppedPackets++;
-      runtime().lastError = "Ungueltiges Telemetriepaket";
     }
-    maybeLogRxSummary();
+    if (result == Telemetry::DecodeStatus::InvalidVersion) runtime().lastError = "Sender-Protokoll passt nicht";
     return;
   }
 
-  char payload[ProjectConfig::TelemetryPayloadSize + 1]{};
-  memcpy(payload, packet.payload, packet.payloadLength);
-  payload[packet.payloadLength] = '\0';
-
-  ++rx_packets;
+  // The CRC-protected header sequence is authoritative for loss detection.
+  runtime().droppedPackets += StatusLogic::packetLossFromSequence(runtime().lastSequence, packet.sequence);
+  runtime().lastSequence = packet.sequence;
   runtime().receivedPackets++;
   runtime().lastReceivedAt = millis();
-  parseTelemetryPayload(payload, packet.sequence);
-}
 
-void onDataRecv(const uint8_t* senderMac, const uint8_t* incomingData, int len) {
-  if (senderMac == nullptr || incomingData == nullptr || len <= 0) return;
-
-  if (memcmp(senderMac, NetworkConfig::SenderAllowedMac, 6) != 0) {
-    ++rx_mac_filtered;
+  if (packet.type == static_cast<uint8_t>(Telemetry::PacketType::LiveSnapshot)) {
+    LiveData::Snapshot snapshot;
+    if (LiveData::decodeSnapshot(packet.payload, packet.payloadLength, snapshot)) {
+      live().apply(snapshot, millis());
+    } else {
+      runtime().droppedPackets++;
+    }
     return;
   }
 
-  if (telemetryQueue == nullptr || len > static_cast<int>(sizeof(Telemetry::TelemetryPacket))) {
-    ++rx_invalid_length;
+  char text[ProjectConfig::TelemetryPayloadSize + 1]{};
+  memcpy(text, packet.payload, packet.payloadLength);
+  handleStatusText(String(text), packet.sequence);
+}
+
+// Arduino-ESP32 3.x (ESP-IDF 5) passes the sender MAC in esp_now_recv_info_t.
+void onReceive(const esp_now_recv_info_t* info, const uint8_t* data, int length) {
+  if (info == nullptr || info->src_addr == nullptr || data == nullptr || length <= 0) return;
+  if (memcmp(info->src_addr, Security::secrets().senderMac, 6) != 0) {
+    ++macFiltered;
     return;
   }
+  if (queue == nullptr || length > static_cast<int>(sizeof(Telemetry::TelemetryPacket))) return;
 
-  QueuedTelemetryPacket queued{};
-  memcpy(queued.senderMac, senderMac, sizeof(queued.senderMac));
-  queued.length = static_cast<uint16_t>(len);
-  memcpy(queued.bytes, incomingData, len);
-
-  if (xQueueSend(telemetryQueue, &queued, 0) != pdTRUE) {
-    ++rx_queue_drops;
-  }
+  QueuedPacket queued;
+  queued.length = static_cast<uint16_t>(length);
+  memcpy(queued.bytes, data, length);
+  if (xQueueSend(queue, &queued, 0) != pdTRUE) ++queueDrops;
 }
 
-}
+} // namespace
 
 namespace DisplayReceiver {
 
 void begin() {
-  telemetryQueue = xQueueCreate(DisplayConfig::TelemetryQueueLength, sizeof(QueuedTelemetryPacket));
-  if (telemetryQueue == nullptr) {
-    DisplayData::runtime().lastError = "Telemetry Queue fehlgeschlagen";
+  using namespace DisplayData;
+  if (!Security::provisioned()) {
+    runtime().lastError = "Nicht provisioniert";
+    DiagnosticLog::appendf("[DISPLAY] ESP-NOW blockiert: %s", Security::problemText());
     return;
   }
 
-  const String securityWarning = WebSecurity::espNowSecurityWarning();
-  if (SecurityConfig::BlockNetworkFeaturesOnPlaceholderSecrets && securityWarning.length() > 0) {
-    DisplayData::runtime().lastError = "ESP-NOW blockiert: " + securityWarning;
-    DiagnosticLog::appendf("[DISPLAY] %s", DisplayData::runtime().lastError.c_str());
+  queue = xQueueCreate(DisplayConfig::TelemetryQueueLength, sizeof(QueuedPacket));
+  if (queue == nullptr) {
+    runtime().lastError = "Queue fehlgeschlagen";
     return;
   }
 
-  // Keep Display Web-OTA SoftAP visible while the ESP-NOW receiver is active.
-  // The station side is disconnected only from infrastructure WiFi; SoftAP
-  // remains up on NetworkConfig::EspNowChannel.
-  WiFi.mode(CANOBD2_ENABLE_DISPLAY_OTA ? WIFI_AP_STA : WIFI_STA);
+  // The management AP (if running) already put the radio in AP+STA mode on
+  // the ESP-NOW channel; otherwise station mode is enough for ESP-NOW.
+  if (WiFi.getMode() == WIFI_OFF) WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.disconnect(false, false);
 
   if (esp_now_init() != ESP_OK) {
-    DisplayData::runtime().lastError = "ESP-NOW Init fehlgeschlagen";
+    runtime().lastError = "ESP-NOW Init fehlgeschlagen";
     return;
   }
 
   esp_now_peer_info_t peer = {};
-  memcpy(peer.peer_addr, NetworkConfig::SenderAllowedMac, 6);
+  memcpy(peer.peer_addr, Security::secrets().senderMac, 6);
   peer.channel = NetworkConfig::EspNowChannel;
   peer.encrypt = NetworkConfig::UseEspNowEncryption;
-  if (NetworkConfig::UseEspNowEncryption) {
-    memcpy(peer.lmk, NetworkConfig::EspNowAesKey, 16);
-  }
+  if (NetworkConfig::UseEspNowEncryption) memcpy(peer.lmk, Security::secrets().espNowKey, 16);
 
-  esp_err_t peerResult = esp_now_add_peer(&peer);
-  if (peerResult != ESP_OK && peerResult != ESP_ERR_ESPNOW_EXIST) {
-    DisplayData::runtime().lastError = "ESP-NOW Peer fehlgeschlagen";
+  const esp_err_t added = esp_now_add_peer(&peer);
+  if (added != ESP_OK && added != ESP_ERR_ESPNOW_EXIST) {
+    runtime().lastError = "ESP-NOW Peer fehlgeschlagen";
     return;
   }
-
-  esp_now_register_recv_cb(onDataRecv);
-  DisplayData::runtime().lastError = "Warte auf Sender";
+  esp_now_register_recv_cb(onReceive);
+  runtime().lastError = "Warte auf Sender";
 }
 
 void processQueuedPackets() {
-  if (telemetryQueue == nullptr) return;
-
-  QueuedTelemetryPacket queued{};
-  while (xQueueReceive(telemetryQueue, &queued, 0) == pdTRUE) {
-    processQueuedPacket(queued);
+  if (queue == nullptr) return;
+  QueuedPacket queued;
+  // Bounded so a flood of packets cannot stall rendering.
+  for (uint8_t count = 0; count < DisplayConfig::TelemetryQueueLength && xQueueReceive(queue, &queued, 0) == pdTRUE;
+       ++count) {
+    processPacket(queued);
   }
 }
 
-}
+uint32_t macFilteredCount() { return macFiltered; }
+uint32_t queueDropCount() { return queueDrops; }
+
+} // namespace DisplayReceiver

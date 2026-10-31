@@ -8,7 +8,6 @@ namespace SenderConfig {
 constexpr bool EnableCAN = true;
 constexpr bool EnableOBD2 = true;
 constexpr bool EnableUDS = true;
-constexpr bool EnableSenderOta = true;
 constexpr bool SendRawData = true;
 constexpr bool SendRawDataOnly = false;
 constexpr bool RequireWebStart = false;
@@ -23,17 +22,18 @@ constexpr int VoltageDividerPin = 32;
 constexpr uint32_t CanBitrate = 500000;
 constexpr int PollingRateMs = 10;
 constexpr int CanIdleTimeoutMs = 500;
-constexpr uint32_t ObdPollIntervalMs = 100;
-constexpr uint32_t FastLiveObdPollIntervalMs = 45;
-constexpr uint32_t SlowLiveObdPollIntervalMs = 750;
-constexpr std::size_t MaxObdPidsPerTick = 1;
+// Target refresh per PID (see Obd::PidPollPlanner). The planner always asks
+// for the most overdue PID, so slow values cannot be starved.
+constexpr uint32_t FastPidIntervalMs = 200;
+constexpr uint32_t SlowPidIntervalMs = 2000;
+// Complete live table to the display, independent of the polling rhythm.
+constexpr uint32_t LiveSnapshotIntervalMs = 100;
 constexpr uint32_t ObdResponseTimeoutMs = 120;
 constexpr uint32_t ObdTxTimeoutMs = 20;
 constexpr uint32_t BatterySendIntervalMs = 3000;
 constexpr uint32_t PowerTelemetryIntervalMs = 1000;
 constexpr uint32_t HeartbeatIntervalMs = 1000;
 constexpr uint32_t SimulationIntervalMs = 250;
-constexpr std::size_t SimulationValuesPerTick = 4;
 constexpr std::size_t SimulationStatusFramesPerTick = 2;
 constexpr uint32_t RawCanTelemetryIntervalMs = 250;
 constexpr uint32_t LedTestDebounceMs = 50;

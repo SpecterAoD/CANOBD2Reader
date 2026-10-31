@@ -33,7 +33,8 @@ void test_manifest_parse_and_best_update() {
                                                              "V2.0.0.b4",
                                                              FirmwareUpdate::UpdateChannel::Development);
     TEST_ASSERT_NOT_NULL(best);
-    TEST_ASSERT_EQUAL_STRING("V2.0.0.b5", best->version.c_str());
+    // SemVer: the final 2.0.0 supersedes all 2.0.0 prereleases (was a bug before).
+    TEST_ASSERT_EQUAL_STRING("V2.0.0", best->version.c_str());
 }
 
 void test_stable_filters_development() {
@@ -65,8 +66,8 @@ void test_wrong_target_protocol_and_sha_are_rejected() {
                       FirmwareUpdate::evaluateEntry(entry, "sender", 2, "V2.0.0.b4",
                                                     FirmwareUpdate::UpdateChannel::Development, true));
     entry.protocol = 2;
-    entry.sha256.clear();
-    TEST_ASSERT_EQUAL(FirmwareUpdate::InstallEligibility::MissingSha256,
+    entry.url.clear();
+    TEST_ASSERT_EQUAL(FirmwareUpdate::InstallEligibility::MissingUrl,
                       FirmwareUpdate::evaluateEntry(entry, "sender", 2, "V2.0.0.b4",
                                                     FirmwareUpdate::UpdateChannel::Development, true));
 }

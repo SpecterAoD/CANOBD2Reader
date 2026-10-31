@@ -7,7 +7,7 @@
   using String = std::string;
 #endif
 
-namespace Network {
+namespace WifiNet {
 
 struct WifiCredentials {
     String ssid;
@@ -22,5 +22,5 @@ public:
     static bool clear();
 };
 
-} // namespace Network
+} // namespace WifiNet
 

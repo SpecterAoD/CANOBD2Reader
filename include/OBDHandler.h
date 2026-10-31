@@ -26,7 +26,7 @@ public:
                                uint8_t expectedPid,
                                IsoTp::Payload& outPayload);
 
-    /// Requests a PID, decodes it and forwards it as telemetry.
+    /// Requests a PID, decodes it and stores it in the live snapshot table.
     static bool requestAndSendPID(uint8_t pid);
 
     /// Calculates and sends consumption from speed and fuel rate.

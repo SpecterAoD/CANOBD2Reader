@@ -1,12 +1,12 @@
 #include "WifiCredentialStore.h"
 
-#include "config/NetworkConfig.h"
+#include "DeviceSecrets.h"
 
 #if defined(ARDUINO)
   #include <Preferences.h>
 #endif
 
-namespace Network {
+namespace WifiNet {
 
 WifiCredentials WifiCredentialStore::load() {
     WifiCredentials credentials;
@@ -19,9 +19,11 @@ WifiCredentials WifiCredentialStore::load() {
         credentials.stored = credentials.ssid.length() > 0;
     }
 #endif
-    if (credentials.ssid.length() == 0 && NetworkConfig::WifiSsid[0] != '\0') {
-        credentials.ssid = NetworkConfig::WifiSsid;
-        credentials.password = NetworkConfig::WifiPassword;
+    // Fallback: optional station WiFi from the provisioned device secrets.
+    const Security::DeviceSecrets& secrets = Security::secrets();
+    if (credentials.ssid.length() == 0 && secrets.stationSsid[0] != '\0') {
+        credentials.ssid = secrets.stationSsid;
+        credentials.password = secrets.stationPassword;
         credentials.stored = false;
     }
     return credentials;
@@ -32,8 +34,13 @@ bool WifiCredentialStore::save(const String& ssid, const String& password) {
     if (ssid.length() == 0) return false;
     Preferences prefs;
     if (!prefs.begin("canobd2-wifi", false)) return false;
-    const bool ok = prefs.putString("ssid", ssid) > 0 &&
-                    prefs.putString("password", password) == password.length();
+    // putString() returns 0 for an empty string, which is valid for open networks.
+    bool ok = prefs.putString("ssid", ssid) > 0;
+    if (password.length() == 0) {
+        prefs.remove("password");
+    } else {
+        ok = ok && prefs.putString("password", password) == password.length();
+    }
     prefs.end();
     return ok;
 #else
@@ -55,5 +62,5 @@ bool WifiCredentialStore::clear() {
 #endif
 }
 
-} // namespace Network
+} // namespace WifiNet
 

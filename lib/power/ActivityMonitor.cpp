@@ -80,7 +80,7 @@ uint8_t ActivityMonitor::calculateActivityScore(ActivitySnapshot& flags, const A
     flags.engineRunning = input.rpm >= PowerConfig::EngineRunningRpm;
     flags.moving = input.speedKph >= PowerConfig::MovingSpeedKph;
     flags.boardAwake = input.batteryVoltage >= PowerConfig::BoardVoltageAwakeMin;
-    flags.userActive = recently(input.nowMs, input.lastUserActivityAtMs, DisplayConfig::ValueTimeoutMs);
+    flags.userActive = recently(input.nowMs, input.lastUserActivityAtMs, PowerConfig::UserActivityWindowMs);
 
     uint8_t score = 0;
     if (flags.canActive) score += 5;
