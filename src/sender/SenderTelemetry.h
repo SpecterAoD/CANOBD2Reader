@@ -26,6 +26,11 @@ void sendStatus(const char* key, const char* value, const char* status);
 // Binary payload (e.g. LiveData snapshot); shares sequence and statistics.
 void sendBinary(Telemetry::PacketType type, const uint8_t* data, std::size_t length);
 
+// Delivery result from the ESP-NOW send callback (any task).
+void onDelivery(bool delivered);
+// True while the display does not acknowledge (sending is reduced to 1/s).
+bool linkOffline();
+
 uint32_t sequence();
 uint32_t sendOkCount();
 uint32_t sendFailCount();

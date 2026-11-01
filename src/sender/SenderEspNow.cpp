@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "Logger.h"
+#include "SenderTelemetry.h"
 #include "DeviceSecrets.h"
 #include "config/NetworkConfig.h"
 
@@ -14,6 +15,11 @@ bool readyState = false;
 int meshIdState = 0;
 uint8_t peerAddress[6] = {};
 esp_now_peer_info_t peerInfo = {};
+
+// MAC-level acknowledgement of each unicast packet (WiFi task context).
+void onSent(const esp_now_send_info_t*, esp_now_send_status_t status) {
+    SenderTelemetry::onDelivery(status == ESP_NOW_SEND_SUCCESS);
+}
 
 int computeMeshId() {
     uint8_t baseMac[6];
@@ -67,6 +73,7 @@ bool begin() {
         return false;
     }
 
+    esp_now_register_send_cb(onSent);
     meshIdState = computeMeshId();
     readyState = true;
     Logger::debugf("[ESP-NOW] Peer OK, meshId=%d", meshIdState);

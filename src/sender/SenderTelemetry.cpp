@@ -2,7 +2,11 @@
 
 #include <string.h>
 
+#include <atomic>
+
 #include "EspNowTelemetryTransport.h"
+#include "EventThrottle.h"
+#include "LinkBackoff.h"
 #include "RuntimeSimulation.h"
 #include "TelemetryCodec.h"
 #include "TelemetryProtocol.h"
@@ -21,6 +25,51 @@ uint32_t lastSummaryAt = 0;
 uint32_t lastObdResponse = 0;
 String lastErrorText;
 String lastSendErrorText;
+
+// Link state from the ESP-NOW delivery callback (WiFi task -> loop).
+std::atomic<uint32_t> deliveredCount{0};
+std::atomic<uint32_t> undeliveredCount{0};
+std::atomic<bool> lastDeliveryOk{false};
+uint32_t seenDelivered = 0;
+uint32_t seenUndelivered = 0;
+// Display off / out of range: after 5 failures only one probe per second.
+Transport::LinkBackoff linkBackoff(5, 1000);
+Logging::EventThrottle failureLog(10000);
+bool linkWasOffline = false;
+
+// Feeds delivery results into the backoff and logs (throttled) state changes.
+void updateLinkState(uint32_t nowMs) {
+    const uint32_t delivered = deliveredCount.load();
+    const uint32_t undelivered = undeliveredCount.load();
+    for (uint32_t i = seenUndelivered; i != undelivered; ++i) linkBackoff.reportResult(false);
+    if (delivered != seenDelivered && lastDeliveryOk.load()) linkBackoff.reportResult(true);
+    seenDelivered = delivered;
+    seenUndelivered = undelivered;
+
+    if (linkBackoff.offline() != linkWasOffline) {
+        linkWasOffline = linkBackoff.offline();
+        WebConsoleHandler::log(linkWasOffline ? "[ESP-NOW] Display antwortet nicht - sende nur noch 1x/s"
+                                              : "[ESP-NOW] Display wieder erreichbar");
+    }
+    (void)nowMs;
+}
+
+void noteSendFailure(esp_err_t result, uint32_t nowMs) {
+    ++sendFail;
+    linkBackoff.reportResult(false);
+    lastSendErrorText = "ESP-NOW Sendefehler " + String(static_cast<int>(result));
+    lastErrorText = lastSendErrorText;
+    if (failureLog.record(nowMs)) {
+        WebConsoleHandler::log("[ESP-NOW] Sendefehler err=" + String(static_cast<int>(result)) + " (x" +
+                               String(static_cast<unsigned long>(failureLog.count())) + " in 10 s)");
+    }
+}
+
+// Common gate for every packet: false = skipped because the link is offline.
+bool mayTransmit(uint32_t nowMs) {
+    updateLinkState(nowMs);
+    return linkBackoff.allowSend(nowMs);
+}
 
 Telemetry::PacketType packetTypeFor(const char* type) {
     if (type == nullptr) return Telemetry::PacketType::Text;
@@ -70,40 +119,26 @@ void send(const char* type,
           const char* value,
           const char* unit,
           const char* status) {
+    // Gate first: skipped packets must not consume sequence numbers, otherwise
+    // the display counts them as lost.
+    const uint32_t now = millis();
+    if (!mayTransmit(now)) return;
+
     TelemetryProtocol::buildPayload(payload, sizeof(payload),
                                     type, key, name, value, unit, status,
                                     currentSequence = Telemetry::nextSequence());
+    WebConsoleHandler::recordTelemetry(payload);
 
-    Telemetry::TelemetryCodec::encodeText(frame,
-                                          packetTypeFor(type),
-                                          currentSequence,
-                                          millis(),
-                                          payload);
+    Telemetry::TelemetryCodec::encodeText(frame, packetTypeFor(type), currentSequence, now, payload);
     const esp_err_t sendResult = Transport::sendTelemetryPacket(frame);
     if (sendResult == ESP_OK) {
         ++sendOk;
         lastSendErrorText = "";
-        if (LoggingConfig::TraceSenderTelemetry &&
-            strcmp(type, "STATUS") == 0 &&
-            strcmp(key, "HEARTBEAT") == 0) {
-            WebConsoleHandler::log("[ESP-NOW] Heartbeat sent seq=" +
-                                   String(static_cast<unsigned long>(currentSequence)));
-        }
     } else {
-        ++sendFail;
-        lastSendErrorText = "ESP-NOW send error " + String(static_cast<int>(sendResult));
-        lastErrorText = lastSendErrorText;
-        WebConsoleHandler::log("[ESP-NOW] Send failed error=" + String(static_cast<int>(sendResult)) +
-                               " seq=" + String(static_cast<unsigned long>(currentSequence)));
-        if (LoggingConfig::TraceSenderTelemetry && LoggingConfig::SerialEnabled) {
-            WebConsoleHandler::log("[sender-tx] send failed seq=" +
-                                   String(static_cast<unsigned long>(currentSequence)) +
-                                   " err=" + String(static_cast<int>(sendResult)));
-        }
+        noteSendFailure(sendResult, now);
     }
 
     maybeLogTelemetrySendSummary();
-    WebConsoleHandler::recordTelemetry(payload);
 
     if (status != nullptr && strcmp(status, "OK") != 0) {
         lastErrorText = String(type == nullptr ? "" : type) + "/" + (key == nullptr ? "" : key) + ": " + status;
@@ -111,15 +146,31 @@ void send(const char* type,
 }
 
 void sendBinary(Telemetry::PacketType type, const uint8_t* data, std::size_t length) {
+    const uint32_t now = millis();
+    if (!mayTransmit(now)) return;
     currentSequence = Telemetry::nextSequence();
-    if (!Telemetry::TelemetryCodec::encode(frame, type, currentSequence, millis(), data, length)) return;
-    if (Transport::sendTelemetryPacket(frame) == ESP_OK) {
+    if (!Telemetry::TelemetryCodec::encode(frame, type, currentSequence, now, data, length)) return;
+    const esp_err_t result = Transport::sendTelemetryPacket(frame);
+    if (result == ESP_OK) {
         ++sendOk;
         lastSendErrorText = "";
     } else {
-        ++sendFail;
-        lastSendErrorText = "ESP-NOW Sendefehler (binaer)";
+        noteSendFailure(result, now);
     }
+}
+
+void onDelivery(bool delivered) {
+    // Runs in the WiFi task: only touch atomics here.
+    lastDeliveryOk.store(delivered);
+    if (delivered) {
+        deliveredCount.fetch_add(1);
+    } else {
+        undeliveredCount.fetch_add(1);
+    }
+}
+
+bool linkOffline() {
+    return linkBackoff.offline();
 }
 
 void sendStatus(const char* key, const char* value, const char* status) {
