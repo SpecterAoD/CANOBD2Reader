@@ -41,6 +41,20 @@ python scripts/ota_upload.py --host 192.168.4.1 output/sender.bin
 python scripts/ota_upload.py --sign-key ~/canobd2-signing.pem .pio/build/sender/firmware.bin
 ```
 
+## Logs per USB auslesen
+
+Ohne WLAN, direkt über USB (nur lesend). Das Board kann am selben Rechner oder
+an einem per SSH erreichbaren Linux-Rechner hängen:
+
+```bash
+python scripts/read_device_logs.py sender --remote kalipi --out ~/canobd2-logs
+python scripts/read_device_logs.py display --remote kalipi --out ~/canobd2-logs
+```
+
+Geräte mit dem alten Layout (bis V2.1.0-beta.2): zusätzlich `--layout legacy`.
+**Vor** einem Layout-Wechsel auslesen, sonst ist das alte Log weg. Die Logs
+können die Fahrgestellnummer enthalten, also nicht ins Repository übernehmen.
+
 ## Abstürze analysieren
 
 Jeder Start schreibt den Grund ins Diagnose-Log (`[BOOT] … reset=PANIC|TASK_WDT|…`).

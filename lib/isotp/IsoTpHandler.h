@@ -18,6 +18,10 @@ public:
     bool receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Payload& out, uint32_t timeoutMs);
     void setRequestId(uint32_t requestId) { requestId_ = requestId; }
     uint32_t requestId() const { return requestId_; }
+    // Accept only frames from this response id (0 = any ECU). Functional
+    // requests (0x7DF) are answered by several ECUs; without a filter the
+    // first answer wins, which mixed up e.g. gearbox and engine data.
+    void setResponseFilter(uint32_t responseId) { responseFilter_ = responseId; }
     bool lastResponseWasNegative() const { return lastResponseWasNegative_; }
     uint8_t lastNegativeService() const { return lastNegativeService_; }
     uint8_t lastNegativeCode() const { return lastNegativeCode_; }
@@ -41,6 +45,7 @@ private:
     std::size_t routedWriteIndex_ = 0;
     std::size_t routedCount_ = 0;
     uint32_t requestId_ = FunctionalRequestId;
+    uint32_t responseFilter_ = 0;
     uint32_t lastResponseId_ = 0;
     Status lastStatus_ = Status::Idle;
     uint8_t lastNegativeService_ = 0;

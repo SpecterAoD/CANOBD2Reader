@@ -178,6 +178,23 @@ void metricCard(int x, int y, int w, int h, Metric metric, bool big, const Value
   const LiveData::MetricInfo& info = LiveData::info(metric);
   panel(x, y, w, h, view.state == ValueState::Fresh ? color : DisplayConfig::Panel);
 
+  const String text = formatValue(metric, view);
+  // Font 7 (7-segment, 48 px) only has digits, '.', '-' and ':'.
+  const bool segmentFont = big && view.state != ValueState::Unsupported;
+  const uint8_t font = segmentFont ? 7 : 4;
+
+  if (h < 46) {
+    // Low card (bottom rows): one small header line "Label unit" in font 1
+    // (8 px) and the value below - a 16 px label would overlap the value.
+    String head = info.label;
+    if (info.unit[0] != '\0') head += String(" ") + info.unit;
+    label(x + 6, y + 4, fitText(head, w - 12, 1).c_str(), 1);
+    frame.setTextDatum(BR_DATUM);
+    frame.setTextColor(color);
+    frame.drawString(fitText(text, w - 12, font), x + w - 6, y + h - 5, font);
+    return;
+  }
+
   const bool narrow = w < 120;
   label(x + 8, y + 4, fitText(info.label, w - 16, 2).c_str());
   frame.setTextColor(DisplayConfig::Muted);
@@ -190,10 +207,6 @@ void metricCard(int x, int y, int w, int h, Metric metric, bool big, const Value
     frame.drawString(info.unit, x + w - 8, y + 4, 2);
   }
 
-  const String text = formatValue(metric, view);
-  // Font 7 (7-segment, 48 px) only has digits, '.', '-' and ':'.
-  const bool segmentFont = big && view.state != ValueState::Unsupported;
-  const uint8_t font = segmentFont ? 7 : 4;
   frame.setTextDatum(BR_DATUM);
   frame.setTextColor(color);
   const int unitSpace = narrow ? frame.textWidth(info.unit, 2) + 4 : 0;

@@ -38,7 +38,15 @@ void updateBoostPressureIfReady() {
 }
 }
 
+// Live data (01) and vehicle info (09) must come from the engine ECU only;
+// other ECUs answer functional requests too (different PID support, own
+// temperatures). DTCs (03) are accepted from any ECU.
+static void selectResponseFilter(uint8_t mode) {
+    isoTp.setResponseFilter(mode == read_LiveData || mode == read_VehicleInfo ? IsoTp::EngineResponseId : 0);
+}
+
 bool OBD2Handler::sendRequest(uint8_t mode, uint8_t pid) {
+    selectResponseFilter(mode);
     Obd::Diagnostics::recordRequest(mode, pid, isoTp.requestId());
     const bool ok = isoTp.sendRequest(mode, pid);
     if (!ok) {
@@ -48,6 +56,7 @@ bool OBD2Handler::sendRequest(uint8_t mode, uint8_t pid) {
 }
 
 bool OBD2Handler::sendRequestPayload(uint8_t mode, const uint8_t* payload, size_t payloadLength) {
+    selectResponseFilter(mode);
     Obd::Diagnostics::recordRequest(mode, payload, payloadLength, isoTp.requestId());
     const bool ok = isoTp.sendRequest(mode, payload, payloadLength);
     if (!ok) {

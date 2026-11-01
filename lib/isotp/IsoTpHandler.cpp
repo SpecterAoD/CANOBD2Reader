@@ -153,6 +153,7 @@ bool IsoTpHandler::receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Pa
 
 void IsoTpHandler::onCanFrame(const CanRouting::CanFrame& frame) {
     if (frame.id < FirstResponseId || frame.id > LastResponseId) return;
+    if (responseFilter_ != 0 && frame.id != responseFilter_) return;
     if (frame.length == 0 || frame.length > 8) return;
     if (routedCount_ >= RoutedFrameQueueSize) {
         lastStatus_ = Status::BufferOverflow;

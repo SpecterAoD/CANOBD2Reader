@@ -101,6 +101,7 @@ void processPacket(const QueuedPacket& queued) {
   runtime().lastSequence = packet.sequence;
   runtime().receivedPackets++;
   runtime().lastReceivedAt = millis();
+  if (runtime().lastError == "Warte auf Sender") runtime().lastError = "";
 
   if (packet.type == static_cast<uint8_t>(Telemetry::PacketType::LiveSnapshot)) {
     LiveData::Snapshot snapshot;

@@ -40,8 +40,9 @@ constexpr float OilWarnC = 115.0f;
 constexpr float OilCriticalC = 125.0f;
 constexpr float VoltageWarnLow = 11.8f;
 constexpr float VoltageCriticalLow = 11.2f;
-constexpr float VoltageWarnHigh = 14.8f;
-constexpr float VoltageCriticalHigh = 15.2f;
+// VW energy management charges up to ~15 V when cold; above that is suspicious.
+constexpr float VoltageWarnHigh = 15.5f;
+constexpr float VoltageCriticalHigh = 16.0f;
 constexpr uint16_t RpmWarn = 4200;
 constexpr uint16_t RpmCritical = 5000;
 constexpr uint16_t RpmMax = 6000;
