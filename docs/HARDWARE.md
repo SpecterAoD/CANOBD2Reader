@@ -11,6 +11,9 @@
 
 CAN: 500 kbit/s, OBD-Anfragen funktional an `0x7DF`, nach wiederholten
 Timeouts physisch an `0x7E0`. Nach Bus-Off startet der Treiber automatisch neu.
+CAN-Fehler (z. B. am Tisch ohne Fahrzeug: „error passive“, „Bus error“) werden
+höchstens alle 5 s als Sammelzeile protokolliert. Antwortet das Display nicht,
+sendet der Sender nur noch ein Paket pro Sekunde, bis es wieder quittiert.
 
 ### LED-Zustände
 
