@@ -34,14 +34,16 @@ constexpr uint32_t ButtonDebounceMs = 30;
 constexpr std::size_t TelemetryQueueLength = 16;
 constexpr std::size_t TelemetryValueCapacity = 64;
 
-constexpr float CoolantWarnC = 95.0f;
-constexpr float CoolantCriticalC = 105.0f;
-constexpr float OilWarnC = 115.0f;
-constexpr float OilCriticalC = 125.0f;
+// VW engines run 90-105 C coolant (eco mode up to ~110) and oil up to ~120 C.
+constexpr float CoolantWarnC = 110.0f;
+constexpr float CoolantCriticalC = 118.0f;
+constexpr float OilWarnC = 130.0f;
+constexpr float OilCriticalC = 140.0f;
 constexpr float VoltageWarnLow = 11.8f;
 constexpr float VoltageCriticalLow = 11.2f;
-constexpr float VoltageWarnHigh = 14.8f;
-constexpr float VoltageCriticalHigh = 15.2f;
+// VW energy management charges up to ~15 V when cold; above that is suspicious.
+constexpr float VoltageWarnHigh = 15.5f;
+constexpr float VoltageCriticalHigh = 16.0f;
 constexpr uint16_t RpmWarn = 4200;
 constexpr uint16_t RpmCritical = 5000;
 constexpr uint16_t RpmMax = 6000;

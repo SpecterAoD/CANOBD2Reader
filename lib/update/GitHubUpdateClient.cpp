@@ -1,6 +1,7 @@
 #include "GitHubUpdateClient.h"
 
 #include "OtaSession.h"
+#include "SystemHealth.h"
 #include "config/UpdateConfig.h"
 
 #if defined(ARDUINO)
@@ -85,6 +86,7 @@ bool GitHubUpdateClient::downloadInto(const char* url, OtaSession& session, std:
     std::size_t received = 0;
     uint32_t lastDataMs = millis();
     while (http.connected() && (contentLength < 0 || received < static_cast<std::size_t>(contentLength))) {
+        SystemHealth::feed();  // a download takes longer than the loop watchdog allows
         const std::size_t available = stream->available();
         if (available == 0) {
             if (millis() - lastDataMs > UpdateConfig::DownloadTimeoutMs) {

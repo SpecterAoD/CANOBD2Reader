@@ -69,6 +69,10 @@ void handleStatusText(const String& raw, uint32_t sequence) {
   } else if (key == "OBD") {
     runtime().lastObdStatusAt = now;
   } else if (key == "POWER_STATE") {
+    // Level based: the state is repeated every second, so a lost packet
+    // cannot keep the display awake (or asleep).
+    const bool sleepState = value == "DisplaySleep";
+    if (sleepState != (runtime().vehicleState == "DisplaySleep")) runtime().displaySleepRequested = sleepState;
     runtime().vehicleState = value;
     runtime().lastPowerStatusAt = now;
   } else if (key == "ACTIVITY_SCORE") {
@@ -101,6 +105,7 @@ void processPacket(const QueuedPacket& queued) {
   runtime().lastSequence = packet.sequence;
   runtime().receivedPackets++;
   runtime().lastReceivedAt = millis();
+  if (runtime().lastError == "Warte auf Sender") runtime().lastError = "";
 
   if (packet.type == static_cast<uint8_t>(Telemetry::PacketType::LiveSnapshot)) {
     LiveData::Snapshot snapshot;

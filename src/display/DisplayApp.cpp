@@ -6,6 +6,7 @@
 #include <WiFi.h>
 
 #include "BootValidation.h"
+#include "SystemHealth.h"
 #include "DeviceSecrets.h"
 #include "DiagnosticLog.h"
 #include "DisplayReceiver.h"
@@ -23,12 +24,14 @@ void begin() {
   DisplayUi::begin();
   DiagnosticLog::begin();
   Security::begin(false);
+  SystemHealth::logBootSummary("display");
   DiagnosticLog::appendf("[BOOT] Display firmware=%s protocol=%u mac=%s secrets=%s %s", ProjectConfig::FirmwareVersion,
-                         ProjectConfig::ProtocolVersion, WiFi.macAddress().c_str(),
+                         ProjectConfig::ProtocolVersion, SystemHealth::macAddress(),
                          Security::sourceName(Security::source()), Security::problemText());
   // Web first: it sets up the AP on the ESP-NOW channel, then ESP-NOW joins.
   DisplayWeb::begin();
   DisplayReceiver::begin();
+  SystemHealth::startWatchdog();
 }
 
 void tick() {

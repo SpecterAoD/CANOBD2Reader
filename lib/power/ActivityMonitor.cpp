@@ -77,8 +77,12 @@ const char* ActivityMonitor::powerCommandName(PowerCommand command) {
 uint8_t ActivityMonitor::calculateActivityScore(ActivitySnapshot& flags, const ActivityInput& input) const {
     flags.canActive = recently(input.nowMs, input.lastCanMessageAtMs, DisplayConfig::CanTimeoutMs);
     flags.obdActive = recently(input.nowMs, input.lastObdResponseAtMs, DisplayConfig::ObdTimeoutMs);
-    flags.engineRunning = input.rpm >= PowerConfig::EngineRunningRpm;
-    flags.moving = input.speedKph >= PowerConfig::MovingSpeedKph;
+    // RPM/speed/load/throttle are the last values the ECU reported. After
+    // ignition off they never change again, so they only count while OBD
+    // answers are recent - otherwise an engine switched off at idle looked
+    // like "running" forever and the car was never detected as parked.
+    flags.engineRunning = flags.obdActive && input.rpm >= PowerConfig::EngineRunningRpm;
+    flags.moving = flags.obdActive && input.speedKph >= PowerConfig::MovingSpeedKph;
     flags.boardAwake = input.batteryVoltage >= PowerConfig::BoardVoltageAwakeMin;
     flags.userActive = recently(input.nowMs, input.lastUserActivityAtMs, PowerConfig::UserActivityWindowMs);
 
@@ -87,8 +91,8 @@ uint8_t ActivityMonitor::calculateActivityScore(ActivitySnapshot& flags, const A
     if (flags.obdActive) score += 5;
     if (flags.engineRunning) score += 3;
     if (flags.moving) score += 3;
-    if (input.engineLoadPercent >= PowerConfig::ActiveEngineLoadPercent) score += 2;
-    if (input.throttlePercent >= PowerConfig::ActiveThrottlePercent) score += 2;
+    if (flags.obdActive && input.engineLoadPercent >= PowerConfig::ActiveEngineLoadPercent) score += 2;
+    if (flags.obdActive && input.throttlePercent >= PowerConfig::ActiveThrottlePercent) score += 2;
     if (flags.boardAwake) score += 2;
     if (flags.userActive) score += 1;
     if (input.simulationActive) score += 5;

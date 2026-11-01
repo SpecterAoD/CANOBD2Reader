@@ -9,6 +9,7 @@
 //   GET  /api/wifi/status,          POST /api/wifi/configure|connect|forget
 //   GET  /log/file|/log/download,   POST /api/log/clear
 //   GET  /api/simulation,           POST /api/simulation/on|off|toggle|scenario
+//   GET  /api/coredump (crash report download), POST /api/coredump/clear
 //   POST /api/restart
 // Device specific pages (/, /status, ...) are registered by the target via
 // server() after begin().

@@ -23,8 +23,8 @@ float displayScenarioValue(const SimulationData::Sample& sample, Scenario scenar
         return normal ? 2500.0f : 2200.0f;
     }
     if (std::strcmp(sample.name, "CoolantTemp") == 0) {
-        if (critical || mixed) return 108.0f;
-        if (warning) return 98.0f;
+        if (critical || mixed) return 120.0f;
+        if (warning) return 112.0f;
         return 85.0f;
     }
     if (std::strcmp(sample.name, "BatteryVoltage") == 0) {
@@ -35,8 +35,8 @@ float displayScenarioValue(const SimulationData::Sample& sample, Scenario scenar
         return 13.8f;
     }
     if (std::strcmp(sample.name, "OilTemp") == 0) {
-        if (critical) return 128.0f;
-        if (warning || mixed) return 116.0f;
+        if (critical) return 142.0f;
+        if (warning || mixed) return 132.0f;
         return 90.0f;
     }
     if (std::strcmp(sample.name, "EngineLoad") == 0) return warning ? 74.0f : 36.0f;

@@ -29,8 +29,10 @@ SECRETS = ROOT / "include" / "secrets.h"
 
 # chip, bootloader offset, USB VID:PID, baud
 TARGETS = {
-    "sender": {"chip": "esp32", "bootloader": 0x1000, "usb": "1a86:7523", "baud": 460800, "mac": "SenderAllowedMac"},
-    "display": {"chip": "esp32s3", "bootloader": 0x0, "usb": "303a:1001", "baud": 460800, "mac": "DisplayPeerMac"},
+    "sender": {"chip": "esp32", "bootloader": 0x1000, "usb": "1a86:7523", "baud": 460800, "mac": "SenderAllowedMac",
+               "partitions": "sender_4mb.csv"},
+    "display": {"chip": "esp32s3", "bootloader": 0x0, "usb": "303a:1001", "baud": 460800, "mac": "DisplayPeerMac",
+                "partitions": "display_16mb.csv"},
 }
 PARTITIONS_OFFSET = 0x8000
 
@@ -54,9 +56,9 @@ def read_secrets() -> dict[str, str]:
     return values
 
 
-def otadata_and_app_offsets() -> tuple[int, int]:
+def otadata_and_app_offsets(csv_name: str) -> tuple[int, int]:
     otadata = app = None
-    for line in (ROOT / "partitions" / "ota_4mb.csv").read_text().splitlines():
+    for line in (ROOT / "partitions" / csv_name).read_text().splitlines():
         fields = [f.strip() for f in line.split(",")]
         if len(fields) >= 4 and not fields[0].startswith("#"):
             if fields[2] == "ota":
@@ -64,7 +66,7 @@ def otadata_and_app_offsets() -> tuple[int, int]:
             if fields[2] == "ota_0":
                 app = int(fields[3], 16)
     if otadata is None or app is None:
-        raise SystemExit("error: partitions/ota_4mb.csv without otadata/ota_0")
+        raise SystemExit(f"error: partitions/{csv_name} without otadata/ota_0")
     return otadata, app
 
 
@@ -80,7 +82,8 @@ FLASH_SH = r'''#!/usr/bin/env bash
 # CANOBD2Reader – Provisionierung per USB (erzeugt von make_provisioning_package.py)
 #
 #   ./flash.sh pruefen sender|display   Board finden und MAC prüfen (ändert nichts)
-#   ./flash.sh sender|display           Flash komplett löschen und neu beschreiben
+#   ./flash.sh sender|display           Flash komplett löschen und neu beschreiben (Provisionierung)
+#   ./flash.sh layout sender|display    Partitionstabelle + Firmware schreiben, Zugangsdaten (NVS) bleiben
 #   ./flash.sh aufraeumen               Paket (enthält Zugangsdaten) löschen
 #
 # Ausgabe zusätzlich in /tmp/canobd2-flash.log
@@ -100,7 +103,13 @@ done
 echo "esptool: $ESPTOOL"
 
 declare -A CHIP=(%(chip)s) USB=(%(usb)s) MAC=(%(mac)s) BAUD=(%(baud)s) BOOT=(%(boot)s)
-OTADATA=%(otadata)s; APP=%(app)s; PART=%(part)s
+declare -A OTADATA=(%(otadata)s) APP=(%(app)s); PART=%(part)s
+
+write_images() {  # $1 = target: bootloader, partition table, boot selection, firmware
+  "$ESPTOOL" --chip "${CHIP[$1]}" --port "$PORT" --baud "${BAUD[$1]}" write_flash -z \
+    "${BOOT[$1]}" "$1/bootloader.bin" "$PART" "$1/partitions.bin" "${OTADATA[$1]}" boot_app0.bin \
+    "${APP[$1]}" "$1/firmware.bin"
+}
 
 find_port() {  # $1 = target; erstes serielles Gerät mit passender VID:PID
   local dev vid pid
@@ -135,13 +144,20 @@ case "${1:-}" in
     echo "==> $T: Flash löschen (alte Firmware, Einstellungen, Logs)"
     "$ESPTOOL" --chip "${CHIP[$T]}" --port "$PORT" --baud "${BAUD[$T]}" erase_flash
     echo "==> $T: schreiben"
-    "$ESPTOOL" --chip "${CHIP[$T]}" --port "$PORT" --baud "${BAUD[$T]}" write_flash -z \
-      "${BOOT[$T]}" "$T/bootloader.bin" "$PART" "$T/partitions.bin" "$OTADATA" boot_app0.bin "$APP" "$T/firmware.bin"
+    write_images "$T"
     echo "==> $T fertig. Das Gerät startet neu und übernimmt die Zugangsdaten ins NVS." ;;
+  layout)
+    # NVS (0x9000) is not touched: credentials stay. The log file system is
+    # re-created at the new position on first boot (old log is lost).
+    T=${2:-x}; [[ -n "${CHIP[$T]:-}" ]] || { echo "Aufruf: $0 layout sender|display"; exit 1; }
+    check_board "$T"
+    echo "==> $T: neue Partitionstabelle + Firmware schreiben (ohne Löschen, Zugangsdaten bleiben)"
+    write_images "$T"
+    echo "==> $T fertig. Erster Start legt das Log-Dateisystem neu an (dauert einige Sekunden)." ;;
   aufraeumen)
     read -r -p "Paket $(pwd) mit Zugangsdaten löschen? [j/N] " a; [[ "$a" =~ ^[jJ]$ ]] || exit 0
     d=$(pwd); cd / && rm -r -- "${d:?}" && echo "gelöscht: $d" ;;
-  *) sed -n '2,8p' "$0"; exit 1 ;;
+  *) sed -n '2,9p' "$0"; exit 1 ;;
 esac
 '''
 
@@ -154,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     secrets = read_secrets()
-    otadata, app = otadata_and_app_offsets()
+    offsets = {t: otadata_and_app_offsets(c["partitions"]) for t, c in TARGETS.items()}
     if not args.skip_build:
         subprocess.run([args.pio, "run", "-e", "sender", "-e", "display"], cwd=ROOT, check=True)
 
@@ -179,7 +195,9 @@ def main(argv: list[str] | None = None) -> int:
         "mac": assoc(lambda t, c: secrets[c["mac"]]),
         "baud": assoc(lambda t, c: c["baud"]),
         "boot": assoc(lambda t, c: hex(c["bootloader"])),
-        "otadata": hex(otadata), "app": hex(app), "part": hex(PARTITIONS_OFFSET),
+        "otadata": assoc(lambda t, c: hex(offsets[t][0])),
+        "app": assoc(lambda t, c: hex(offsets[t][1])),
+        "part": hex(PARTITIONS_OFFSET),
     }
     (out / "flash.sh").write_text(script, encoding="utf-8")
     (out / "flash.sh").chmod(0o700)

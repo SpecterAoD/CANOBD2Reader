@@ -7,7 +7,10 @@
 | CAN TX / RX (TWAI) | 5 / 4 |
 | LED grün / Fehler | 26 / 27 |
 | Taster (LED-Test) | 25 |
-| Spannungsteiler Bordnetz | 32 (Faktor 4,81) |
+| Spannungsteiler Bordnetz | 32 (Faktor 4,62, abgeglichen mit PID 0x42) |
+
+Partitionslayout `partitions/sender_4mb.csv`: 2 × 1,81 MB Firmware, 64 KB
+Absturzbericht, 256 KB Log.
 
 CAN: 500 kbit/s, OBD-Anfragen funktional an `0x7DF`, nach wiederholten
 Timeouts physisch an `0x7E0`. Nach Bus-Off startet der Treiber automatisch neu.
@@ -30,7 +33,8 @@ sendet der Sender nur noch ein Paket pro Sekunde, bis es wieder quittiert.
 ## Display – LilyGO T-Display S3
 
 ST7789 170×320 an 8-Bit-Parallelbus (Pins in `platformio.ini`), Hintergrundbeleuchtung GPIO 38,
-Displayversorgung GPIO 15, Tasten GPIO 0 (BOOT) und GPIO 14.
+Partitionslayout `partitions/display_16mb.csv`: 2 × 4 MB Firmware, 128 KB
+Absturzbericht, 1 MB Log, Rest frei. Displayversorgung GPIO 15, Tasten GPIO 0 (BOOT) und GPIO 14.
 
 Tasten: BOOT (GPIO 0) kurz = nächste Seite, zweite Taste (GPIO 14) kurz = vorherige
 Seite, eine der beiden lang (1,2 s) = Hauptseite, BOOT sehr lang (3 s) = Diagnoseseiten ein/aus.
@@ -52,7 +56,14 @@ VW-MQB-Evo-Fahrzeuge halten Steuergeräte nach Zündung-aus minutenlang wach und
 nutzen Start-Stopp intensiv. Der Power-Manager (`lib/power/ActivityMonitor`)
 bewertet deshalb Drehzahl, Tempo, Last, Drosselklappe, Spannung und Busaktivität.
 Ohne CAN-/OBD-Aktivität gilt das Fahrzeug nach 5 min als geparkt; 10 min danach schickt er dem Display
-`Sleep`, beim Aufwachen `Wakeup`.
+`Sleep`, beim Aufwachen `Wakeup`. Das Display folgt dem jede Sekunde gesendeten
+Zustand (`DisplaySleep`), ein verlorenes Paket hält es also nicht wach.
+
+**Fahrzeug schlafen lassen:** Antwortet das Motorsteuergerät nicht (Zündung aus),
+sendet der Sender nichts mehr auf den Diagnose-CAN. Anfragen würden das
+VW-Gateway wecken und das Bordnetz wach halten. Die Abfrage startet erst wieder,
+wenn die Bordspannung ≥ 13,0 V zeigt (Lichtmaschine lädt, Motor läuft). Mit
+Zündung an, aber Motor aus, bleiben die Werte deshalb leer.
 
 ## Inbetriebnahme-Check
 

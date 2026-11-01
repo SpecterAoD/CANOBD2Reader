@@ -10,6 +10,7 @@
 #include "DiagnosticLog.h"
 #include "FirmwareMetadata.h"
 #include "OtaSession.h"
+#include "SystemHealth.h"
 #include "RuntimeSimulation.h"
 #include "SimulationTypes.h"
 #include "WebAssets.h"
@@ -73,6 +74,7 @@ void keepAccessPointAlive() {
 void handleUploadChunk() {
     if (!authorized(SecurityConfig::RequireOtaAuthentication)) return;
     HTTPUpload& part = webServer.upload();
+    SystemHealth::feed();  // the whole upload runs inside one loop() iteration
     switch (part.status) {
         case UPLOAD_FILE_START:
             uploadSucceeded = false;
@@ -217,6 +219,35 @@ void handleLogClear() {
     sendJson(ok ? 200 : 500, ok ? "{\"cleared\":true}" : "{\"cleared\":false}");
 }
 
+// ---- Crash reports -----------------------------------------------------------
+
+void handleCoreDumpDownload() {
+    if (!authorized()) return;
+    const SystemHealth::CoreDumpInfo dump = SystemHealth::coreDump();
+    if (!dump.present) {
+        webServer.send(404, "text/plain; charset=utf-8", "Kein Absturzbericht vorhanden");
+        return;
+    }
+    const String filename = String("CANOBD2_") + ProjectConfig::TargetName + "_" + ProjectConfig::FirmwareVersion +
+                            "_coredump.bin";
+    webServer.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+    webServer.setContentLength(dump.size);
+    webServer.send(200, "application/octet-stream", "");
+    uint8_t buffer[1024];
+    for (std::size_t offset = 0; offset < dump.size; offset += sizeof(buffer)) {
+        const std::size_t length = dump.size - offset < sizeof(buffer) ? dump.size - offset : sizeof(buffer);
+        if (!SystemHealth::readCoreDump(offset, buffer, length)) break;
+        webServer.sendContent(reinterpret_cast<const char*>(buffer), length);
+    }
+}
+
+void handleCoreDumpClear() {
+    if (!authorized()) return;
+    const bool ok = SystemHealth::eraseCoreDump();
+    log(ok ? "[WEB] Absturzbericht geloescht" : "[WEB] Absturzbericht konnte nicht geloescht werden");
+    sendJson(ok ? 200 : 500, ok ? "{\"cleared\":true}" : "{\"cleared\":false}");
+}
+
 void handleRestart() {
     if (!authorized(SecurityConfig::RequireRestartAuthentication)) return;
     log("[WEB] Neustart angefordert");
@@ -297,6 +328,8 @@ void registerRoutes() {
     webServer.on("/log/download", HTTP_GET, handleLogDownload);
     webServer.on("/api/log/clear", HTTP_POST, handleLogClear);
     webServer.on("/api/restart", HTTP_POST, handleRestart);
+    webServer.on("/api/coredump", HTTP_GET, handleCoreDumpDownload);
+    webServer.on("/api/coredump/clear", HTTP_POST, handleCoreDumpClear);
     // Simulation status is always readable; switching needs a dev build.
     webServer.on("/api/simulation", HTTP_GET, handleSimulationStatus);
 #if CANOBD2_DEV_TOOLS
@@ -412,6 +445,10 @@ void appendCommonStatusJson(String& json) {
     field("ip", WiFi.softAPIP().toString());
     number("apClients", WiFi.softAPgetStationNum());
     number("apRestarts", apRestarts);
+    const SystemHealth::CoreDumpInfo dump = SystemHealth::coreDump();
+    field("resetReason", SystemHealth::resetReasonText());
+    flag("coreDumpPresent", dump.present);
+    number("coreDumpSize", dump.size);
     flag("devTools", CANOBD2_DEV_TOOLS);
     number("uptime", millis());
 }

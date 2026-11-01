@@ -85,6 +85,9 @@ namespace SenderPower {
     if (lastSnapshot.command != Power::PowerCommand::None) {
       WebConsoleHandler::log(String("[POWER] command=") +
                              Power::ActivityMonitor::powerCommandName(lastSnapshot.command));
+      // The command exists for exactly one update; send it right away instead
+      // of waiting for the 1 s status cycle (it was practically never sent).
+      sendPowerStatus(lastSnapshot);
     }
   }
 

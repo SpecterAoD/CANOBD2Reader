@@ -6,7 +6,8 @@
 namespace LoggingConfig {
 
 constexpr bool SerialEnabled = true;
-constexpr bool GeneralDebugEnabled = true;
+// Serial debug output per CAN frame / OBD request costs loop time; enable only for bench debugging.
+constexpr bool GeneralDebugEnabled = false;
 constexpr bool TwaiDebugEnabled = false;
 constexpr bool PowerDebugEnabled = false;
 constexpr bool CanDebugEnabled = false;
@@ -16,6 +17,8 @@ constexpr uint32_t TraceSummaryIntervalMs = 1000;
 
 constexpr bool EnablePersistentDiagnosticLog = true;
 constexpr bool PersistTelemetryPayloadsToDiagnosticLog = false;
+// Write per-request OBD/ISO-TP trace lines to the flash log (debug only).
+constexpr bool PersistTraceToDiagnosticLog = false;
 constexpr std::size_t DiagnosticLogMaxBytes = 64U * 1024U;
 
 constexpr const char* SenderDiagnosticLogPath = "/sender_diagnostic.log";

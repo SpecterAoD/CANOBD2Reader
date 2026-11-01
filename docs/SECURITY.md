@@ -44,6 +44,10 @@ Zugriff auf die Platine das NVS auslesen.
   als bestätigt (`lib/update/BootValidation`). Stürzt sie vorher ab, startet
   der Bootloader wieder die vorherige Version.
 
+* **Watchdog:** Hängt `loop()` länger als 30 s, startet das Gerät neu. Passiert
+  das mit einer frisch installierten Firmware innerhalb der ersten 30 s, greift
+  ebenfalls der Rollback.
+
 ### Schlüsselverwaltung
 
 * Öffentliche Schlüssel: `include/config/FirmwareSigningKeys.h` (im Repo).

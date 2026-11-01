@@ -22,8 +22,11 @@ Gemeinsamer Code liegt in `lib/` und wird nativ getestet (`env:native`).
 ## Datenfluss Livewerte
 
 1. `Obd::PidPollPlanner` wählt pro Durchlauf den PID, der relativ zu seinem
-   Sollintervall am stärksten überfällig ist (schnelle Werte 200 ms, langsame
-   2 s). Nicht unterstützte PIDs (laut ECU-Maske) werden übersprungen.
+   Sollintervall am stärksten überfällig ist (schnell 200 ms: Drehzahl, Tempo,
+   Last, Luftmasse; langsam 2 s: Temperaturen, Spannung, Tank …). Nicht
+   unterstützte PIDs (laut Maske des Motorsteuergeräts 0x7E8) werden übersprungen.
+   Antworten anderer Steuergeräte (z. B. Getriebe 0x7E9) werden für Mode 01/09 verworfen.
+   Der Verbrauch wird aus der Luftmasse berechnet (PID 0x5E ist bei VW unzuverlässig).
 2. `OBD2Handler` dekodiert die Antwort und schreibt sie in die
    `LiveData::LiveValueTable` (`SenderLiveData`). Abgeleitete Werte
    (Ladedruck, Verbrauch) und die Bordspannung landen in derselben Tabelle.
@@ -51,6 +54,7 @@ Heartbeat) sind selten und bleiben Textpakete.
 | `lib/update/` | GitHub-Manifest, SemVer, `OtaSession` (signierte Installation), Boot-Validierung |
 | `lib/firmware_signing/`, `lib/monocypher/` | Ed25519-Prüfung der Firmware |
 | `lib/security/` | Gerätezugangsdaten im NVS |
+| `lib/diagnostics/` | Neustartgrund, Absturzbericht (Coredump), Loop-Watchdog |
 | `lib/web/` | Gemeinsamer Management-Webserver, Authentifizierung, HTML-Assets |
 | `lib/simulation/`, `lib/capabilities/`, `lib/can_router/` | Entwicklerwerkzeuge (nur `*_dev`-Builds aktiv) |
 | `include/config/` | Konfiguration je Bereich (keine Zugangsdaten) |

@@ -19,5 +19,8 @@ constexpr float MovingSpeedKph = 1.0f;
 constexpr float ActiveEngineLoadPercent = 5.0f;
 constexpr float ActiveThrottlePercent = 2.0f;
 constexpr float BoardVoltageAwakeMin = 12.0f;
+// With the ECU silent, OBD polling (re)starts only above this board voltage
+// (alternator charging = engine running). See SenderApp vehicleBusMayBeUsed().
+constexpr float ResumePollingVoltage = 13.0f;
 
 } // namespace PowerConfig
