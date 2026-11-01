@@ -12,6 +12,7 @@
 #include "config/SenderConfig.h"
 #include "config/DisplayConfig.h"
 #include "config/LoggingConfig.h"
+#include "config/PowerConfig.h"
 #include "RuntimeSimulation.h"
 #include "CANHandler.h"
 #include "CanRouterHub.h"
@@ -105,8 +106,18 @@ Runtime::SenderRuntimeCoordinator::CanAlertResult processCanAlerts(uint32_t wait
   return {result.rxData, result.errorLedRequested, lastCanError.c_str()};
 }
 
+// Requests on the diagnostic CAN wake the vehicle gateway. While the engine
+// ECU does not answer (ignition off) nothing is transmitted unless the board
+// voltage shows a running alternator - otherwise the sender would keep the
+// car's network awake and drain the vehicle battery.
+bool vehicleBusMayBeUsed() {
+  if (Simulation::RuntimeSimulation::enabled()) return true;
+  if (SenderObdScheduler::supportedPidsInitialized()) return true;
+  return SenderPower::getLastVoltage() >= PowerConfig::ResumePollingVoltage;
+}
+
 void tickObd(Runtime::SenderLoopState& runtimeState) {
-  if (SenderCapabilityScanner::active()) return;
+  if (SenderCapabilityScanner::active() || !vehicleBusMayBeUsed()) return;
   SenderObdScheduler::tick(runtimeState.currentMillis,
                            runtimeState.lastCanMessageAt,
                            SenderTelemetry::lastObdResponseAtRef(),
@@ -116,7 +127,7 @@ void tickObd(Runtime::SenderLoopState& runtimeState) {
 }
 
 void tickUds(Runtime::SenderLoopState& runtimeState) {
-  if (SenderCapabilityScanner::active()) return;
+  if (SenderCapabilityScanner::active() || !SenderObdScheduler::supportedPidsInitialized()) return;
   SenderUdsScheduler::tick(runtimeState.currentMillis,
                            runtimeState.lastCanMessageAt,
                            SenderTelemetry::lastObdResponseAtRef(),
@@ -170,7 +181,7 @@ void SenderApp::begin() {
   DiagnosticLog::begin();
   Security::begin(true);
   SystemHealth::logBootSummary("sender");
-  DiagnosticLog::appendf("[BOOT] mac=%s secrets=%s %s", WiFi.macAddress().c_str(),
+  DiagnosticLog::appendf("[BOOT] mac=%s secrets=%s %s", SystemHealth::macAddress(),
                          Security::sourceName(Security::source()), Security::problemText());
   DiagnosticLog::appendf("[BOOT] Sender firmware=%s protocol=%u target=%s",
                          ProjectConfig::FirmwareVersion,

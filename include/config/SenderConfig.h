@@ -57,7 +57,8 @@ constexpr const char* DiagnosticLogArchivePath = LoggingConfig::SenderDiagnostic
 constexpr uint32_t TwaiStatusLogIntervalMs = LoggingConfig::TwaiStatusLogIntervalMs;
 constexpr std::size_t MaxCanFramesPerTick = 16;
 
-constexpr float VoltageCalcFactor = 4.81f;
+// Calibrated 01.11.2026 against the engine ECU (PID 0x42: 14.62 V, ADC read ~15.3 V).
+constexpr float VoltageCalcFactor = 4.62f;
 constexpr float DefaultBarometricPressureKpa = 101.3f;
 
 constexpr std::size_t CanRxQueueLength = 32;

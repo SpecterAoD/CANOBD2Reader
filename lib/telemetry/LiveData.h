@@ -92,6 +92,8 @@ public:
     void reset();
     void update(Metric metric, float value, uint32_t nowMs);
     void markUnsupported(Metric metric);
+    // Value no longer meaningful (e.g. L/100 km while standing): shown as "--".
+    void clear(Metric metric);
     void setSimulated(bool simulated) { simulated_ = simulated; }
     bool has(Metric metric) const;
     float value(Metric metric) const;

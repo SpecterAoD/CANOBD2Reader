@@ -11,6 +11,7 @@ namespace SenderLiveData {
 void reset();
 void update(LiveData::Metric metric, float value);
 void markUnsupported(LiveData::Metric metric);
+void clear(LiveData::Metric metric);
 void setSimulated(bool simulated);
 bool has(LiveData::Metric metric);
 float value(LiveData::Metric metric);

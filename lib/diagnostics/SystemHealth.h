@@ -38,6 +38,9 @@ bool readCoreDump(std::size_t offset, uint8_t* buffer, std::size_t length);
 // Writes the boot summary to the diagnostic log (call after DiagnosticLog::begin).
 void logBootSummary(const char* device);
 
+// Station MAC from eFuse (valid before WiFi is started), "aa:bb:cc:dd:ee:ff".
+const char* macAddress();
+
 void startWatchdog();
 void feed();
 

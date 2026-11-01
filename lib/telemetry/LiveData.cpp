@@ -130,6 +130,12 @@ void LiveValueTable::markUnsupported(Metric metric) {
     validMask_ &= ~(1u << index);
 }
 
+void LiveValueTable::clear(Metric metric) {
+    const uint8_t index = static_cast<uint8_t>(metric);
+    if (index >= MetricCount) return;
+    validMask_ &= ~(1u << index);
+}
+
 bool LiveValueTable::has(Metric metric) const {
     return (validMask_ >> static_cast<uint8_t>(metric)) & 1U;
 }

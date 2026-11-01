@@ -26,7 +26,7 @@ void begin() {
   Security::begin(false);
   SystemHealth::logBootSummary("display");
   DiagnosticLog::appendf("[BOOT] Display firmware=%s protocol=%u mac=%s secrets=%s %s", ProjectConfig::FirmwareVersion,
-                         ProjectConfig::ProtocolVersion, WiFi.macAddress().c_str(),
+                         ProjectConfig::ProtocolVersion, SystemHealth::macAddress(),
                          Security::sourceName(Security::source()), Security::problemText());
   // Web first: it sets up the AP on the ESP-NOW channel, then ESP-NOW joins.
   DisplayWeb::begin();

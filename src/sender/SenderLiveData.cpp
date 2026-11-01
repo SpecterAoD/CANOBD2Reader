@@ -28,6 +28,10 @@ void markUnsupported(LiveData::Metric metric) {
     table.markUnsupported(metric);
 }
 
+void clear(LiveData::Metric metric) {
+    table.clear(metric);
+}
+
 void setSimulated(bool simulated) {
     table.setSimulated(simulated);
 }

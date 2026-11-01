@@ -7,7 +7,7 @@
 | CAN TX / RX (TWAI) | 5 / 4 |
 | LED grün / Fehler | 26 / 27 |
 | Taster (LED-Test) | 25 |
-| Spannungsteiler Bordnetz | 32 (Faktor 4,81) |
+| Spannungsteiler Bordnetz | 32 (Faktor 4,62, abgeglichen mit PID 0x42) |
 
 Partitionslayout `partitions/sender_4mb.csv`: 2 × 1,81 MB Firmware, 64 KB
 Absturzbericht, 256 KB Log.
@@ -56,7 +56,14 @@ VW-MQB-Evo-Fahrzeuge halten Steuergeräte nach Zündung-aus minutenlang wach und
 nutzen Start-Stopp intensiv. Der Power-Manager (`lib/power/ActivityMonitor`)
 bewertet deshalb Drehzahl, Tempo, Last, Drosselklappe, Spannung und Busaktivität.
 Ohne CAN-/OBD-Aktivität gilt das Fahrzeug nach 5 min als geparkt; 10 min danach schickt er dem Display
-`Sleep`, beim Aufwachen `Wakeup`.
+`Sleep`, beim Aufwachen `Wakeup`. Das Display folgt dem jede Sekunde gesendeten
+Zustand (`DisplaySleep`), ein verlorenes Paket hält es also nicht wach.
+
+**Fahrzeug schlafen lassen:** Antwortet das Motorsteuergerät nicht (Zündung aus),
+sendet der Sender nichts mehr auf den Diagnose-CAN. Anfragen würden das
+VW-Gateway wecken und das Bordnetz wach halten. Die Abfrage startet erst wieder,
+wenn die Bordspannung ≥ 13,0 V zeigt (Lichtmaschine lädt, Motor läuft). Mit
+Zündung an, aber Motor aus, bleiben die Werte deshalb leer.
 
 ## Inbetriebnahme-Check
 

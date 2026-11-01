@@ -4,6 +4,7 @@
   #include <Arduino.h>
   #include <esp_core_dump.h>
   #include <esp_flash.h>
+  #include <esp_mac.h>
   #include <esp_system.h>
   #include <esp_task_wdt.h>
   #include "DiagnosticLog.h"
@@ -98,6 +99,18 @@ void logBootSummary(const char* device) {
 #else
     (void)device;
 #endif
+}
+
+const char* macAddress() {
+    static char text[18] = "00:00:00:00:00:00";
+#if defined(ARDUINO)
+    uint8_t mac[6] = {};
+    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK) {
+        std::snprintf(text, sizeof(text), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4],
+                      mac[5]);
+    }
+#endif
+    return text;
 }
 
 void startWatchdog() {

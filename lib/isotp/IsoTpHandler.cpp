@@ -140,7 +140,7 @@ bool IsoTpHandler::receiveResponse(uint8_t expectedMode, uint8_t expectedPid, Pa
     }
     CanRouting::unregisterListener(*this);
     lastStatus_ = Status::Timeout;
-    Logger::warn("[ISOTP] Timeout waiting for response");
+    Logger::obd("[ISOTP] Timeout waiting for response");  // reported once by the OBD/UDS layer
     return false;
 #else
     (void)expectedMode;

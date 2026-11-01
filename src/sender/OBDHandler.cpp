@@ -2,6 +2,7 @@
 #include "LiveData.h"
 #include "SenderLiveData.h"
 #include "PIDs.h"
+#include "config/ObdConfig.h"
 #include "PID_Converter.h"
 #include "IsoTpHandler.h"
 #include "BoostCalculator.h"
@@ -111,12 +112,15 @@ void OBD2Handler::calcConsumption(uint8_t pid, float value) {
     if (pid == VEHICLE_SPEED) Runtime::SenderRuntimeState::updateSpeed(value);
     if (pid == ENGINE_FUEL_RATE) Runtime::SenderRuntimeState::updateFuelRate(value);
 
-    // Instantaneous consumption only makes sense while moving.
+    // Instantaneous consumption only makes sense while moving; standing it
+    // is cleared instead of keeping the last (now wrong) value.
     if (SenderLiveData::has(LiveData::Metric::FuelRate) && SenderLiveData::has(LiveData::Metric::Speed)) {
         const float speed = SenderLiveData::value(LiveData::Metric::Speed);
         if (speed >= 5.0f) {
             SenderLiveData::update(LiveData::Metric::InstantConsumption,
                                    SenderLiveData::value(LiveData::Metric::FuelRate) * 100.0f / speed);
+        } else {
+            SenderLiveData::clear(LiveData::Metric::InstantConsumption);
         }
     }
 
@@ -175,9 +179,20 @@ bool OBD2Handler::requestAndSendPID(uint8_t pid) {
     updateActivityMetrics(pid, result.value);
 
     LiveData::Metric metric;
-    if (LiveData::metricForPid(pid, metric)) SenderLiveData::update(metric, result.value);
+    const bool fuelFromMaf = ObdConfig::FuelRateFromMaf && pid == ENGINE_FUEL_RATE;
+    if (!fuelFromMaf && LiveData::metricForPid(pid, metric)) SenderLiveData::update(metric, result.value);
 
-    if (pid == VEHICLE_SPEED || pid == ENGINE_FUEL_RATE) calcConsumption(pid, result.value);
+    if (ObdConfig::FuelRateFromMaf && pid == MAF_FLOW_RATE) {
+        // g/s air -> L/h fuel; overrun (no load) means fuel cut-off.
+        const bool overrun = Runtime::SenderRuntimeState::lastEngineLoadPercent() < ObdConfig::OverrunLoadPercent;
+        const float litresPerHour = overrun ? 0.0f
+                                            : result.value * 3600.0f /
+                                                  (ObdConfig::StoichiometricAfr * ObdConfig::FuelDensityGramPerLitre);
+        SenderLiveData::update(LiveData::Metric::FuelRate, litresPerHour);
+        calcConsumption(ENGINE_FUEL_RATE, litresPerHour);
+    }
+
+    if (pid == VEHICLE_SPEED || (pid == ENGINE_FUEL_RATE && !fuelFromMaf)) calcConsumption(pid, result.value);
     if (pid == INTAKE_MANIFOLD_ABS_PRESSURE || pid == ABS_BAROMETRIC_PRESSURE) updateBoostPressure(pid, result.value);
 
     Logger::obdValue(getPIDName(pid), result.value, result.unit);

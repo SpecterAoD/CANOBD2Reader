@@ -26,8 +26,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = {
-    "sender": {"chip": "esp32", "usb": "1a86:7523", "csv": "sender_4mb.csv"},
-    "display": {"chip": "esp32s3", "usb": "303a:1001", "csv": "display_16mb.csv"},
+    # CH340 (sender) is unreliable above 115200 for long reads.
+    "sender": {"chip": "esp32", "usb": "1a86:7523", "csv": "sender_4mb.csv", "baud": "115200"},
+    "display": {"chip": "esp32s3", "usb": "303a:1001", "csv": "display_16mb.csv", "baud": "460800"},
 }
 # Layout of V2.0 - V2.1.0-beta.2 (partitions/ota_4mb.csv, both devices).
 LEGACY = {"spiffs": (0x3B0000, 0x50000)}
@@ -41,7 +42,7 @@ P=""; for d in /dev/ttyUSB* /dev/ttyACM*; do [[ -e "$d" ]] || continue
   v=$(udevadm info -q property -n "$d" | sed -n 's/^ID_VENDOR_ID=//p'); p=$(udevadm info -q property -n "$d" | sed -n 's/^ID_MODEL_ID=//p')
   [[ "${v,,}:${p,,}" == "$USBID" ]] && { P=$d; break; }; done
 [[ -n "$P" ]] || { echo "Board $USBID nicht gefunden" >&2; exit 1; }
-"$E" --chip "$CHIP" --port "$P" --baud 460800 read_flash "$OFFSET" "$SIZE" "$OUT" >&2
+"$E" --chip "$CHIP" --port "$P" --baud "$BAUD" read_flash "$OFFSET" "$SIZE" "$OUT" >&2
 '''
 
 
@@ -55,7 +56,7 @@ def partition(csv_name: str, subtype: str) -> tuple[int, int]:
 
 def read_region(target: str, offset: int, size: int, dest: Path, remote: str | None) -> None:
     env = {"USBID": TARGETS[target]["usb"], "CHIP": TARGETS[target]["chip"],
-           "OFFSET": hex(offset), "SIZE": hex(size)}
+           "OFFSET": hex(offset), "SIZE": hex(size), "BAUD": TARGETS[target]["baud"]}
     if remote:
         remote_file = f"/tmp/canobd2-read-{os.getpid()}.bin"
         assignments = " ".join(f"{k}={shlex.quote(v)}" for k, v in {**env, "OUT": remote_file}.items())

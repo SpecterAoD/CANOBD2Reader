@@ -69,6 +69,10 @@ void handleStatusText(const String& raw, uint32_t sequence) {
   } else if (key == "OBD") {
     runtime().lastObdStatusAt = now;
   } else if (key == "POWER_STATE") {
+    // Level based: the state is repeated every second, so a lost packet
+    // cannot keep the display awake (or asleep).
+    const bool sleepState = value == "DisplaySleep";
+    if (sleepState != (runtime().vehicleState == "DisplaySleep")) runtime().displaySleepRequested = sleepState;
     runtime().vehicleState = value;
     runtime().lastPowerStatusAt = now;
   } else if (key == "ACTIVITY_SCORE") {

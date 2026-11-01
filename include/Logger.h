@@ -16,6 +16,14 @@ namespace Logger {
         if (sink) sink(msg);
     }
 
+    // Per-frame/per-request trace (debug, ISO-TP, OBD values). Writing every
+    // line to the flash log slowed polling down to ~5 requests/s in the
+    // vehicle; it only goes to the sink (web console + flash log) when
+    // explicitly enabled for a debugging session.
+    inline void emitTrace(const char* msg) {
+        if (LoggingConfig::PersistTraceToDiagnosticLog && sink) sink(msg);
+    }
+
     // ======== Initialisierung ========
     inline void initDebug() {
         if (LoggingConfig::SerialEnabled) {
@@ -37,7 +45,7 @@ namespace Logger {
 
     // ======== Allgemeines Debug ========
     inline void debug(const char* msg) {
-        emit(msg);
+        emitTrace(msg);
         if (LoggingConfig::GeneralDebugEnabled && LoggingConfig::SerialEnabled) {
             Serial.print("[DEBUG] ");
             Serial.println(msg);
@@ -55,7 +63,7 @@ namespace Logger {
 
         Serial.print("[DEBUG] ");
         Serial.println(buf);
-        emit(buf);
+        emitTrace(buf);
     }
 
     template<typename T>
@@ -72,7 +80,7 @@ namespace Logger {
             Serial.println();
             char buf[128];
             snprintf(buf, sizeof(buf), "%s: %s%s", label, String(value).c_str(), unit && unit[0] ? unit : "");
-            emit(buf);
+            emitTrace(buf);
         }
     }
 
@@ -110,7 +118,7 @@ namespace Logger {
     }
 
     inline void can(const char* msg) {
-        emit(msg);
+        emitTrace(msg);
         if (LoggingConfig::CanDebugEnabled && LoggingConfig::SerialEnabled) {
             Serial.print("[CAN] ");
             Serial.println(msg);
@@ -125,7 +133,7 @@ namespace Logger {
         for (int i = 0; i < message.data_length_code && used > 0 && used < static_cast<int>(sizeof(buf)); i++) {
             used += snprintf(buf + used, sizeof(buf) - used, " %02X", message.data[i]);
         }
-        emit(buf);
+        emitTrace(buf);
 
         if (LoggingConfig::CanDebugEnabled && LoggingConfig::SerialEnabled) {
             Serial.print("[CAN] ID=0x");
@@ -144,7 +152,7 @@ namespace Logger {
 
     // ======== OBD2 Debug ========
     inline void obd(const char* msg) {
-        emit(msg);
+        emitTrace(msg);
         if (LoggingConfig::Obd2DebugEnabled && LoggingConfig::SerialEnabled) {
             Serial.print("[OBD2] ");
             Serial.println(msg);
@@ -157,7 +165,7 @@ namespace Logger {
         for (uint8_t i = 0; i < len && used > 0 && used < static_cast<int>(sizeof(buf)); i++) {
             used += snprintf(buf + used, sizeof(buf) - used, " %02X", data[i]);
         }
-        emit(buf);
+        emitTrace(buf);
 
         if (LoggingConfig::Obd2DebugEnabled && LoggingConfig::SerialEnabled) {
             Serial.print("[OBD2] PID 0x");
@@ -180,7 +188,7 @@ namespace Logger {
                  String(value).c_str(),
                  unit && unit[0] ? " " : "",
                  unit && unit[0] ? unit : "");
-        emit(buf);
+        emitTrace(buf);
 
         if (LoggingConfig::Obd2DebugEnabled && LoggingConfig::SerialEnabled) {
             Serial.print("[OBD2] ");

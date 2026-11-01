@@ -87,6 +87,29 @@ void test_parked_starts_sleep_timer_but_does_not_sleep_immediately() {
                             static_cast<uint8_t>(snapshot.command));
 }
 
+// Regression (vehicle test 01.11.2026): the engine was switched off at idle,
+// the last reported RPM (800) and speed stayed in memory and the car was
+// considered "running" forever - the display never went to sleep.
+void test_stale_rpm_after_ignition_off_does_not_prevent_parking() {
+    Power::ActivityMonitor monitor;
+    monitor.reset(0);
+    Power::ActivityInput input = baseInput(PowerConfig::ParkDetectionTimeoutMs + 20000);
+    input.batteryVoltage = 12.6f;  // realistic resting voltage
+    input.rpm = 800.0f;            // last value before ignition off
+    input.speedKph = 3.0f;
+    input.engineLoadPercent = 25.0f;
+    input.lastCanMessageAtMs = 1000;
+    input.lastObdResponseAtMs = 1000;
+
+    Power::ActivitySnapshot snapshot = monitor.update(input);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(Power::VehicleState::Parked), static_cast<uint8_t>(snapshot.state));
+
+    input.nowMs += PowerConfig::DisplaySleepAfterMs + 1;
+    snapshot = monitor.update(input);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(Power::VehicleState::DisplaySleep),
+                            static_cast<uint8_t>(snapshot.state));
+}
+
 void test_display_sleep_after_parked_timer_elapsed() {
     Power::ActivityMonitor monitor;
     monitor.reset(0);
@@ -151,6 +174,7 @@ int main(int, char**) {
     RUN_TEST(test_engine_off_alone_does_not_request_display_sleep);
     RUN_TEST(test_can_activity_prevents_parked_state);
     RUN_TEST(test_parked_starts_sleep_timer_but_does_not_sleep_immediately);
+    RUN_TEST(test_stale_rpm_after_ignition_off_does_not_prevent_parking);
     RUN_TEST(test_display_sleep_after_parked_timer_elapsed);
     RUN_TEST(test_wakeup_from_display_sleep_on_new_can_message);
     RUN_TEST(test_simulation_activity_keeps_power_manager_awake);
