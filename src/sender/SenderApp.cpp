@@ -16,6 +16,7 @@
 #include "CANHandler.h"
 #include "CanRouterHub.h"
 #include "BootValidation.h"
+#include "SystemHealth.h"
 #include "DeviceSecrets.h"
 #include "SenderLiveData.h"
 #include "SenderPower.h"
@@ -168,6 +169,7 @@ void SenderApp::begin() {
   Serial.begin(ProjectConfig::Baudrate);
   DiagnosticLog::begin();
   Security::begin(true);
+  SystemHealth::logBootSummary("sender");
   DiagnosticLog::appendf("[BOOT] mac=%s secrets=%s %s", WiFi.macAddress().c_str(),
                          Security::sourceName(Security::source()), Security::problemText());
   DiagnosticLog::appendf("[BOOT] Sender firmware=%s protocol=%u target=%s",
@@ -222,6 +224,7 @@ void SenderApp::begin() {
 
   WebConsoleHandler::log(canDriverReady ? "Sender bereit" : "Sender im Fehler-/OTA-Modus");
   SenderLedButton::pulseError(millis());
+  SystemHealth::startWatchdog();
 }
 // End region ================================== Setup ==================================
 

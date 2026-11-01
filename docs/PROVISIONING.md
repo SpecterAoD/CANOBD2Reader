@@ -71,6 +71,22 @@ Paket kopieren (z. B. `scp -r`), Board per USB anschließen, dann:
 5. Optional: unter „Firmware-Update“ eine unsignierte Datei hochladen – sie muss
    abgelehnt werden.
 
+## Partitionslayout ändern (Zugangsdaten bleiben)
+
+Eine neue Partitionstabelle lässt sich nicht per WLAN einspielen. Für diesen
+Fall gibt es den Befehl `layout`: Er schreibt Bootloader, Partitionstabelle,
+Startauswahl und Firmware, **ohne** den Flash zu löschen. Der NVS-Bereich mit
+den Zugangsdaten liegt in allen Layouts bei `0x9000` und bleibt erhalten. Nur
+das Diagnose-Log wird beim ersten Start neu angelegt.
+
+```bash
+./flash.sh pruefen sender && ./flash.sh layout sender
+./flash.sh pruefen display && ./flash.sh layout display
+```
+
+Aktuelle Layouts: `partitions/sender_4mb.csv` (ESP32, 4 MB) und
+`partitions/display_16mb.csv` (ESP32-S3, 16 MB), jeweils mit Coredump-Bereich.
+
 ## Spätere Updates
 
 Unter **Firmware-Update** (`/github-update`): WLAN/Hotspot eintragen, Kanal

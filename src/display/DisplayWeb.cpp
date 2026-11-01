@@ -45,6 +45,8 @@ body{margin:0 auto;max-width:460px;padding:12px;background:#070b12;color:#f8fafc
 <a class="btn" href="/github-update">Firmware-Update (signiert)</a></div>
 <div class="card"><div class="label">Display-Seiten</div><div id="pages" class="value">--</div>
 <button id="toggleDiag">Diagnoseseiten umschalten</button></div>
+<div class="card"><div class="label">Neustart / Absturzbericht</div><div id="crash" class="value">--</div>
+<a class="btn" id="crashDl" href="/api/coredump" style="display:none">Absturzbericht herunterladen</a><button id="crashClear" class="danger" style="display:none">Absturzbericht loeschen</button></div>
 <div class="card"><div class="label">Diagnose-Log</div><a class="btn" href="/log/download">Log herunterladen</a><button id="clearLog" class="danger">Log loeschen</button></div>
 <button id="restart" class="danger">Display neu starten</button>
 <script>%%COMMON_JS%%
@@ -52,9 +54,12 @@ async function refresh(){try{let s=await (await api('/status')).json();
 $('link').textContent=s.espNowConnected?'verbunden':'keine Daten';$('link').className='value '+(s.espNowConnected?'ok':'bad');
 $('packets').textContent=s.receivedPackets+' ok, '+s.droppedPackets+' verloren, '+s.crcErrors+' CRC, letztes vor '+(s.lastPacketAgeMs/1000).toFixed(1)+' s'+(s.simulated?' (Simulation)':'');
 $('fw').textContent=s.firmware+' / Protokoll '+s.protocol;$('sec').textContent=s.securityReady?'Zugangsdaten: '+s.secretsSource:'Nicht provisioniert: '+s.securityWarning;
+$('crash').textContent='Letzter Neustart: '+s.resetReason+(s.coreDumpPresent?' - Absturzbericht vorhanden ('+s.coreDumpSize+' Bytes)':'');
+$('crashDl').style.display=$('crashClear').style.display=s.coreDumpPresent?'block':'none';
 $('pages').textContent=s.diagnosticPagesEnabled?'Diagnose ('+s.visiblePageCount+' Seiten)':'Fahrmodus ('+s.visiblePageCount+' Seiten)'}catch(e){$('link').textContent='offline'}}
 $('toggleDiag').onclick=async()=>{await post('/api/display/diagnostic-pages/toggle');refresh()};
 $('clearLog').onclick=async()=>{if(confirm('Log wirklich loeschen?'))await post('/api/log/clear')};
+$('crashClear').onclick=async()=>{if(confirm('Absturzbericht loeschen?')){await post('/api/coredump/clear');refresh()}};
 $('restart').onclick=async()=>{if(confirm('Display neu starten?'))await post('/api/restart')};
 refresh();setInterval(refresh,2000);
 </script></body></html>)HTML";

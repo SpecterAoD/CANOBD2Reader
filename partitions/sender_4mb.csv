@@ -1,0 +1,9 @@
+# Sender, ESP32 4 MB. NVS (credentials) and app slots unchanged from the
+# former ota_4mb.csv, so a layout change via USB keeps the provisioning.
+# Name,    Type, SubType,  Offset,   Size
+nvs,       data, nvs,      0x9000,   0x5000
+otadata,   data, ota,      0xe000,   0x2000
+app0,      app,  ota_0,    0x10000,  0x1D0000
+app1,      app,  ota_1,    0x1E0000, 0x1D0000
+coredump,  data, coredump, 0x3B0000, 0x10000
+spiffs,    data, spiffs,   0x3C0000, 0x40000

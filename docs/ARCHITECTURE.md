@@ -51,6 +51,7 @@ Heartbeat) sind selten und bleiben Textpakete.
 | `lib/update/` | GitHub-Manifest, SemVer, `OtaSession` (signierte Installation), Boot-Validierung |
 | `lib/firmware_signing/`, `lib/monocypher/` | Ed25519-Prüfung der Firmware |
 | `lib/security/` | Gerätezugangsdaten im NVS |
+| `lib/diagnostics/` | Neustartgrund, Absturzbericht (Coredump), Loop-Watchdog |
 | `lib/web/` | Gemeinsamer Management-Webserver, Authentifizierung, HTML-Assets |
 | `lib/simulation/`, `lib/capabilities/`, `lib/can_router/` | Entwicklerwerkzeuge (nur `*_dev`-Builds aktiv) |
 | `include/config/` | Konfiguration je Bereich (keine Zugangsdaten) |

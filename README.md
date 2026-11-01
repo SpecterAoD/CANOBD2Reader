@@ -8,7 +8,7 @@ per ESP-NOW an ein LilyGO T-Display S3 im Auto.
 - **Display** (`env:display`): flackerfreie Anzeige mit 4 Fahrseiten und
   4 Diagnoseseiten, Weboberfläche.
 
-Stand: `V2.1.0-beta.2`, Telemetrie-Protokoll 3.
+Stand: `V2.1.0-beta.3`, Telemetrie-Protokoll 3.
 
 ## Schnellstart
 

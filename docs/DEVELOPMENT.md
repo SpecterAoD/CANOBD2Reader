@@ -41,6 +41,21 @@ python scripts/ota_upload.py --host 192.168.4.1 output/sender.bin
 python scripts/ota_upload.py --sign-key ~/canobd2-signing.pem .pio/build/sender/firmware.bin
 ```
 
+## Abstürze analysieren
+
+Jeder Start schreibt den Grund ins Diagnose-Log (`[BOOT] … reset=PANIC|TASK_WDT|…`).
+Nach einem Absturz liegt ein Absturzbericht (Coredump, ELF) im Flash. Man lädt
+ihn in der Weboberfläche oder per `GET /api/coredump` herunter und wertet ihn
+mit der `firmware.elf` **genau dieses Builds** aus (CI-Artefakt bzw. lokaler
+Build mit gleichem Commit):
+
+```bash
+pip install esp-coredump
+esp-coredump info_corefile -t raw -c CANOBD2_sender_…_coredump.bin .pio/build/sender/firmware.elf
+```
+
+Danach den Bericht in der Weboberfläche löschen (`POST /api/coredump/clear`).
+
 ## Release
 
 GitHub → Actions → **Release** → Version (z. B. `2.1.0-beta.1`) und Kanal
