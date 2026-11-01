@@ -31,10 +31,13 @@ void test_voltage_severity() {
                       static_cast<int>(DisplayLogic::severityForMetric("BatteryVoltage", 11.7f, true)));
     TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Critical),
                       static_cast<int>(DisplayLogic::severityForMetric("BatteryVoltage", 11.0f, true)));
-    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Warning),
-                      static_cast<int>(DisplayLogic::severityForMetric("BatteryVoltage", 15.0f, true)));
-    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Critical),
+    // VW energy management charges up to ~15 V when cold: still OK.
+    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Ok),
                       static_cast<int>(DisplayLogic::severityForMetric("BatteryVoltage", 15.3f, true)));
+    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Warning),
+                      static_cast<int>(DisplayLogic::severityForMetric("BatteryVoltage", 15.6f, true)));
+    TEST_ASSERT_EQUAL(static_cast<int>(DisplaySeverity::Critical),
+                      static_cast<int>(DisplayLogic::severityForMetric("BatteryVoltage", 16.2f, true)));
 }
 
 void test_rpm_severity() {
