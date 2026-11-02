@@ -1,6 +1,7 @@
 #include "LiveData.h"
 
 #include <cstring>
+#include <cmath>
 
 namespace LiveData {
 namespace {
@@ -116,7 +117,7 @@ void LiveValueTable::reset() {
 
 void LiveValueTable::update(Metric metric, float value, uint32_t nowMs) {
     const uint8_t index = static_cast<uint8_t>(metric);
-    if (index >= MetricCount) return;
+    if (index >= MetricCount || !std::isfinite(value)) return;
     values_[index] = value;
     updatedAt_[index] = nowMs;
     validMask_ |= 1u << index;
@@ -151,7 +152,8 @@ Snapshot LiveValueTable::snapshot(uint32_t nowMs) const {
     snap.unsupportedMask = unsupportedMask_;
     for (std::size_t index = 0; index < MetricCount; ++index) {
         snap.values[index] = values_[index];
-        if (!((validMask_ >> index) & 1U)) {
+        if (!((validMask_ >> index) & 1U) || nowMs - updatedAt_[index] > MaxValueAgeMs) {
+            snap.validMask &= ~(1u << index);
             snap.ageTenths[index] = AgeUnknown;
             continue;
         }

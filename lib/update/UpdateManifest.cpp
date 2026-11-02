@@ -1,3 +1,4 @@
+#include "JsonEscape.h"
 #include "UpdateManifest.h"
 
 #include "FirmwareVersion.h"
@@ -25,23 +26,8 @@ bool equalsIgnoreCase(const char* a, const char* b) {
 }
 
 std::string jsonEscape(const std::string& value) {
-    std::string out;
-    out.reserve(value.size() + 8);
-    for (char c : value) {
-        if (c == '"' || c == '\\') {
-            out.push_back('\\');
-            out.push_back(c);
-        } else if (c == '\n') {
-            out += "\\n";
-        } else if (c == '\r') {
-            out += "\\r";
-        } else {
-            out.push_back(c);
-        }
-    }
-    return out;
+    return Json::escape(value);
 }
-
 std::string extractString(const std::string& object, const char* key) {
     const std::string pattern = std::string("\"") + key + "\"";
     size_t pos = object.find(pattern);

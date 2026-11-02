@@ -22,7 +22,6 @@ constexpr FirmwareUpdate::UpdateChannel DefaultChannel = FirmwareUpdate::UpdateC
 
 // Installing an older version is allowed only after explicit confirmation.
 constexpr bool AllowRollback = true;
-constexpr bool BlockInstallWhileVehicleRunning = true;
 constexpr bool RejectWhenSketchSpaceUnknown = true;
 
 constexpr uint32_t ManifestTimeoutMs = 15000;

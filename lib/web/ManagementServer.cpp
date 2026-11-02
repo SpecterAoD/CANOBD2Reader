@@ -1,3 +1,5 @@
+#include "JsonEscape.h"
+#include "UpdateSafety.h"
 #if defined(ARDUINO)
 
 #include "ManagementServer.h"
@@ -79,8 +81,8 @@ void handleUploadChunk() {
         case UPLOAD_FILE_START:
             uploadSucceeded = false;
             uploadInProgress = true;
-            if (config.installBlocker != nullptr && config.installBlocker()) {
-                uploadStatus = "Abgelehnt: Fahrzeug aktiv";
+            if (config.installBlocker == nullptr || config.installBlocker()) {
+                uploadStatus = "Abgelehnt: Fahrzeug aktiv oder Status unbekannt; Wartungsmodus nur bei getrenntem Fahrzeug";
                 uploadInProgress = false;
                 break;
             }
@@ -139,6 +141,25 @@ void handleGithubPage() {
 void handleUpdateStatus() {
     if (!authorized()) return;
     sendJson(200, FirmwareUpdate::FirmwareUpdateManager::statusJson());
+}
+
+void handleMaintenance() {
+    if (!authorized(SecurityConfig::RequireOtaAuthentication)) return;
+    // A custom header prevents cross-origin HTML forms using cached Basic Auth
+    // from enabling maintenance. This server does not grant CORS preflights.
+    if (webServer.header("X-Maintenance-Confirm") != "vehicle-disconnected") {
+        sendJson(403, "{\"error\":\"Wartungsbestaetigung im Header fehlt\"}");
+        return;
+    }
+    if (webServer.arg("enable") == "0") {
+        FirmwareUpdate::updateSafety.disableMaintenance();
+    } else if (!FirmwareUpdate::updateSafety.enableMaintenance(
+                   millis(), webServer.arg("confirm") == "vehicle-disconnected")) {
+        sendJson(409, "{\"error\":\"Fahrzeug aktiv oder Bestaetigung fehlt\"}");
+        return;
+    }
+    log("[OTA] Wartungsmodus geaendert");
+    handleUpdateStatus();
 }
 
 void handleUpdateVersions() {
@@ -315,6 +336,7 @@ void handleSimulationScenario() {
 void registerRoutes() {
     webServer.on("/update", HTTP_POST, handleUploadFinished, handleUploadChunk);
     webServer.on("/github-update", HTTP_GET, handleGithubPage);
+    webServer.on("/api/update/maintenance", HTTP_POST, handleMaintenance);
     webServer.on("/api/update/status", HTTP_GET, handleUpdateStatus);
     webServer.on("/api/update/versions", HTTP_GET, handleUpdateVersions);
     webServer.on("/api/update/check", HTTP_POST, handleUpdateCheck);
@@ -354,7 +376,7 @@ bool begin(const Config& value) {
         return false;
     }
 
-    startAccessPoint("boot");
+    if (!startAccessPoint("boot")) return false;
     WifiNet::WifiStationManager::begin();
     FirmwareUpdate::FirmwareUpdateManager::begin(ProjectConfig::TargetName, ProjectConfig::FirmwareVersion,
                                                  ProjectConfig::ProtocolVersion);
@@ -382,21 +404,7 @@ bool otaInProgress() { return uploadInProgress; }
 const String& otaStatus() { return uploadStatus; }
 
 String jsonEscape(const String& value) {
-    String out;
-    out.reserve(value.length() + 8);
-    for (unsigned int index = 0; index < value.length(); ++index) {
-        const char c = value[index];
-        switch (c) {
-            case '"': out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            case '\t': out += "\\t"; break;
-            default:
-                if (static_cast<unsigned char>(c) >= 0x20) out += c;
-        }
-    }
-    return out;
+    return String(Json::escape(std::string_view(value.c_str(), value.length())).c_str());
 }
 
 void appendCommonStatusJson(String& json) {

@@ -30,7 +30,7 @@ struct ValueView {
 
 class LiveValueView {
 public:
-    static constexpr uint32_t MaxStaleMs = 60000;
+    static constexpr uint32_t MaxStaleMs = LiveData::MaxValueAgeMs;
 
     void reset();
     void apply(const LiveData::Snapshot& snapshot, uint32_t receivedAtMs);

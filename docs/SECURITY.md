@@ -39,10 +39,28 @@ Zugriff auf die Platine das NVS auslesen.
 * Wege: Web-Upload (`/github-update` → „Datei hochladen“ oder
   `scripts/ota_upload.py`) und GitHub-Update. Ein Update per USB-Kabel ist
   immer möglich (physischer Zugriff).
-* Während das Fahrzeug läuft, werden Updates abgelehnt.
+* Vor Beginn eines Updates muss ein höchstens 3 s alter Zustand `Parked` oder
+  `DisplaySleep` vorliegen. `Booting`, unbekannte Zustände und ein veralteter
+  Senderstatus sperren Updates ebenfalls. Die Freigabe wird vor dem Flashen geprüft;
+  während eines laufenden synchronen Uploads/Downloads wird keine neue
+  Fahrzeugzustandsmessung garantiert. Das Fahrzeug muss bis zum Neustart stehen bleiben.
+* Für Wartung ohne Fahrzeug: Gerät vom Fahrzeug trennen, auf der Update-Seite den
+  Wartungsmodus ausdrücklich bestätigen. Er gilt höchstens 10 Minuten, wird nicht
+  gespeichert und bei einem neuen aktiven Fahrzeugzustand sofort aufgehoben.
+  API: authentifiziertes `POST /api/update/maintenance` mit
+  `confirm=vehicle-disconnected` und Header `X-Maintenance-Confirm: vehicle-disconnected`;
+  `enable=0` mit demselben Header beendet ihn. Der zusätzliche Header verhindert
+  die Aktivierung über fremde HTML-Formulare mit gespeicherter Browser-Anmeldung. Signatur und Anmeldung
+  bleiben auch im Wartungsmodus erforderlich.
 * **Automatischer Rollback:** Neue Firmware gilt erst nach 30 s stabilem Lauf
-  als bestätigt (`lib/update/BootValidation`). Stürzt sie vorher ab, startet
-  der Bootloader wieder die vorherige Version.
+  mit erfolgreicher lokaler Initialisierung als bestätigt (`lib/update/BootValidation`).
+  Geprüft werden Logspeicher, CAN-Treiber bzw. Display-Framebuffer sowie bei
+  provisionierten Geräten Webserver und ESP-NOW-Initialisierung. Fehlende externe
+  ECU-/Senderantworten sind kein Fehler dieser Boot-Prüfung. Bleibt die lokale
+  Initialisierung 60 s lang unzureichend, wird die vorherige gültige Firmware
+  angefordert. Ohne gültigen Rückweg wird der Fehler protokolliert; soweit erfolgreich
+  initialisiert, bleibt die Diagnose-/Wartungsoberfläche erreichbar.
+  Ein Absturz vor der Bestätigung führt ebenfalls zum Bootloader-Rollback.
 
 * **Watchdog:** Hängt `loop()` länger als 30 s, startet das Gerät neu. Passiert
   das mit einer frisch installierten Firmware innerhalb der ersten 30 s, greift

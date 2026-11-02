@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -46,13 +47,18 @@ def sha256_of(path: Path) -> str:
 
 
 def load_previous(path: Path | None) -> dict:
-    if path is None or not path.exists():
+    if path is None:
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (ValueError, OSError):
-        return {}
-    return data if isinstance(data, dict) else {}
+    except (ValueError, OSError) as error:
+        raise ManifestError("Existing index cannot be read; refusing to discard history") from error
+    if data == {}:
+        return data  # Only the explicit initialization path creates this file.
+    problems = validate(data)
+    if problems:
+        raise ManifestError("Invalid existing index: " + "; ".join(problems))
+    return data
 
 
 def build_manifest(previous: dict, version: str, channel: str, protocol: int, base_url: str,
@@ -88,10 +94,19 @@ def build_manifest(previous: dict, version: str, channel: str, protocol: int, ba
 
 def validate(manifest: dict) -> list[str]:
     problems = []
+    if not isinstance(manifest, dict):
+        return ["manifest must be an object"]
     if manifest.get("manifestVersion") != MANIFEST_VERSION:
         problems.append("manifestVersion must be 1")
     for target in ("sender", "display"):
-        for index, entry in enumerate(manifest.get(target, [])):
+        entries = manifest.get(target)
+        if not isinstance(entries, list):
+            problems.append(f"{target} must be an array")
+            continue
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                problems.append(f"{target}[{index}] must be an object")
+                continue
             where = f"{target}[{index}]"
             for key in ("version", "channel", "url", "protocol"):
                 if key not in entry:
@@ -138,7 +153,9 @@ def main(argv: list[str] | None = None) -> int:
         if problems:
             raise ManifestError("; ".join(problems))
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        temporary = args.out.with_suffix(args.out.suffix + ".tmp")
+        temporary.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        os.replace(temporary, args.out)
         print(f"Wrote {args.out}: sender={len(manifest['sender'])} display={len(manifest['display'])} entries")
         return 0
     except (ManifestError, OSError, ValueError) as exc:

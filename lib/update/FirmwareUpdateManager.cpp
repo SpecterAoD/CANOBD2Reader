@@ -1,3 +1,5 @@
+#include "JsonEscape.h"
+#include "UpdateSafety.h"
 #include "FirmwareUpdateManager.h"
 
 #include "FirmwareVersion.h"
@@ -52,19 +54,7 @@ uint32_t nowMs() {
 }
 
 std::string jsonEscape(const std::string& value) {
-    std::string out;
-    out.reserve(value.size() + 8);
-    for (char c : value) {
-        switch (c) {
-            case '"': out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            default:
-                if (static_cast<unsigned char>(c) >= 0x20) out.push_back(c);
-        }
-    }
-    return out;
+    return Json::escape(value);
 }
 
 void refreshAvailability() {
@@ -83,8 +73,8 @@ bool fail(const std::string& message) {
 // Downloads, verifies and activates one manifest entry. Never returns on
 // success because the device restarts into the new firmware.
 bool installEntry(const FirmwareVersionEntry& entry) {
-    if (UpdateConfig::BlockInstallWhileVehicleRunning && state.installBlocker != nullptr && state.installBlocker()) {
-        return fail("Fahrzeug aktiv - Update erst im Stand bei Motor aus");
+    if (state.installBlocker == nullptr || state.installBlocker()) {
+        return fail("Update gesperrt: Fahrzeug aktiv oder Status unbekannt");
     }
 
     OtaSession session;
@@ -203,6 +193,10 @@ String FirmwareUpdateManager::statusJson() {
     json += ",\"allowRollback\":";
     json += UpdateConfig::AllowRollback ? "true" : "false";
     json += ",\"signedUpdatesOnly\":true";
+    json += ",\"installBlocked\":";
+    json += (state.installBlocker == nullptr || state.installBlocker()) ? "true" : "false";
+    json += ",\"maintenance\":";
+    json += updateSafety.maintenance(nowMs()) ? "true" : "false";
     json += ",\"channel\":\"" + std::string(channelName(state.channel)) + "\"";
     json += ",\"installed\":\"" + jsonEscape(state.installed) + "\"";
     json += ",\"target\":\"" + jsonEscape(state.target) + "\"";

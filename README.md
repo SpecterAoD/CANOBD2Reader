@@ -8,7 +8,7 @@ per ESP-NOW an ein LilyGO T-Display S3 im Auto.
 - **Display** (`env:display`): flackerfreie Anzeige mit 4 Fahrseiten und
   4 Diagnoseseiten, Weboberfläche.
 
-Stand: `V2.1.0-beta.3`, Telemetrie-Protokoll 3.
+Stand: `V2.1.1-beta.4`, Telemetrie-Protokoll 3.
 
 ## Schnellstart
 
@@ -54,3 +54,5 @@ Danach mit dem WLAN `CANOBD2_Sender` bzw. `CANOBD2_Display` verbinden und
 Siehe [LICENSE](LICENSE). Enthält Monocypher 4.0.2 (BSD-2-Clause/CC0,
 `lib/monocypher`). Ursprünglich basierend auf dem
 [MrDIY CAN-Bus Gateway](https://gitlab.com/MrDIYca/canabus).
+
+Änderungen dieser Version: [CHANGELOG.md](CHANGELOG.md).

@@ -31,8 +31,8 @@ bool isConfiguredToken(const char* token) {
 
 #if defined(ARDUINO)
 void collectAuthHeaders(WebServer& server) {
-    static const char* headers[] = {"X-API-Token", "Authorization"};
-    server.collectHeaders(headers, 2);
+    static const char* headers[] = {"X-API-Token", "Authorization", "X-Maintenance-Confirm"};
+    server.collectHeaders(headers, 3);
 }
 
 bool requireAuthentication(WebServer& server, bool protectEndpoint) {
