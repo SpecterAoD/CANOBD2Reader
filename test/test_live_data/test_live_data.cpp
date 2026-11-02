@@ -38,11 +38,12 @@ void test_snapshot_roundtrip_keeps_values_masks_and_ages() {
     TEST_ASSERT_EQUAL_UINT8(LiveData::FlagSimulated, decoded.flags);
 }
 
-void test_very_old_values_never_report_unknown_age() {
+void test_very_old_values_expire_in_snapshot() {
     LiveData::LiveValueTable table;
     table.update(Metric::FuelLevel, 50.0f, 0);
     const LiveData::Snapshot snap = table.snapshot(600000);
-    TEST_ASSERT_EQUAL_UINT8(LiveData::AgeUnknown - 1, snap.ageTenths[static_cast<int>(Metric::FuelLevel)]);
+    TEST_ASSERT_FALSE(snap.valid(Metric::FuelLevel));
+    TEST_ASSERT_EQUAL_UINT8(LiveData::AgeUnknown, snap.ageTenths[static_cast<int>(Metric::FuelLevel)]);
 }
 
 void test_new_value_clears_unsupported_flag() {
@@ -95,7 +96,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_snapshot_fits_into_one_espnow_packet);
     RUN_TEST(test_snapshot_roundtrip_keeps_values_masks_and_ages);
-    RUN_TEST(test_very_old_values_never_report_unknown_age);
+    RUN_TEST(test_very_old_values_expire_in_snapshot);
     RUN_TEST(test_new_value_clears_unsupported_flag);
     RUN_TEST(test_decode_rejects_wrong_size_or_table_version);
     RUN_TEST(test_pid_and_name_lookup);

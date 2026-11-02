@@ -32,6 +32,7 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{border-bottom:1p
 </style></head><body>
 <h1>Firmware-Updates &ndash; %%DEVICE%%</h1>
 <p class="small">Es werden nur vom Projekt signierte Firmware-Dateien akzeptiert (Ed25519). Unsignierte oder veraenderte Dateien werden vor dem Umschalten verworfen. <a href="/">Zurueck</a></p>
+<div class="card"><h2>Update-Freigabe</h2><div id="safety" class="small">--</div><p class="small">Ohne aktuellen Fahrzeugstatus sind Updates gesperrt. Fuer Wartung am Tisch das Geraet vom Fahrzeug trennen.</p><button id="maintenance">Wartungsmodus fuer 10 Minuten aktivieren</button><button id="maintenanceOff">Wartungsmodus beenden</button></div>
 <div class="card"><h2>Datei hochladen</h2><form id="uploadForm"><input type="file" id="file" accept=".bin"><button class="primary" type="submit">Signierte Firmware installieren</button></form><div id="uploadState" class="small">--</div></div>
 <div class="card"><h2>WLAN / Hotspot fuer GitHub</h2><input id="ssid" placeholder="SSID" autocomplete="off"><input id="pass" placeholder="Passwort" type="password" autocomplete="new-password"><button class="primary" id="wifiSave">Speichern</button><button id="wifiConnect">Verbinden</button><button id="wifiForget">Vergessen</button><div id="wifi" class="small">--</div></div>
 <div class="card"><h2>GitHub</h2><select id="channel"><option value="stable">Stable</option><option value="beta">Beta</option><option value="development">Development</option></select><button id="setChannel">Kanal setzen</button><button class="primary" id="check">Nach Updates suchen</button><button class="primary" id="installLatest">Neueste passende Version installieren</button><div id="status" class="kv"></div></div>
@@ -39,6 +40,9 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{border-bottom:1p
 <script>%%COMMON_JS%%
 function pill(label,value,cls){return '<div class="pill">'+esc(label)+'<br><b class="'+(cls||'')+'">'+esc(value)+'</b></div>'}
 async function act(fn){try{await fn()}catch(e){alert(e.message)}await refresh()}
+function maintenance(body){return api('/api/update/maintenance',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Maintenance-Confirm':'vehicle-disconnected'},body})}
+$('maintenance').onclick=()=>{if(confirm('Das Geraet ist vom Fahrzeug getrennt. Wartungsmodus fuer 10 Minuten aktivieren?'))act(()=>maintenance('confirm=vehicle-disconnected'))};
+$('maintenanceOff').onclick=()=>act(()=>maintenance('enable=0'));
 $('wifiSave').onclick=()=>act(()=>post('/api/wifi/configure','ssid='+encodeURIComponent($('ssid').value)+'&password='+encodeURIComponent($('pass').value)));
 $('wifiConnect').onclick=()=>act(()=>post('/api/wifi/connect'));
 $('wifiForget').onclick=()=>act(()=>post('/api/wifi/forget'));
@@ -50,6 +54,7 @@ $('versions').onclick=e=>{let b=e.target.closest('button[data-version]');if(b)in
 $('uploadForm').onsubmit=async e=>{e.preventDefault();let f=$('file').files[0];if(!f)return;let d=new FormData();d.append('firmware',f,f.name);$('uploadState').textContent='Upload laeuft ...';try{let r=await fetch('/update',{method:'POST',body:d,credentials:'same-origin'});$('uploadState').textContent=await r.text()}catch(err){$('uploadState').textContent='Fehler: '+err.message}};
 function renderVersions(v){let rows=(v.versions||[]).map(x=>{let action='<span class="muted">'+esc(x.status)+'</span>';if(x.status==='newer'||x.status==='rollback'){action='<button class="'+(x.status==='newer'?'primary':'warn')+'" data-version="'+esc(x.version)+'" data-status="'+esc(x.status)+'">'+(x.status==='newer'?'Installieren':'Rollback')+'</button>'}return '<tr><td><b>'+esc(x.version)+'</b><br><span class="small">'+esc(x.createdAt||'')+'</span></td><td>'+esc(x.channel)+'</td><td>'+esc(x.status)+'</td><td>'+action+'</td></tr>'}).join('');$('versions').innerHTML=rows||'<tr><td colspan="4">Keine Versionen.</td></tr>'}
 async function refresh(){try{let w=await (await api('/api/wifi/status')).json();let u=await (await api('/api/update/status')).json();let v=await (await api('/api/update/versions')).json();
+$('safety').textContent=u.installBlocked?'Gesperrt: Fahrzeug aktiv oder Status unbekannt':(u.maintenance?'Wartungsmodus aktiv (max. 10 Minuten)':'Fahrzeug geparkt, Update freigegeben');
 $('wifi').textContent='WLAN: '+(w.connected?'verbunden '+(w.ip||''):'offline');$('channel').value=(u.channel||'stable').toLowerCase();
 $('status').innerHTML=pill('Installiert',u.installed)+pill('Verfuegbar',u.availableVersion||'--',u.updateAvailable?'ok':'muted')+pill('Geraet',u.target)+pill('Fehler',u.lastError||'--',u.lastError?'bad':'ok');renderVersions(v)}catch(e){$('wifi').textContent='Fehler: '+e.message}}
 refresh();setInterval(refresh,5000);

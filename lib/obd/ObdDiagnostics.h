@@ -18,6 +18,7 @@ namespace Obd {
 class Diagnostics {
 public:
     static void reset() {
+        invalidResponseCount_ = 0;
         requestCount_ = 0;
         sendFailureCount_ = 0;
         timeoutCount_ = 0;
@@ -62,6 +63,13 @@ public:
         ++sendFailureCount_;
         copyText(lastEcuResponse_, sizeof(lastEcuResponse_), "SEND_FAIL");
     }
+
+    static void recordInvalidResponse() {
+        ++invalidResponseCount_;
+        copyText(lastEcuResponse_, sizeof(lastEcuResponse_), "INVALID_PID_DATA");
+    }
+
+    static uint32_t invalidResponseCount() { return invalidResponseCount_; }
 
     static void recordTimeout() {
         ++timeoutCount_;
@@ -169,6 +177,7 @@ private:
         std::snprintf(target, targetSize, "%s", source);
     }
 
+    static inline uint32_t invalidResponseCount_ = 0;
     static inline uint32_t requestCount_ = 0;
     static inline uint32_t sendFailureCount_ = 0;
     static inline uint32_t timeoutCount_ = 0;

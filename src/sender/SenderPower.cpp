@@ -1,4 +1,5 @@
 #include "SenderPower.h"
+#include "UpdateSafety.h"
 
 #include <Arduino.h>
 
@@ -81,6 +82,10 @@ namespace SenderPower {
     const Power::VehicleState previousState = lastSnapshot.state;
     lastSnapshot = activityMonitor.update(input);
     logStateChange(previousState, lastSnapshot.state);
+    FirmwareUpdate::updateSafety.observe(
+        Simulation::RuntimeSimulation::enabled() ? FirmwareUpdate::VehicleCondition::Unknown
+            : FirmwareUpdate::vehicleCondition(Power::ActivityMonitor::vehicleStateName(lastSnapshot.state)),
+        state.currentMillis);
 
     if (lastSnapshot.command != Power::PowerCommand::None) {
       WebConsoleHandler::log(String("[POWER] command=") +

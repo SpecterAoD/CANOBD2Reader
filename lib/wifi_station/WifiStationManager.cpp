@@ -1,4 +1,5 @@
 #include "WifiStationManager.h"
+#include "JsonEscape.h"
 
 #include "WifiCredentialStore.h"
 #include "config/NetworkConfig.h"
@@ -156,11 +157,11 @@ String WifiStationManager::statusJson() {
     json += ",\"connecting\":";
     json += connecting() ? "true" : "false";
     json += ",\"ssid\":\"";
-    json += ssid();
+    json += Json::escape(ssid().c_str()).c_str();
     json += "\",\"ip\":\"";
     json += ip();
     json += "\",\"lastError\":\"";
-    json += lastError;
+    json += Json::escape(lastError.c_str()).c_str();
     json += "\",\"lastConnectAttemptMs\":";
 #if defined(ARDUINO)
     json += String(static_cast<unsigned long>(lastConnectAttemptMs));

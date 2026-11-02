@@ -50,10 +50,14 @@ jobs:
           python scripts/check_firmware_image.py .pio/build/sender/firmware.bin sender
           python scripts/check_firmware_image.py .pio/build/display/firmware.bin display
 
+      - name: Archive exact debug images
+        run: python scripts/archive_build.py --out output --version "$(cat VERSION.txt)" sender display sender_dev display_dev
+
       - uses: actions/upload-artifact@v4
         with:
           name: firmware-unsigned-${{ github.sha }}
           path: |
             .pio/build/sender/firmware.bin
             .pio/build/display/firmware.bin
-          retention-days: 14
+            output/debug-*.zip
+          retention-days: 90

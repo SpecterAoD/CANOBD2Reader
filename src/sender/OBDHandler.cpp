@@ -108,29 +108,6 @@ bool OBD2Handler::requestPayload(uint8_t mode,
     return receivePayload(mode, expectedPid, outPayload);
 }
 
-void OBD2Handler::calcConsumption(uint8_t pid, float value) {
-    if (pid == VEHICLE_SPEED) Runtime::SenderRuntimeState::updateSpeed(value);
-    if (pid == ENGINE_FUEL_RATE) Runtime::SenderRuntimeState::updateFuelRate(value);
-
-    // Instantaneous consumption only makes sense while moving; standing it
-    // is cleared instead of keeping the last (now wrong) value.
-    if (SenderLiveData::has(LiveData::Metric::FuelRate) && SenderLiveData::has(LiveData::Metric::Speed)) {
-        const float speed = SenderLiveData::value(LiveData::Metric::Speed);
-        if (speed >= 5.0f) {
-            SenderLiveData::update(LiveData::Metric::InstantConsumption,
-                                   SenderLiveData::value(LiveData::Metric::FuelRate) * 100.0f / speed);
-        } else {
-            SenderLiveData::clear(LiveData::Metric::InstantConsumption);
-        }
-    }
-
-    if (!Runtime::SenderRuntimeState::hasConsumptionInput()) return;
-    float avg = 0.0f;
-    if (Runtime::SenderRuntimeState::addConsumptionSample(avg)) {
-        SenderLiveData::update(LiveData::Metric::AverageConsumption, avg);
-    }
-}
-
 namespace {
 void updateActivityMetrics(uint8_t pid, float value) {
     if (pid == ENGINE_RPM) Runtime::SenderRuntimeState::updateRpm(value);
@@ -176,6 +153,11 @@ bool OBD2Handler::requestAndSendPID(uint8_t pid) {
 
     Logger::obdFrame(pid, responseData, responseLen);
     const PIDResult result = convertPID(pid, responseData, responseLen);
+    if (!result.valid) {
+        Obd::Diagnostics::recordInvalidResponse();
+        Logger::warn("[OBD] Ungueltige PID-Nutzdaten verworfen");
+        return false;
+    }
     updateActivityMetrics(pid, result.value);
 
     LiveData::Metric metric;
@@ -189,10 +171,8 @@ bool OBD2Handler::requestAndSendPID(uint8_t pid) {
                                             : result.value * 3600.0f /
                                                   (ObdConfig::StoichiometricAfr * ObdConfig::FuelDensityGramPerLitre);
         SenderLiveData::update(LiveData::Metric::FuelRate, litresPerHour);
-        calcConsumption(ENGINE_FUEL_RATE, litresPerHour);
     }
 
-    if (pid == VEHICLE_SPEED || (pid == ENGINE_FUEL_RATE && !fuelFromMaf)) calcConsumption(pid, result.value);
     if (pid == INTAKE_MANIFOLD_ABS_PRESSURE || pid == ABS_BAROMETRIC_PRESSURE) updateBoostPressure(pid, result.value);
 
     Logger::obdValue(getPIDName(pid), result.value, result.unit);

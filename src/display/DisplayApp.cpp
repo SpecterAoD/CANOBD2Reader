@@ -1,6 +1,7 @@
 // CANOBD2 display: receives live values from the sender via ESP-NOW and shows
 // them on the LilyGO T-Display S3.
 #include "DisplayApp.h"
+#include "ManagementServer.h"
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -36,12 +37,14 @@ void begin() {
 
 void tick() {
   const uint32_t now = millis();
-  DisplayWeb::handle();
+  // Apply queued vehicle status before evaluating an incoming update request.
   DisplayReceiver::processQueuedPackets();
+  DisplayWeb::handle();
   DisplaySimulation::update();
   DisplayUi::handleButton();
   DisplayUi::renderIfDue();
-  BootValidation::tick(now);
+  BootValidation::tick(now, DisplayUi::ready() && DiagnosticLog::mounted() &&
+      (!Security::provisioned() || (DisplayReceiver::ready() && Management::running())));
 }
 
 } // namespace DisplayApp

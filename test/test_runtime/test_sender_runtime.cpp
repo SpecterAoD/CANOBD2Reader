@@ -92,28 +92,6 @@ void setUp() {
 
 void tearDown() {}
 
-void test_consumption_requires_speed_and_fuel_rate() {
-    TEST_ASSERT_FALSE(Runtime::SenderRuntimeState::hasConsumptionInput());
-    Runtime::SenderRuntimeState::updateSpeed(50.0f);
-    TEST_ASSERT_FALSE(Runtime::SenderRuntimeState::hasConsumptionInput());
-    Runtime::SenderRuntimeState::updateFuelRate(5.0f);
-    TEST_ASSERT_TRUE(Runtime::SenderRuntimeState::hasConsumptionInput());
-}
-
-void test_consumption_average_after_ten_samples() {
-    Runtime::SenderRuntimeState::updateSpeed(100.0f);
-    Runtime::SenderRuntimeState::updateFuelRate(7.5f);
-
-    float average = 0.0f;
-    for (int i = 0; i < 9; ++i) {
-        TEST_ASSERT_FALSE(Runtime::SenderRuntimeState::addConsumptionSample(average));
-    }
-
-    TEST_ASSERT_TRUE(Runtime::SenderRuntimeState::addConsumptionSample(average));
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 7.5f, average);
-    TEST_ASSERT_EQUAL_UINT32(0, Runtime::SenderRuntimeState::consumptionSampleCount());
-}
-
 void test_sender_loop_state_tracks_can_activity() {
     Runtime::SenderLoopState state;
     state.resetForBoot(1000, 250);
@@ -201,8 +179,6 @@ void test_runtime_coordinator_respects_start_and_driver_guards() {
 
 int main(int, char**) {
     UNITY_BEGIN();
-    RUN_TEST(test_consumption_requires_speed_and_fuel_rate);
-    RUN_TEST(test_consumption_average_after_ten_samples);
     RUN_TEST(test_sender_loop_state_tracks_can_activity);
     RUN_TEST(test_sender_loop_state_resets_timestamps);
     RUN_TEST(test_runtime_coordinator_runs_simulation_path_before_schedulers);

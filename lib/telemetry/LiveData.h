@@ -15,7 +15,7 @@
 //   uint32 validMask              bit n: metric n has a value
 //   uint32 unsupportedMask        bit n: ECU does not support metric n
 //   float  values[MetricCount]
-//   uint8  ageTenths[MetricCount] age of each value in 0.1 s, 255 = >= 25.5 s
+//   uint8  ageTenths[MetricCount] age of each value in 0.1 s, 254 = saturated age, 255 = missing/expired
 //
 // Status/diagnostic information (DTC, VIN, UDS, CAN hints, power state) stays
 // in the text packets, it is rare and not time critical.
@@ -66,6 +66,7 @@ bool metricForPid(uint8_t pid, Metric& out);
 bool metricForName(const char* name, Metric& out);
 
 constexpr uint8_t AgeUnknown = 255;
+constexpr uint32_t MaxValueAgeMs = 60000;
 constexpr uint8_t FlagSimulated = 0x01;
 
 struct Snapshot {

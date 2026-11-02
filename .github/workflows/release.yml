@@ -10,6 +10,11 @@ on:
         description: "SemVer version, e.g. 2.1.0 or 2.1.0-beta.1"
         required: true
         type: string
+      initialize_index:
+        description: "Nur beim ersten Release: fehlenden Update-Index neu anlegen"
+        required: false
+        default: false
+        type: boolean
       channel:
         description: "Update channel shown to devices"
         required: true
@@ -91,15 +96,24 @@ jobs:
       - name: Update manifest
         env:
           BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.meta.outputs.tag }}
+          INITIALIZE_INDEX: ${{ inputs.initialize_index }}
           INDEX_URL: https://github.com/${{ github.repository }}/releases/download/firmware-index/update_manifest.json
         run: |
           set -euo pipefail
-          curl -fsSL "$INDEX_URL" -o previous_manifest.json || echo '{}' > previous_manifest.json
+          args=()
+          if [[ "$INITIALIZE_INDEX" == "true" ]]; then args+=(--initialize); fi
+          python scripts/fetch_previous_manifest.py "$INDEX_URL" --out previous_manifest.json "${args[@]}"
+          cp previous_manifest.json output/previous_manifest.json
           python scripts/release_manifest.py --previous previous_manifest.json \
             --out output/update_manifest.json --version "${{ steps.meta.outputs.version }}" \
             --channel "${{ inputs.channel }}" --protocol "${{ steps.meta.outputs.protocol }}" \
             --base-url "$BASE_URL" --sender output/sender.bin --display output/display.bin
-          (cd output && sha256sum sender.bin display.bin > SHA256SUMS.txt)
+
+
+      - name: Archive exact debug images
+        run: |
+          python scripts/archive_build.py --out output --version "V${{ steps.meta.outputs.version }}" sender display
+          (cd output && sha256sum sender.bin display.bin debug-*.zip previous_manifest.json > SHA256SUMS.txt)
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -118,6 +132,9 @@ jobs:
             output/sender.bin
             output/display.bin
             output/SHA256SUMS.txt
+            output/debug-sender.zip
+            output/debug-display.zip
+            output/previous_manifest.json
 
       - name: Publish update index
         uses: softprops/action-gh-release@v2

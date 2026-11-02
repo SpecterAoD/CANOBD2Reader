@@ -62,12 +62,13 @@ def main() -> int:
         if not path.is_file():
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
-        for pattern in SECRET_PATTERNS:
+        for rule, pattern in enumerate(SECRET_PATTERNS, start=1):
             for match in pattern.finditer(text):
                 value = match.group(match.lastindex or 0)
                 if "encodeURIComponent" in match.group(0) or allowed(value):
                     continue
-                errors.append(f"{rel}: possible secret: {match.group(0)[:90]}")
+                line = text.count("\n", 0, match.start()) + 1
+                errors.append(f"{rel}:{line}: possible secret (rule {rule}; value redacted)")
 
     if errors:
         print("Secret check failed:")

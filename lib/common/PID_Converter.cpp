@@ -1,12 +1,10 @@
 #include "PID_Converter.h"
 #include "PidDecoder.h"
 
-PIDResult convertPID(byte pid, const byte* data, byte length) {
-    const Obd::PidValue decoded = Obd::decodePid(pid, data, length);
-    if (!decoded.valid) return {-1.0f, "INVALID"};
-    return {decoded.value, decoded.unit};
+PIDResult convertPID(uint8_t pid, const uint8_t* data, uint8_t length) {
+    return Obd::decodePid(pid, data, length);
 }
 
-const char* getPIDName(byte pid) {
+const char* getPIDName(uint8_t pid) {
     return Obd::pidName(pid);
 }

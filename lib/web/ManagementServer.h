@@ -5,7 +5,7 @@
 // Common endpoints (all authenticated):
 //   POST /update                    signed firmware upload (multipart, field "firmware")
 //   GET  /github-update             GitHub update page
-//   GET  /api/update/status|versions, POST /api/update/check|install|channel
+//   GET  /api/update/status|versions, POST /api/update/check|install|channel|maintenance
 //   GET  /api/wifi/status,          POST /api/wifi/configure|connect|forget
 //   GET  /log/file|/log/download,   POST /api/log/clear
 //   GET  /api/simulation,           POST /api/simulation/on|off|toggle|scenario
@@ -35,7 +35,7 @@ struct Config {
     const char* apPassword;
     LogFunction log;                  // required
     ReportFunction diagnosticReport;  // full text report for /log/file
-    FirmwareUpdate::FirmwareUpdateManager::InstallBlocker installBlocker; // may be nullptr
+    FirmwareUpdate::FirmwareUpdateManager::InstallBlocker installBlocker; // nullptr blocks all installations
 };
 
 // Starts AP, station manager, update manager and the common routes.

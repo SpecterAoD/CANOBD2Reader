@@ -14,6 +14,7 @@ extern "C" bool verifyRollbackLater() {
 namespace BootValidation {
 namespace {
 bool done = false;
+HealthGate health;
 } // namespace
 
 bool pendingVerify() {
@@ -27,15 +28,27 @@ bool pendingVerify() {
 #endif
 }
 
-void tick(uint32_t nowMs) {
-    if (done || nowMs < StableAfterMs) return;
-    done = true;
+void tick(uint32_t nowMs, bool localHealthy) {
+    if (done) return;
+    const Decision decision = health.evaluate(nowMs, localHealthy);
+    if (decision == Decision::Wait) return;
 #if defined(ARDUINO)
     if (pendingVerify()) {
+        if (decision == Decision::Rollback) {
+            DiagnosticLog::appendf("[OTA] Lokale Initialisierung fehlgeschlagen, Rollback");
+            // If no previous valid slot exists, remain in the recovery UI.
+            const esp_err_t result = esp_ota_mark_app_invalid_rollback_and_reboot();
+            DiagnosticLog::appendf("[OTA] Rollback nicht moeglich: %d", static_cast<int>(result));
+            done = true;
+            return;
+        }
         const bool ok = esp_ota_mark_app_valid_cancel_rollback() == ESP_OK;
         DiagnosticLog::appendf(ok ? "[OTA] Neue Firmware stabil, bestaetigt" : "[OTA] Bestaetigung fehlgeschlagen");
+        // A failed confirmation must not be silently considered successful.
+        if (!ok) return;
     }
 #endif
+    done = true;
 }
 
 } // namespace BootValidation

@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include "SenderApp.h"
+#include "UpdateSafety.h"
 #include <string.h>
 #include "common_config.h"
 #include "config/ProjectConfig.h"
@@ -23,6 +24,7 @@
 #include "SenderPower.h"
 #include "WebConsoleHandler.h"
 #include "DiagnosticLog.h"
+#include "ManagementServer.h"
 #include "ObdDiagnostics.h"
 #include "UdsDiagnostics.h"
 #include "SenderEspNow.h"
@@ -205,7 +207,7 @@ void SenderApp::begin() {
   CanRouting::setFramePump(CANHandler::processIncoming);
   coordinator.resetForBoot(millis(), kCanIdleTimeoutMs, espNowReady, canDriverReady);
 
-  WebConsoleHandler::setInstallBlocker(SenderPower::isCarRunning);
+  WebConsoleHandler::setInstallBlocker([]() { return FirmwareUpdate::updateSafety.blocked(millis()); });
   WebConsoleHandler::begin();
 
   if (!espNowReady) {
@@ -245,8 +247,10 @@ void SenderApp::begin() {
 void SenderApp::tick() {
   const uint32_t now = millis();
   coordinator.tick(now);
-  SenderLiveData::tick(now);
-  BootValidation::tick(now);
+  SenderLiveData::tick(millis());
+  BootValidation::tick(now, coordinator.state().canDriverReady &&
+      (!Security::provisioned() || (coordinator.state().espNowReady && Management::running())) &&
+      DiagnosticLog::mounted());
 #if CANOBD2_DEV_TOOLS
   SenderCapabilityScanner::tick(now);
 #endif

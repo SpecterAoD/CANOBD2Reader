@@ -35,7 +35,7 @@ Gemeinsamer Code liegt in `lib/` und wird nativ getestet (`env:native`).
 4. Das Display übernimmt den Snapshot in `DisplayLogic::LiveValueView`. Jeder
    Wert ist *frisch*, *veraltet* (grau, letzter Wert bleibt sichtbar),
    *nicht unterstützt* oder *fehlend*.
-5. `DisplayUi` zeichnet alle 50 ms ein komplettes Bild in einen Sprite und
+5. `DisplayRenderer` zeichnet alle 50 ms ein komplettes Bild in einen Sprite und
    überträgt es in einem Stück. Dadurch flackert nichts.
 
 Statusinformationen (CAN/OBD-Zustand, DTC, VIN, UDS, Power-Zustand,
@@ -55,7 +55,7 @@ Heartbeat) sind selten und bleiben Textpakete.
 | `lib/firmware_signing/`, `lib/monocypher/` | Ed25519-Prüfung der Firmware |
 | `lib/security/` | Gerätezugangsdaten im NVS |
 | `lib/diagnostics/` | Neustartgrund, Absturzbericht (Coredump), Loop-Watchdog |
-| `lib/web/` | Gemeinsamer Management-Webserver, Authentifizierung, HTML-Assets |
+| `lib/web/` | Gemeinsamer Management-Webserver, Authentifizierung, HTML-Assets (`DevicePages`, `WebAssets`) |
 | `lib/simulation/`, `lib/capabilities/`, `lib/can_router/` | Entwicklerwerkzeuge (nur `*_dev`-Builds aktiv) |
 | `include/config/` | Konfiguration je Bereich (keine Zugangsdaten) |
 | `scripts/` | Signieren, Upload, Release-Manifest, Secret-Check, Build-Hooks |
@@ -67,3 +67,11 @@ Heartbeat) sind selten und bleiben Textpakete.
 Simulation, OBD/UDS-Capability-Scanner, CAN-Signal-Finder, RAW-CAN-Telemetrie
 und die CAN-Sniffer-Seite. In Release-Builds sind Endpunkte und Bedienelemente
 nicht vorhanden; die Simulation kann dort nicht eingeschaltet werden.
+
+Display-Hardware, Framebuffer und Taster liegen in `DisplayUi`; Seiten und Widgets
+in `DisplayRenderer`. Web-Routen verwenden die separat abgelegten Seiten aus
+`lib/web/DevicePages.cpp`. JSON-Escaping teilen sie mit dem Update- und WLAN-Code
+über `lib/utils/JsonEscape.h`; Browser-HTML-Escaping kommt aus `WebAssets::commonScript`.
+`ConsumptionAccumulator` integriert Kraftstoffmenge und Strecke unabhängig von
+PID-Abfragefrequenz und Display-Rendering. `UpdateSafety` trennt unbekannten,
+geparkten und aktiven Fahrzeugzustand vom ausdrücklich bestätigten Wartungsmodus.

@@ -4,6 +4,7 @@
 // and copies the raw bytes into a FreeRTOS queue. Decoding and all state
 // updates happen in loop() via processQueuedPackets().
 #include "DisplayReceiver.h"
+#include "UpdateSafety.h"
 
 #include <WiFi.h>
 #include <esp_now.h>
@@ -26,6 +27,7 @@ struct QueuedPacket {
 };
 
 QueueHandle_t queue = nullptr;
+bool receiverReady = false;
 uint32_t macFiltered = 0;
 uint32_t queueDrops = 0;
 
@@ -74,6 +76,7 @@ void handleStatusText(const String& raw, uint32_t sequence) {
     const bool sleepState = value == "DisplaySleep";
     if (sleepState != (runtime().vehicleState == "DisplaySleep")) runtime().displaySleepRequested = sleepState;
     runtime().vehicleState = value;
+    FirmwareUpdate::updateSafety.observe(FirmwareUpdate::vehicleCondition(value.c_str()), now);
     runtime().lastPowerStatusAt = now;
   } else if (key == "ACTIVITY_SCORE") {
     runtime().activityScore = static_cast<uint8_t>(value.toInt());
@@ -177,7 +180,11 @@ void begin() {
     runtime().lastError = "ESP-NOW Peer fehlgeschlagen";
     return;
   }
-  esp_now_register_recv_cb(onReceive);
+  if (esp_now_register_recv_cb(onReceive) != ESP_OK) {
+    runtime().lastError = "ESP-NOW Callback fehlgeschlagen";
+    return;
+  }
+  receiverReady = true;
   runtime().lastError = "Warte auf Sender";
 }
 
@@ -190,6 +197,8 @@ void processQueuedPackets() {
     processPacket(queued);
   }
 }
+
+bool ready() { return receiverReady; }
 
 uint32_t macFilteredCount() { return macFiltered; }
 uint32_t queueDropCount() { return queueDrops; }

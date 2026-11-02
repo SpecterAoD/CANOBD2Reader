@@ -1,4 +1,5 @@
 #include "DisplayWeb.h"
+#include "UpdateSafety.h"
 
 #include "DeviceSecrets.h"
 #include "DiagnosticLog.h"
@@ -32,41 +33,10 @@ String diagnosticReport() {
   return report;
 }
 
-const char RootPage[] PROGMEM = R"HTML(<!doctype html><html lang="de"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>CANOBD2 Display</title><style>
-body{margin:0 auto;max-width:460px;padding:12px;background:#070b12;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}
-.card{background:#182235;border:1px solid #263244;border-radius:16px;padding:12px;margin:10px 0}.label{font-size:12px;color:#94a3b8}
-.value{font-size:20px;font-weight:700}.small{font-size:13px;color:#94a3b8}a.btn,button{display:block;width:100%;box-sizing:border-box;text-align:center;padding:12px;margin-top:8px;border:0;border-radius:12px;background:#075985;color:#fff;font-weight:700;text-decoration:none;font-size:15px}
-.danger{background:#7f1d1d!important}.ok{color:#22c55e}.bad{color:#ef4444}
-</style></head><body>
-<h2>CANOBD2 Display</h2>
-<div class="card"><div class="label">Verbindung zum Sender</div><div id="link" class="value">--</div><div id="packets" class="small">--</div></div>
-<div class="card"><div class="label">Firmware</div><div id="fw" class="value">--</div><div id="sec" class="small">--</div>
-<a class="btn" href="/github-update">Firmware-Update (signiert)</a></div>
-<div class="card"><div class="label">Display-Seiten</div><div id="pages" class="value">--</div>
-<button id="toggleDiag">Diagnoseseiten umschalten</button></div>
-<div class="card"><div class="label">Neustart / Absturzbericht</div><div id="crash" class="value">--</div>
-<a class="btn" id="crashDl" href="/api/coredump" style="display:none">Absturzbericht herunterladen</a><button id="crashClear" class="danger" style="display:none">Absturzbericht loeschen</button></div>
-<div class="card"><div class="label">Diagnose-Log</div><a class="btn" href="/log/download">Log herunterladen</a><button id="clearLog" class="danger">Log loeschen</button></div>
-<button id="restart" class="danger">Display neu starten</button>
-<script>%%COMMON_JS%%
-async function refresh(){try{let s=await (await api('/status')).json();
-$('link').textContent=s.espNowConnected?'verbunden':'keine Daten';$('link').className='value '+(s.espNowConnected?'ok':'bad');
-$('packets').textContent=s.receivedPackets+' ok, '+s.droppedPackets+' verloren, '+s.crcErrors+' CRC, letztes vor '+(s.lastPacketAgeMs/1000).toFixed(1)+' s'+(s.simulated?' (Simulation)':'');
-$('fw').textContent=s.firmware+' / Protokoll '+s.protocol;$('sec').textContent=s.securityReady?'Zugangsdaten: '+s.secretsSource:'Nicht provisioniert: '+s.securityWarning;
-$('crash').textContent='Letzter Neustart: '+s.resetReason+(s.coreDumpPresent?' - Absturzbericht vorhanden ('+s.coreDumpSize+' Bytes)':'');
-$('crashDl').style.display=$('crashClear').style.display=s.coreDumpPresent?'block':'none';
-$('pages').textContent=s.diagnosticPagesEnabled?'Diagnose ('+s.visiblePageCount+' Seiten)':'Fahrmodus ('+s.visiblePageCount+' Seiten)'}catch(e){$('link').textContent='offline'}}
-$('toggleDiag').onclick=async()=>{await post('/api/display/diagnostic-pages/toggle');refresh()};
-$('clearLog').onclick=async()=>{if(confirm('Log wirklich loeschen?'))await post('/api/log/clear')};
-$('crashClear').onclick=async()=>{if(confirm('Absturzbericht loeschen?')){await post('/api/coredump/clear');refresh()}};
-$('restart').onclick=async()=>{if(confirm('Display neu starten?'))await post('/api/restart')};
-refresh();setInterval(refresh,2000);
-</script></body></html>)HTML";
 
 void handleRoot() {
   if (!WebSecurity::requireAuthentication(Management::server())) return;
-  String page(RootPage);
+  String page(WebAssets::displayPage());
   page.replace("%%COMMON_JS%%", WebAssets::commonScript());
   Management::server().send(200, "text/html; charset=utf-8", page);
 }
@@ -104,8 +74,7 @@ void handleDiagnosticPagesToggle() {
 // Updates must not interrupt the driver: block while the sender reports a
 // running vehicle.
 bool vehicleActive() {
-  const String& state = DisplayData::runtime().vehicleState;
-  return DisplayData::isEspNowConnected() && (state == "Running" || state == "StartStop" || state == "Idle");
+  return FirmwareUpdate::updateSafety.blocked(millis());
 }
 
 } // namespace

@@ -28,7 +28,7 @@ uint8   flags             bit0 = simulierte Werte
 uint32  validMask         bit n: Metrik n hat einen Wert
 uint32  unsupportedMask   bit n: ECU unterstützt Metrik n nicht
 float   values[19]        IEEE-754, little endian
-uint8   ageTenths[19]     Alter in 0,1 s; 255 = nie gemessen
+uint8   ageTenths[19]     Alter in 0,1 s; 254 = gesättigt, 255 = fehlend/abgelaufen
 ```
 
 Metriken (Reihenfolge = Bitnummer): RPM, Speed, CoolantTemp, BatteryVoltage,
@@ -51,3 +51,16 @@ Displays verwerfen den Snapshot statt falsch zuzuordnen.
 | `DTC` (Typ DTC) | aktive Fehlercodes, Status `WARN` bei Fehlern |
 | `VIN`, `UDS_DID_F190`, `UDS`, `UDS_DTC`, `UDS_NEGATIVE`, `ECU_COUNT` | Diagnose |
 | `RAW`, `HINT`, `CAN_*` (Typ CAN) | nur Entwickler-Builds |
+
+## Messwertgültigkeit ab V2.1.1-beta.4
+
+Das Paketformat bleibt v3. Ab 60 Sekunden ohne neue Messung löscht der Sender
+beim nächsten Snapshot das jeweilige `validMask`-Bit. Ein weiterlaufender
+Funkkontakt verlängert diese Frist nicht. Das kompakte Altersfeld ist bis dahin
+auf 25,4 Sekunden begrenzt. Kühlmitteltemperatur und ECU-Spannung haben wie andere
+langsame PIDs eine Frischegrenze von 7 Sekunden; schnelle Werte 1,5 Sekunden.
+
+Der Durchschnittsverbrauch umfasst die seit Start (oder Simulationswechsel)
+aufgelaufene Kraftstoffmenge und Strecke. Beide Eingaben müssen frisch sein;
+Lücken werden nicht integriert. Nullverbrauch zählt mit, Kraftstoff im Stillstand
+zur Menge, nicht zur Strecke. Die Anzeige beginnt ab einem gefahrenen Meter.

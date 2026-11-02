@@ -29,9 +29,6 @@ public:
     /// Requests a PID, decodes it and stores it in the live snapshot table.
     static bool requestAndSendPID(uint8_t pid);
 
-    /// Calculates and sends consumption from speed and fuel rate.
-    static void calcConsumption(uint8_t pid, float value);
-
     /// Updates MAP/BARO state and sends the centrally calculated boost pressure.
     static void updateBoostPressure(uint8_t pid, float value);
 

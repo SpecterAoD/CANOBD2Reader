@@ -1,4 +1,5 @@
 #include "LiveValueView.h"
+#include "config/SenderConfig.h"
 
 namespace DisplayLogic {
 
@@ -47,13 +48,14 @@ uint32_t LiveValueView::freshLimitMs(Metric metric) {
         case Metric::Rpm:
         case Metric::Speed:
         case Metric::EngineLoad:
-        case Metric::CoolantTemp:
-        case Metric::EcuVoltage:
-            return 1500;  // polled every ~200 ms
+        case Metric::Maf:
+        case Metric::FuelRate:
+        case Metric::InstantConsumption:
+            return SenderConfig::FastPidIntervalMs * 3 + 900;
         case Metric::BatteryVoltage:
-            return 8000;  // measured every 3 s
+            return SenderConfig::BatterySendIntervalMs * 2 + 2000;
         default:
-            return 7000;  // slow PIDs (~2 s) and values derived from them
+            return SenderConfig::SlowPidIntervalMs * 3 + 1000;
     }
 }
 
